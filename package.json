@@ -1,0 +1,18 @@
+{
+  "name": "varco-agent-saga-promo",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "install:all": "npm -C server install && npm -C web install",
+    "dev": "concurrently \"npm -C server run dev\" \"npm -C web run dev\"",
+    "build": "npm -C web run build",
+    "preview": "npm -C web run preview",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up --build -d",
+    "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "concurrently": "^9.0.1"
+  }
+}

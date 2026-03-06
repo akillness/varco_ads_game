@@ -1,0 +1,33 @@
+services:
+  server:
+    build:
+      context: ./server
+    container_name: varco-saga-server
+    environment:
+      PORT: 8787
+      VARCO_API_BASE: https://api.varco.ai
+      VARCO_TEXT2SOUND_PATH: /sound/varco/v1/api/text2sound
+      VARCO_IMAGE_TO_3D_PATH: /3d/varco/v1/api/imagetothree
+      VARCO_OPENAPI_KEY: ${VARCO_OPENAPI_KEY:-}
+    ports:
+      - "8787:8787"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8787/api/health | grep -q '\"ok\":true'"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  web:
+    build:
+      context: ./web
+    container_name: varco-saga-web
+    depends_on:
+      server:
+        condition: service_healthy
+    ports:
+      - "5173:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ | grep -q '<!doctype html>'"]
+      interval: 10s
+      timeout: 3s
+      retries: 10

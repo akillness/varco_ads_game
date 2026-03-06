@@ -1,0 +1,12 @@
+node_modules/
+**/node_modules/
+
+.DS_Store
+.omc/
+test-results/
+playwright-report/
+
+web/dist/
+
+.env
+server/.env
