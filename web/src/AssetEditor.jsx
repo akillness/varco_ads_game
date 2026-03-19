@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const ASSET_TYPES = [
   { id: 'orb', label: 'Orb', imagePath: '/cards/orb.svg' },
@@ -10,6 +10,10 @@ export default function AssetEditor({ editHistory = [], dispatch, studioPack = n
   const [selectedAsset, setSelectedAsset] = useState('orb');
   const [isConverting, setIsConverting] = useState(false);
   const [latestResult, setLatestResult] = useState(null);
+
+  useEffect(() => {
+    import('@google/model-viewer').catch(() => null);
+  }, []);
 
   const currentAsset = ASSET_TYPES.find(a => a.id === selectedAsset);
   const typeHistory = editHistory.filter(e => e.type === 'asset' && e.subType === selectedAsset);
@@ -28,8 +32,9 @@ export default function AssetEditor({ editHistory = [], dispatch, studioPack = n
       const data = await res.json();
       const latencyMs = Date.now() - start;
       const modelUrl = data.result?.data?.[0]?.model_url || data.data?.[0]?.model_url || '';
-      dispatch({ type: 'EDIT_GENERATE', editType: 'asset', subType: selectedAsset, prompt: directionPrompt, result: { modelUrl }, latencyMs });
-      setLatestResult({ modelUrl, latencyMs });
+      const cacheHit = Boolean(data.result?.cache_hit || data.cache_hit);
+      dispatch({ type: 'EDIT_GENERATE', editType: 'asset', subType: selectedAsset, prompt: directionPrompt, result: { modelUrl }, latencyMs, cacheHit });
+      setLatestResult({ modelUrl, latencyMs, cacheHit });
     } catch (e) {
       console.error('3D conversion failed:', e);
     } finally {
@@ -80,6 +85,7 @@ export default function AssetEditor({ editHistory = [], dispatch, studioPack = n
           <model-viewer src={latestResult.modelUrl} auto-rotate camera-controls
             style={{ width: '100%', height: '180px', background: '#1a1a2e' }} />
           <div className="latency-badge">Converted in {(latestResult.latencyMs / 1000).toFixed(1)}s by VARCO3D</div>
+          {latestResult.cacheHit && <div className="cache-hit-badge">cache hit</div>}
           <button className="apply-btn" onClick={() => { const e = typeHistory.at(-1); if (e) handleApply(e.id); }}>
             ✓ Apply → 게임에 즉시 반영
           </button>
@@ -93,6 +99,7 @@ export default function AssetEditor({ editHistory = [], dispatch, studioPack = n
             <div key={entry.id} className={`version-item ${entry.appliedAt ? 'active' : ''}`}>
               <span className="version-prompt">{entry.subType}</span>
               <span className="version-latency">{(entry.latencyMs / 1000).toFixed(1)}s</span>
+              {entry.cacheHit && <span className="cache-hit-badge">cache</span>}
               {entry.appliedAt && <span className="applied-badge">적용됨</span>}
               <button className="apply-btn small" onClick={() => handleApply(entry.id)}>Apply</button>
             </div>

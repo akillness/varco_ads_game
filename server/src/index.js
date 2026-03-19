@@ -51,6 +51,21 @@ const heroProfiles = {
   }
 };
 
+const channelPlaybooks = {
+  x: {
+    label: "X",
+    cta: "Clip the wildest arena moment and invite remix battles."
+  },
+  instagram: {
+    label: "Instagram Reel",
+    cta: "Lead with the hero silhouette, then cut to the payoff asset swap."
+  },
+  discord: {
+    label: "Discord",
+    cta: "Share the brief, pack, and score so creators can iterate together."
+  }
+};
+
 const varcoCache = new Map();
 const cacheStats = {
   entries: 0,
@@ -155,6 +170,64 @@ function buildStudioPack(brief, heroId = "modeler") {
     .replace(/[^\p{L}\p{N}\s-]/gu, "")
     .trim();
 
+  const assetDirections = {
+    player: `${hero.name} mascot, ${conciseBrief}, stylized promo hero, silhouette readable from far away`,
+    enemy: `rogue ad-bot rival, ${conciseBrief}, readable threat shape, exaggerated silhouette`,
+    orb: `ugc core collectible, ${conciseBrief}, glowing token, premium sponsor-friendly finish`
+  };
+  const soundDirections = {
+    bgm: `${conciseBrief}, ${hero.tone}, looping promo game soundtrack, energetic but brand-safe`,
+    orb: `${conciseBrief}, reward pickup stinger, short sparkling UI sound`,
+    hit: `${conciseBrief}, impact hit, crunchy arena collision`,
+    win: `${conciseBrief}, triumphant logo sting, sponsor-ready ending`,
+    lose: `${conciseBrief}, dramatic fail cue, short and playful`
+  };
+  const marketingAngles = Object.entries(channelPlaybooks).map(([channel, playbook], index) => ({
+    id: `${channel}-${index + 1}`,
+    channel,
+    label: playbook.label,
+    hook: `${hero.name} turns "${campaignTag || conciseBrief}" into a live playable ad moment.`,
+    copy: `${hero.name} enters the VARCO arena with ${conciseBrief}. Generate one reusable pack, ship the sound + asset stack, then let spectators remix the outcome.`,
+    cta: playbook.cta
+  }));
+  const productionQueue = [
+    {
+      id: "sound-bgm",
+      lane: "sound",
+      key: "bgm",
+      label: "Launch soundtrack",
+      prompt: soundDirections.bgm
+    },
+    {
+      id: "sound-win",
+      lane: "sound",
+      key: "win",
+      label: "Victory sting",
+      prompt: soundDirections.win
+    },
+    {
+      id: "asset-player",
+      lane: "asset",
+      key: "player",
+      label: "Hero showcase model",
+      prompt: assetDirections.player
+    },
+    {
+      id: "asset-enemy",
+      lane: "asset",
+      key: "enemy",
+      label: "Rival silhouette",
+      prompt: assetDirections.enemy
+    },
+    {
+      id: "social-x",
+      lane: "social",
+      key: "x",
+      label: "Social launch copy",
+      prompt: marketingAngles[0].copy
+    }
+  ];
+
   return {
     packId: crypto.randomUUID(),
     brief: conciseBrief,
@@ -171,17 +244,15 @@ function buildStudioPack(brief, heroId = "modeler") {
         "Push viewers into betting, sharing, or generating their own remix pack."
       ]
     },
-    sounds: {
-      bgm: `${conciseBrief}, ${hero.tone}, looping promo game soundtrack, energetic but brand-safe`,
-      orb: `${conciseBrief}, reward pickup stinger, short sparkling UI sound`,
-      hit: `${conciseBrief}, impact hit, crunchy arena collision`,
-      win: `${conciseBrief}, triumphant logo sting, sponsor-ready ending`,
-      lose: `${conciseBrief}, dramatic fail cue, short and playful`
-    },
-    assets: {
-      player: `${hero.name} mascot, ${conciseBrief}, stylized promo hero, silhouette readable from far away`,
-      enemy: `rogue ad-bot rival, ${conciseBrief}, readable threat shape, exaggerated silhouette`,
-      orb: `ugc core collectible, ${conciseBrief}, glowing token, premium sponsor-friendly finish`
+    sounds: soundDirections,
+    assets: assetDirections,
+    marketingAngles,
+    productionQueue,
+    reusePlan: {
+      briefFingerprint: campaignTag || conciseBrief,
+      lanes: ["sound", "asset", "social"],
+      queueDepth: productionQueue.length,
+      generatedFromSingleBrief: true
     },
     savings: {
       estimatedCallsWithoutPack: 8,

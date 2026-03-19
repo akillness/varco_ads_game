@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
-const BASE = "http://localhost:5173";
-const API = "http://localhost:8787";
+const BASE = "http://127.0.0.1:5173";
+const API = "http://127.0.0.1:8787";
 
 test.describe("API contracts", () => {
   test("GET /api/health exposes cache stats", async ({ request }) => {
@@ -58,7 +58,9 @@ test.describe("Web UI", () => {
     await expect(page.locator(".brand-title")).toContainText("VARCO AGENT SAGA");
     await expect(page.getByTestId("mission-panel")).toBeVisible();
     await expect(page.getByTestId("ability-panel")).toBeVisible();
+    await expect(page.getByTestId("director-panel")).toBeVisible();
     await expect(page.getByTestId("studio-pack-panel")).toBeVisible();
+    await expect(page.getByTestId("studio-kpi-strip")).toContainText("cache hits");
     await expect(page.getByTestId("arena-status-strip")).toContainText("Mission:");
   });
 
@@ -68,10 +70,36 @@ test.describe("Web UI", () => {
     await studioPanel.getByRole("button", { name: "Generate Studio Pack" }).click();
 
     await expect(studioPanel).toContainText("calls saved");
-    await studioPanel.getByRole("button", { name: "bgm" }).click();
+    await expect(studioPanel).toContainText("Production Queue");
+    await studioPanel.getByRole("button", { name: "bgm", exact: true }).click();
 
     const soundPrompt = page.locator(".sound-editor .prompt-input");
     await expect(soundPrompt).toHaveValue(/Retro arcade launch/);
+  });
+
+  test("real input can collect a core after director setup", async ({ page }) => {
+    await page.getByRole("button", { name: "Start" }).click();
+    await page.evaluate(() => {
+      window.__SAGA_DEBUG__.dispatch({
+        type: "DEBUG_PATCH_STATE",
+        patch: {
+          running: true,
+          player: { x: 2, y: 2 },
+          orb: { x: 3, y: 2 },
+          enemies: [],
+          powerup: null,
+          combo: 0,
+          totalOrbs: 0,
+          score: 0,
+          abilityCharge: 0,
+        },
+      });
+    });
+
+    await page.keyboard.down("ArrowRight");
+    await expect(page.locator(".stat-val.score")).toHaveText("10");
+    await page.keyboard.up("ArrowRight");
+    await expect(page.getByTestId("director-panel")).toContainText(/Launch Window|Broadcast Rush|Overdrive|Final Push/);
   });
 
   test("sound editor generates and applies a reusable cue", async ({ page }) => {

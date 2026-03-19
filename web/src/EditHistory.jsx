@@ -21,6 +21,7 @@ export default function EditHistory({ editHistory = [], dispatch }) {
             </span>
             <span className="version-latency">{(entry.latencyMs / 1000).toFixed(1)}s by VARCO3D</span>
           </div>
+          {entry.cacheHit && <span className="cache-hit-badge">cache</span>}
           {entry.appliedAt && <span className="applied-badge">적용됨</span>}
           <button className="apply-btn small"
             onClick={() => dispatch({ type: 'EDIT_APPLY', historyId: entry.id })}>

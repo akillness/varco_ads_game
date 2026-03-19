@@ -101,6 +101,37 @@ const MISSION_TEMPLATES = [
   }
 ];
 
+const DIRECTOR_PHASES = [
+  {
+    id: "launch",
+    minTime: 41,
+    label: "Launch Window",
+    callout: "Low pressure. Build combo routes and charge your hero ability.",
+    threat: "Low"
+  },
+  {
+    id: "broadcast",
+    minTime: 21,
+    label: "Broadcast Rush",
+    callout: "Spectators spike. Expect support drops and harder pressure.",
+    threat: "Medium"
+  },
+  {
+    id: "overtime",
+    minTime: 11,
+    label: "Overdrive",
+    callout: "Arena director starts forcing highlight moments.",
+    threat: "High"
+  },
+  {
+    id: "finale",
+    minTime: 0,
+    label: "Final Push",
+    callout: "Cash in abilities and convert one last showcase moment.",
+    threat: "Critical"
+  }
+];
+
 function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
 function randomCell() { return { x: Math.floor(Math.random() * GRID_W), y: Math.floor(Math.random() * GRID_H) }; }
 function randomCellAway(pos, minDist = 3) {
@@ -120,6 +151,9 @@ function comboMultiplier(combo) {
 }
 
 function xpForLevel(level) { return 50 + level * 30; }
+function getDirectorPhase(timer) {
+  return DIRECTOR_PHASES.find((phase) => timer >= phase.minTime) || DIRECTOR_PHASES[DIRECTOR_PHASES.length - 1];
+}
 function missionProgressText(mission) {
   if (!mission) return "";
   if (mission.kind === "survive") return "No damage";
@@ -206,6 +240,48 @@ function failMission(state) {
   return advanceMissionState(state, `${state.mission.title} missed`);
 }
 
+function createDirectorBeat(title, text, now = Date.now()) {
+  return {
+    id: now,
+    title,
+    text
+  };
+}
+
+function triggerDirectorBeat(state, timer) {
+  const now = Date.now();
+  const eventIndex = Math.abs(timer + state.totalOrbs + state.level) % 3;
+
+  if (eventIndex === 0) {
+    const powerType = POWERUP_TYPES[(state.level + state.totalOrbs) % POWERUP_TYPES.length];
+    return {
+      ...state,
+      powerup: state.powerup || { ...randomCellAway(state.player, 4), type: powerType },
+      abilityCharge: clamp(state.abilityCharge + 18, 0, ABILITY_MAX),
+      directorBeat: createDirectorBeat("Sponsor Drop", `${powerType.label} deployed for the next promo beat`, now),
+      directorBeatEndsAt: now + 6000
+    };
+  }
+
+  if (eventIndex === 1) {
+    return {
+      ...state,
+      bonusOrb: randomCellAway(state.player, 4),
+      enemyFreezeUntil: Math.max(state.enemyFreezeUntil || 0, now + 2500),
+      directorBeat: createDirectorBeat("Focus Window", "Bonus core live. Secure it before the cutaway ends.", now),
+      directorBeatEndsAt: now + 6000
+    };
+  }
+
+  return {
+    ...state,
+    enemies: state.enemies.length < 6 ? [...state.enemies, randomCellAway(state.player)] : state.enemies,
+    abilityCharge: clamp(state.abilityCharge + 10, 0, ABILITY_MAX),
+    directorBeat: createDirectorBeat("Drone Surge", "Rival drones rush the frame. Hold the route.", now),
+    directorBeatEndsAt: now + 6000
+  };
+}
+
 function loadHighScores() {
   try { return JSON.parse(localStorage.getItem("saga_highscores") || "[]").slice(0, 5); }
   catch { return []; }
@@ -258,6 +334,9 @@ const initState = (hero) => {
     missionSecondsLeft: mission.duration,
     missionEvent: null,
     abilityEvent: null,
+    directorBeat: createDirectorBeat("Launch Window", getDirectorPhase(GAME_TIME).callout),
+    directorBeatEndsAt: Date.now() + 5000,
+    bonusOrb: null,
     editHistory: [],
     appliedSounds: { orb: null, hit: null, win: null, lose: null, bgm: null },
     appliedAssets: { orb: null, enemy: null, player: null },
@@ -285,12 +364,20 @@ function reducer(state, action) {
           : state.enemies.map((enemy) => moveEnemy(enemy, player, state.difficulty));
 
       let next = { ...state, player, enemies };
+      let collectedCollectibleCount = 0;
+      let orbCollected = false;
 
       // Magnet: pull orb closer
       if (state.activePowerups.magnet && now < state.activePowerups.magnet) {
         const odx = Math.sign(player.x - state.orb.x);
         const ody = Math.sign(player.y - state.orb.y);
         next.orb = { x: state.orb.x + odx, y: state.orb.y + ody };
+        if (state.bonusOrb) {
+          next.bonusOrb = {
+            x: clamp(state.bonusOrb.x + odx, 0, GRID_W - 1),
+            y: clamp(state.bonusOrb.y + ody, 0, GRID_H - 1)
+          };
+        }
       }
 
       // Orb collection
@@ -334,19 +421,34 @@ function reducer(state, action) {
         if (newTotalOrbs % 8 === 0 && enemies.length < 6) {
           next.enemies = [...next.enemies, randomCellAway(player)];
         }
+        collectedCollectibleCount += 1;
+        orbCollected = true;
+      }
 
-        if (state.mission?.kind === "collect") {
-          next.mission = {
-            ...state.mission,
-            progress: Math.min(state.mission.target, state.mission.progress + 1)
-          };
-        }
-        if (state.mission?.kind === "combo") {
-          next.mission = {
-            ...state.mission,
-            progress: Math.max(state.mission.progress, newCombo)
-          };
-        }
+      if (next.bonusOrb && player.x === next.bonusOrb.x && player.y === next.bonusOrb.y) {
+        next = {
+          ...next,
+          bonusOrb: null,
+          score: next.score + 25,
+          abilityCharge: clamp(next.abilityCharge + 35, 0, ABILITY_MAX),
+          scoreFloats: [...next.scoreFloats, { id: now + 1, x: player.x, y: player.y, text: "+25" }],
+          directorBeat: createDirectorBeat("Bonus Core Secured", "Sponsor highlight locked in for the next asset pass.", now),
+          directorBeatEndsAt: now + 5000
+        };
+        collectedCollectibleCount += 1;
+      }
+
+      if (state.mission?.kind === "collect" && collectedCollectibleCount > 0) {
+        next.mission = {
+          ...state.mission,
+          progress: Math.min(state.mission.target, state.mission.progress + collectedCollectibleCount)
+        };
+      }
+      if (state.mission?.kind === "combo" && orbCollected) {
+        next.mission = {
+          ...state.mission,
+          progress: Math.max(state.mission.progress, next.combo)
+        };
       }
 
       // Powerup collection
@@ -383,6 +485,10 @@ function reducer(state, action) {
         if (ap[k] < now) delete ap[k];
       }
       next.activePowerups = ap;
+      if (next.directorBeatEndsAt && next.directorBeatEndsAt < now) {
+        next.directorBeat = null;
+        next.directorBeatEndsAt = 0;
+      }
 
       // Clean old score floats
       next.scoreFloats = next.scoreFloats.filter((f) => now - f.id < 800);
@@ -413,12 +519,35 @@ function reducer(state, action) {
       }
 
       const missionSecondsLeft = state.missionSecondsLeft - 1;
-      if (missionSecondsLeft <= 0) {
-        const missionResolved = state.mission?.kind === "survive" ? completeMission(state) : failMission(state);
-        return { ...missionResolved, timer: newTimer };
+      let next = {
+        ...state,
+        timer: newTimer,
+        missionSecondsLeft
+      };
+
+      const previousPhase = getDirectorPhase(state.timer);
+      const nextPhase = getDirectorPhase(newTimer);
+      if (previousPhase.id !== nextPhase.id) {
+        const now = Date.now();
+        next = {
+          ...next,
+          abilityCharge: clamp(next.abilityCharge + 20, 0, ABILITY_MAX),
+          powerup: next.powerup || { ...randomCellAway(state.player, 4), type: POWERUP_TYPES[(state.level + newTimer) % POWERUP_TYPES.length] },
+          directorBeat: createDirectorBeat(nextPhase.label, nextPhase.callout, now),
+          directorBeatEndsAt: now + 6000
+        };
       }
 
-      return { ...state, timer: newTimer, missionSecondsLeft };
+      if (missionSecondsLeft <= 0) {
+        const missionResolved = state.mission?.kind === "survive" ? completeMission(next) : failMission(next);
+        next = { ...missionResolved, timer: newTimer };
+      }
+
+      if (newTimer > 0 && newTimer % 12 === 0) {
+        next = triggerDirectorBeat(next, newTimer);
+      }
+
+      return next;
     }
 
     case "SET_HERO": {
@@ -505,6 +634,7 @@ function reducer(state, action) {
         appliedAt: null,
         versionNum: (state.editHistory || []).filter(e => e.subType === action.subType).length + 1,
         latencyMs: action.latencyMs,
+        cacheHit: Boolean(action.cacheHit),
       };
       return { ...state, editHistory: [...(state.editHistory || []), newEntry] };
     }
@@ -526,7 +656,36 @@ function reducer(state, action) {
     }
 
     case 'EDIT_REVERT':
-      return reducer(state, { ...action, type: 'EDIT_APPLY' });
+      {
+        const target = (state.editHistory || []).find((entry) => entry.id === action.historyId);
+        if (!target) return state;
+        const updatedHistory = (state.editHistory || []).map((entry) =>
+          entry.id === action.historyId ? { ...entry, appliedAt: null } : entry
+        );
+        const previousApplied = [...updatedHistory]
+          .reverse()
+          .find((entry) => entry.type === target.type && entry.subType === target.subType && entry.appliedAt);
+
+        if (target.type === "sound") {
+          return {
+            ...state,
+            editHistory: updatedHistory,
+            appliedSounds: {
+              ...state.appliedSounds,
+              [target.subType]: previousApplied?.result?.audioUrl || null
+            }
+          };
+        }
+
+        return {
+          ...state,
+          editHistory: updatedHistory,
+          appliedAssets: {
+            ...state.appliedAssets,
+            [target.subType]: previousApplied?.result?.modelUrl || null
+          }
+        };
+      }
 
     default:
       return state;
@@ -559,6 +718,8 @@ export default function App() {
   const [studioBrief, setStudioBrief] = useState("Neon sponsor arena for creator-made hero collectibles");
   const [studioPack, setStudioPack] = useState(null);
   const [studioStatus, setStudioStatus] = useState("idle");
+  const [studioCache, setStudioCache] = useState(null);
+  const [selectedMarketingAngle, setSelectedMarketingAngle] = useState(null);
   const [editorDrafts, setEditorDrafts] = useState({ sound: {}, asset: {} });
 
   const {
@@ -589,12 +750,15 @@ export default function App() {
     missionSecondsLeft,
     missionEvent,
     abilityEvent,
+    directorBeat,
+    bonusOrb,
     editHistory,
     appliedSounds,
     appliedAssets
   } = state;
 
   const activeAbility = HERO_ABILITIES[hero.id];
+  const directorPhase = getDirectorPhase(timer);
 
   // Save progress on achievement / level change
   useEffect(() => {
@@ -612,6 +776,15 @@ export default function App() {
       }).catch(() => null);
     }
   }, [gameOver]);
+
+  async function refreshCacheStats() {
+    try {
+      const json = await jsonRequest("/api/varco/cache/stats");
+      setStudioCache(json.cache);
+    } catch {
+      /* cache polling is non-fatal */
+    }
+  }
 
   // Keyboard
   useEffect(() => {
@@ -657,6 +830,7 @@ export default function App() {
   // Server polling
   useEffect(() => {
     jsonRequest("/api/match/start", { method: "POST" }).catch(() => null);
+    refreshCacheStats().catch(() => null);
     const poll = setInterval(async () => {
       try {
         const [match, logsRes] = await Promise.all([
@@ -669,7 +843,13 @@ export default function App() {
         setServerLogs(logsRes.logs);
       } catch { /* polling non-fatal */ }
     }, 2500);
-    return () => clearInterval(poll);
+    const cachePoll = setInterval(() => {
+      refreshCacheStats().catch(() => null);
+    }, 10000);
+    return () => {
+      clearInterval(poll);
+      clearInterval(cachePoll);
+    };
   }, []);
 
   // Log orb collect
@@ -710,6 +890,11 @@ export default function App() {
   }, [abilityEvent?.id]);
 
   useEffect(() => {
+    if (!directorBeat) return;
+    setLog((prev) => [`${directorBeat.title}: ${directorBeat.text}`, ...prev].slice(0, 8));
+  }, [directorBeat?.id]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return undefined;
     window.__SAGA_DEBUG__ = {
       dispatch,
@@ -725,7 +910,7 @@ export default function App() {
     if (totalOrbs > 0 && running && appliedSounds.orb) {
       try { new Audio(appliedSounds.orb).play(); } catch(e) {}
     }
-  }, [totalOrbs]);
+  }, [totalOrbs, running, appliedSounds.orb]);
 
   // Play hit sound
   const prevHpRef = useRef(hero.hp);
@@ -734,7 +919,7 @@ export default function App() {
       try { new Audio(appliedSounds.hit).play(); } catch(e) {}
     }
     prevHpRef.current = hp;
-  }, [hp]);
+  }, [hp, running, appliedSounds.hit]);
 
   // Play win/lose sound on game over
   useEffect(() => {
@@ -745,7 +930,21 @@ export default function App() {
         try { new Audio(soundUrl).play(); } catch(e) {}
       }
     }
-  }, [gameOver]);
+  }, [gameOver, score, appliedSounds.win, appliedSounds.lose]);
+
+  useEffect(() => {
+    if (studioPack?.marketingAngles?.length) {
+      setSelectedMarketingAngle(studioPack.marketingAngles[0]);
+    } else {
+      setSelectedMarketingAngle(null);
+    }
+  }, [studioPack?.packId]);
+
+  const totalPool = betPools.player + betPools.enemy || 1;
+  const abilityPercent = (abilityCharge / ABILITY_MAX) * 100;
+  const abilityCooldown = Math.max(0, Math.ceil((abilityCooldownUntil - Date.now()) / 1000));
+  const abilityReady = abilityCharge >= ABILITY_MAX && abilityCooldown <= 0;
+  const enemyFrozen = enemyFreezeUntil && Date.now() < enemyFreezeUntil;
 
   // Build tile data
   const tiles = useMemo(() => {
@@ -765,6 +964,10 @@ export default function App() {
           classes += " has-orb";
           if (appliedAssets.orb) classes += " custom-orb";
         }
+        if (bonusOrb && x === bonusOrb.x && y === bonusOrb.y) {
+          entity = "bonus";
+          classes += " has-bonus-orb";
+        }
         if (enemies.some((e) => e.x === x && e.y === y)) {
           entity = "enemy";
           classes += " has-enemy";
@@ -782,15 +985,12 @@ export default function App() {
       }
     }
     return map;
-  }, [player, orb, enemies, powerup, activePowerups, appliedAssets, enemyFrozen]);
+  }, [player, orb, bonusOrb, enemies, powerup, activePowerups, appliedAssets, enemyFrozen]);
 
   const hpPercent = (hp / hero.hp) * 100;
   const xpPercent = (xp / xpForLevel(level)) * 100;
-  const totalPool = betPools.player + betPools.enemy || 1;
-  const abilityPercent = (abilityCharge / ABILITY_MAX) * 100;
-  const abilityCooldown = Math.max(0, Math.ceil((abilityCooldownUntil - Date.now()) / 1000));
-  const abilityReady = abilityCharge >= ABILITY_MAX && abilityCooldown <= 0;
-  const enemyFrozen = enemyFreezeUntil && Date.now() < enemyFreezeUntil;
+  const liveAssetCount = Object.values(appliedAssets).filter(Boolean).length;
+  const liveSoundCount = Object.values(appliedSounds).filter(Boolean).length;
 
   function updateEditorDraft(kind, key, value) {
     setEditorDrafts((prev) => ({
@@ -808,6 +1008,26 @@ export default function App() {
     setLog((prev) => [`Prompt loaded: ${key}`, ...prev].slice(0, 8));
   }
 
+  function loadQueueItem(item) {
+    if (item.lane === "social") {
+      const angle = studioPack?.marketingAngles?.find((entry) => entry.channel === item.key) || null;
+      setSelectedMarketingAngle(angle);
+      setLog((prev) => [`Copy loaded: ${item.key}`, ...prev].slice(0, 8));
+      return;
+    }
+    applyStudioSuggestion(item.lane, item.key, item.prompt);
+  }
+
+  async function copyMarketingCopy() {
+    if (!selectedMarketingAngle?.copy || typeof navigator === "undefined" || !navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(`${selectedMarketingAngle.copy}\nCTA: ${selectedMarketingAngle.cta}`);
+      setLog((prev) => [`Copied ${selectedMarketingAngle.label} copy`, ...prev].slice(0, 8));
+    } catch {
+      setLog((prev) => ["Clipboard copy blocked", ...prev].slice(0, 8));
+    }
+  }
+
   async function generateStudioPack() {
     setStudioStatus("loading");
     try {
@@ -821,6 +1041,8 @@ export default function App() {
         sound: json.studioPack.sounds,
         asset: json.studioPack.assets
       });
+      setSelectedMarketingAngle(json.studioPack.marketingAngles?.[0] || null);
+      refreshCacheStats().catch(() => null);
       setLog((prev) => [`Studio pack ${json.studioPack.cache_hit ? "cached" : "ready"}`, ...prev].slice(0, 8));
     } catch (error) {
       setStudioStatus("error");
@@ -978,6 +1200,35 @@ export default function App() {
           </button>
         </div>
 
+        <div className="panel director-panel" data-testid="director-panel">
+          <div className="panel-title">Arena Director</div>
+          <div className="director-phase-row">
+            <strong>{directorPhase.label}</strong>
+            <span>{directorPhase.threat} threat</span>
+          </div>
+          <p className="director-phase-copy">{directorPhase.callout}</p>
+          {directorBeat && (
+            <div className="director-beat-card">
+              <strong>{directorBeat.title}</strong>
+              <span>{directorBeat.text}</span>
+            </div>
+          )}
+          <div className="director-kpis">
+            <div>
+              <span>Bonus core</span>
+              <strong>{bonusOrb ? "Live" : "Offline"}</strong>
+            </div>
+            <div>
+              <span>Live assets</span>
+              <strong>{liveAssetCount}/3</strong>
+            </div>
+            <div>
+              <span>Live cues</span>
+              <strong>{liveSoundCount}/5</strong>
+            </div>
+          </div>
+        </div>
+
         {/* Power-ups */}
         <div className="panel">
           <div className="panel-title">Power-ups</div>
@@ -1007,7 +1258,7 @@ export default function App() {
           </div>
           <div className="live-state-row">
             <span>{enemyFrozen ? "ENEMIES FROZEN" : "ARENA HOT"}</span>
-            <span>{Object.values(appliedAssets).filter(Boolean).length} skins live</span>
+            <span>{liveAssetCount} skins live</span>
           </div>
           <div className="pool-bar">
             <div className="pool-bar-p" style={{ width: `${(betPools.player / totalPool) * 100}%` }} />
@@ -1030,10 +1281,11 @@ export default function App() {
       {/* ARENA */}
       <div className="arena-wrap">
         <div className="arena-status-strip" data-testid="arena-status-strip">
+          <span>Phase: {directorPhase.label}</span>
           <span>Mission: {mission.title}</span>
           <span>Ability: {activeAbility.name}</span>
-          <span>Assets live: {Object.values(appliedAssets).filter(Boolean).length}/3</span>
-          <span>Sound cues live: {Object.values(appliedSounds).filter(Boolean).length}/5</span>
+          <span>Assets live: {liveAssetCount}/3</span>
+          <span>Sound cues live: {liveSoundCount}/5</span>
         </div>
         <div className={`arena-3d${shaking ? " shake" : ""}`} role="application" aria-label="game grid">
           {tiles.map((t) => (
@@ -1041,7 +1293,13 @@ export default function App() {
               {t.entity && (
                 <div
                   className="entity"
-                  data-icon={t.entity === "powerup" && powerup ? powerup.type.icon : undefined}
+                  data-icon={
+                    t.entity === "powerup" && powerup
+                      ? powerup.type.icon
+                      : t.entity === "bonus"
+                        ? "★"
+                        : undefined
+                  }
                 />
               )}
             </div>
@@ -1093,6 +1351,11 @@ export default function App() {
           <button type="button" className="bet-btn" onClick={generateStudioPack} disabled={studioStatus === "loading"}>
             {studioStatus === "loading" ? "Building Pack..." : "Generate Studio Pack"}
           </button>
+          <div className="studio-kpi-strip" data-testid="studio-kpi-strip">
+            <span>cache hits {studioCache?.hits ?? 0}</span>
+            <span>saved calls {studioCache?.savedCalls ?? 0}</span>
+            <span>studio hits {studioCache?.studioPackHits ?? 0}</span>
+          </div>
           {studioPack && (
             <div className="studio-pack-card">
               <div className="studio-pack-header">
@@ -1103,6 +1366,20 @@ export default function App() {
               <div className="studio-savings">
                 <span>{studioPack.savings.estimatedCallsSaved} calls saved</span>
                 <span>{studioPack.savings.estimatedCallsWithPack}/{studioPack.savings.estimatedCallsWithoutPack} planned</span>
+              </div>
+              <div className="studio-queue">
+                <div className="studio-suggestion-title">Production Queue</div>
+                {studioPack.productionQueue.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="studio-queue-item"
+                    onClick={() => loadQueueItem(item)}
+                  >
+                    <strong>{item.label}</strong>
+                    <span>{item.lane} / {item.key}</span>
+                  </button>
+                ))}
               </div>
               <div className="studio-suggestion-group">
                 <div className="studio-suggestion-title">Sound Prompts</div>
@@ -1120,6 +1397,29 @@ export default function App() {
                   </button>
                 ))}
               </div>
+              <div className="studio-suggestion-group">
+                <div className="studio-suggestion-title">Marketing Copy</div>
+                {studioPack.marketingAngles.map((angle) => (
+                  <button
+                    key={angle.id}
+                    type="button"
+                    className={`studio-chip${selectedMarketingAngle?.id === angle.id ? " active" : ""}`}
+                    onClick={() => setSelectedMarketingAngle(angle)}
+                  >
+                    {angle.label}
+                  </button>
+                ))}
+              </div>
+              {selectedMarketingAngle && (
+                <div className="studio-copy-card" data-testid="studio-copy-card">
+                  <strong>{selectedMarketingAngle.label}</strong>
+                  <p>{selectedMarketingAngle.copy}</p>
+                  <span>{selectedMarketingAngle.cta}</span>
+                  <button type="button" className="share-btn" onClick={copyMarketingCopy}>
+                    Copy launch copy
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -33,9 +33,10 @@ export default function SoundEditor({ editHistory = [], dispatch, studioPack = n
       const latencyMs = Date.now() - start;
       const audioUrl = data.result?.data?.[0]?.audio || data.data?.[0]?.audio || '';
       const id = data.result?.version_id || data.version_id || Date.now().toString();
+      const cacheHit = Boolean(data.result?.cache_hit || data.cache_hit);
 
-      dispatch({ type: 'EDIT_GENERATE', editType: 'sound', subType: activeTab, prompt: displayPrompt, result: { audioUrl }, latencyMs });
-      setLatestResult({ audioUrl, latencyMs, id });
+      dispatch({ type: 'EDIT_GENERATE', editType: 'sound', subType: activeTab, prompt: displayPrompt, result: { audioUrl }, latencyMs, cacheHit });
+      setLatestResult({ audioUrl, latencyMs, id, cacheHit });
     } catch (e) {
       console.error('Sound generation failed:', e);
     } finally {
@@ -85,6 +86,7 @@ export default function SoundEditor({ editHistory = [], dispatch, studioPack = n
         <div className="generation-result" data-testid="sound-generation-result">
           <audio controls src={latestResult.audioUrl} style={{ width: '100%' }} />
           <div className="latency-badge">Generated in {(latestResult.latencyMs / 1000).toFixed(1)}s by VARCO3D</div>
+          {latestResult.cacheHit && <div className="cache-hit-badge">cache hit</div>}
           <button className="apply-btn" onClick={() => {
             const entry = editHistory.filter(e => e.type === 'sound' && e.subType === activeTab).at(-1);
             if (entry) handleApply(entry.id);
@@ -101,6 +103,7 @@ export default function SoundEditor({ editHistory = [], dispatch, studioPack = n
             <div key={entry.id} className={`version-item ${entry.appliedAt ? 'active' : ''}`}>
               <span className="version-prompt">{entry.prompt.slice(0, 30)}{entry.prompt.length > 30 ? '...' : ''}</span>
               <span className="version-latency">{(entry.latencyMs / 1000).toFixed(1)}s</span>
+              {entry.cacheHit && <span className="cache-hit-badge">cache</span>}
               {entry.appliedAt && <span className="applied-badge">적용됨</span>}
               {entry.result?.audioUrl && <audio controls src={entry.result.audioUrl} style={{ width: '80px', height: '24px' }} />}
               <button className="apply-btn small" onClick={() => handleApply(entry.id)}>Apply</button>
