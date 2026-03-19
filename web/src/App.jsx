@@ -1,10 +1,14 @@
-import { useEffect, useMemo, useReducer, useRef, useCallback, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import SoundEditor from "./SoundEditor.jsx";
+import AssetEditor from "./AssetEditor.jsx";
+import EditHistory from "./EditHistory.jsx";
 
 const GRID_W = 14;
 const GRID_H = 10;
 const TICK_MS = 150;
 const GAME_TIME = 60;
 const COMBO_WINDOW = 2000;
+const ABILITY_MAX = 100;
 
 const heroes = [
   { id: "modeler", name: "3D Modeler", hp: 6, speed: 1, desc: "HP 6 / SPD 1" },
@@ -29,6 +33,74 @@ const ACHIEVEMENTS = [
   { id: "collector", name: "Collector", desc: "Get 10 orbs in one game", check: (s) => s.totalOrbs >= 10 }
 ];
 
+const HERO_ABILITIES = {
+  modeler: {
+    name: "Hard-Light Shield",
+    hint: "Space",
+    cooldownMs: 12000,
+    summary: "Shield + heal + scatter enemies"
+  },
+  sounder: {
+    name: "Bass Drop",
+    hint: "Space",
+    cooldownMs: 11000,
+    summary: "Freeze enemies + protect your combo"
+  },
+  faceweaver: {
+    name: "Phase Rush",
+    hint: "Space",
+    cooldownMs: 10000,
+    summary: "Speed + magnet burst for orb routing"
+  }
+};
+
+const MISSION_TEMPLATES = [
+  {
+    kind: "collect",
+    title: "Core Rush",
+    build(difficulty) {
+      const target = difficulty >= 4 ? 4 : 3;
+      return {
+        kind: "collect",
+        title: "Core Rush",
+        target,
+        progress: 0,
+        duration: 15,
+        rewardLabel: `+${20 + difficulty * 3} score / +35 charge`
+      };
+    }
+  },
+  {
+    kind: "combo",
+    title: "Combo Broadcast",
+    build(difficulty) {
+      const target = difficulty >= 5 ? 4 : 3;
+      return {
+        kind: "combo",
+        title: "Combo Broadcast",
+        target,
+        progress: 0,
+        duration: 14,
+        rewardLabel: "magnet pulse / +40 charge"
+      };
+    }
+  },
+  {
+    kind: "survive",
+    title: "Clean Take",
+    build(difficulty) {
+      return {
+        kind: "survive",
+        title: "Clean Take",
+        target: 1,
+        progress: 0,
+        duration: Math.max(8, 12 - Math.floor(difficulty / 2)),
+        rewardLabel: "heal 1 / shield refresh"
+      };
+    }
+  }
+];
+
 function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
 function randomCell() { return { x: Math.floor(Math.random() * GRID_W), y: Math.floor(Math.random() * GRID_H) }; }
 function randomCellAway(pos, minDist = 3) {
@@ -48,6 +120,91 @@ function comboMultiplier(combo) {
 }
 
 function xpForLevel(level) { return 50 + level * 30; }
+function missionProgressText(mission) {
+  if (!mission) return "";
+  if (mission.kind === "survive") return "No damage";
+  return `${mission.progress}/${mission.target}`;
+}
+
+function moveEnemy(enemy, player, difficulty) {
+  const steps = Math.min(2, 1 + Math.floor(difficulty / 4));
+  let current = { ...enemy };
+  for (let step = 0; step < steps; step += 1) {
+    const chase = Math.random() < 0.3 + difficulty * 0.05;
+    if (chase) {
+      current = {
+        x: clamp(current.x + Math.sign(player.x - current.x), 0, GRID_W - 1),
+        y: clamp(current.y + Math.sign(player.y - current.y), 0, GRID_H - 1)
+      };
+    } else {
+      current = {
+        x: clamp(current.x + Math.floor(Math.random() * 3) - 1, 0, GRID_W - 1),
+        y: clamp(current.y + Math.floor(Math.random() * 3) - 1, 0, GRID_H - 1)
+      };
+    }
+  }
+  return current;
+}
+
+function createMission(difficulty = 1, excludeKind = null) {
+  const pool = MISSION_TEMPLATES.filter((mission) => mission.kind !== excludeKind);
+  const template = pool[Math.floor(Math.random() * pool.length)];
+  return template.build(difficulty);
+}
+
+function advanceMissionState(state, eventText, rewardEffect) {
+  const now = Date.now();
+  const next = rewardEffect ? rewardEffect(state) : state;
+  const mission = createMission(next.difficulty, state.mission?.kind);
+  return {
+    ...next,
+    mission,
+    missionSecondsLeft: mission.duration,
+    missionEvent: { id: now, text: eventText }
+  };
+}
+
+function completeMission(state) {
+  const mission = state.mission;
+  if (!mission) return state;
+
+  if (mission.kind === "collect") {
+    return advanceMissionState(
+      {
+        ...state,
+        score: state.score + 20 + state.difficulty * 3,
+        abilityCharge: clamp(state.abilityCharge + 35, 0, ABILITY_MAX)
+      },
+      `${mission.title} cleared`
+    );
+  }
+
+  if (mission.kind === "combo") {
+    const now = Date.now();
+    return advanceMissionState(
+      {
+        ...state,
+        abilityCharge: clamp(state.abilityCharge + 40, 0, ABILITY_MAX),
+        activePowerups: { ...state.activePowerups, magnet: now + 5000 }
+      },
+      `${mission.title} cleared`
+    );
+  }
+
+  return advanceMissionState(
+    {
+      ...state,
+      hp: Math.min(state.hero.hp, state.hp + 1),
+      activePowerups: { ...state.activePowerups, shield: Date.now() + 3500 }
+    },
+    `${mission.title} cleared`
+  );
+}
+
+function failMission(state) {
+  if (!state.mission) return state;
+  return advanceMissionState(state, `${state.mission.title} missed`);
+}
 
 function loadHighScores() {
   try { return JSON.parse(localStorage.getItem("saga_highscores") || "[]").slice(0, 5); }
@@ -68,38 +225,53 @@ function saveProgress(data) {
   localStorage.setItem("saga_progress", JSON.stringify(data));
 }
 
-const initState = (hero) => ({
-  hero,
-  running: false,
-  gameOver: false,
-  score: 0,
-  hp: hero.hp,
-  player: { x: 2, y: 2 },
-  orb: randomCell(),
-  enemies: [randomCellAway({ x: 2, y: 2 }), randomCellAway({ x: 2, y: 2 })],
-  powerup: null,
-  activePowerups: {},
-  timer: GAME_TIME,
-  combo: 0,
-  lastOrbTime: 0,
-  maxCombo: 0,
-  totalOrbs: 0,
-  wonWith1Hp: false,
-  usedSpeed: false,
-  xp: loadProgress().xp || 0,
-  level: loadProgress().level || 1,
-  achievements: loadProgress().achievements || [],
-  scoreFloats: [],
-  shaking: false,
-  difficulty: 1
-});
+const initState = (hero) => {
+  const mission = createMission(1);
+  return {
+    hero,
+    running: false,
+    gameOver: false,
+    score: 0,
+    hp: hero.hp,
+    player: { x: 2, y: 2 },
+    orb: randomCell(),
+    enemies: [randomCellAway({ x: 2, y: 2 }), randomCellAway({ x: 2, y: 2 })],
+    powerup: null,
+    activePowerups: {},
+    timer: GAME_TIME,
+    combo: 0,
+    lastOrbTime: 0,
+    maxCombo: 0,
+    totalOrbs: 0,
+    wonWith1Hp: false,
+    usedSpeed: false,
+    xp: loadProgress().xp || 0,
+    level: loadProgress().level || 1,
+    achievements: loadProgress().achievements || [],
+    scoreFloats: [],
+    shaking: false,
+    difficulty: 1,
+    abilityCharge: 0,
+    abilityCooldownUntil: 0,
+    enemyFreezeUntil: 0,
+    mission,
+    missionSecondsLeft: mission.duration,
+    missionEvent: null,
+    abilityEvent: null,
+    editHistory: [],
+    appliedSounds: { orb: null, hit: null, win: null, lose: null, bgm: null },
+    appliedAssets: { orb: null, enemy: null, player: null },
+  };
+};
 
 function reducer(state, action) {
   switch (action.type) {
     case "TICK": {
       if (!state.running || state.gameOver) return state;
+      const now = Date.now();
       const keys = action.keys;
-      const step = state.activePowerups.speed ? state.hero.speed + 1 : state.hero.speed;
+      const hasSpeed = state.activePowerups.speed && now < state.activePowerups.speed;
+      const step = hasSpeed ? state.hero.speed + 1 : state.hero.speed;
       let nx = state.player.x, ny = state.player.y;
       if (keys.ArrowUp || keys.w) ny -= step;
       if (keys.ArrowDown || keys.s) ny += step;
@@ -107,27 +279,15 @@ function reducer(state, action) {
       if (keys.ArrowRight || keys.d) nx += step;
       const player = { x: clamp(nx, 0, GRID_W - 1), y: clamp(ny, 0, GRID_H - 1) };
 
-      const enemySpeed = 1 + Math.floor(state.difficulty / 3);
-      const enemies = state.enemies.map((e) => {
-        const chase = Math.random() < 0.3 + state.difficulty * 0.05;
-        if (chase) {
-          const dx = Math.sign(player.x - e.x);
-          const dy = Math.sign(player.y - e.y);
-          return {
-            x: clamp(e.x + dx, 0, GRID_W - 1),
-            y: clamp(e.y + dy, 0, GRID_H - 1)
-          };
-        }
-        return {
-          x: clamp(e.x + Math.floor(Math.random() * 3) - 1, 0, GRID_W - 1),
-          y: clamp(e.y + Math.floor(Math.random() * 3) - 1, 0, GRID_H - 1)
-        };
-      });
+      const enemies =
+        state.enemyFreezeUntil && now < state.enemyFreezeUntil
+          ? state.enemies
+          : state.enemies.map((enemy) => moveEnemy(enemy, player, state.difficulty));
 
       let next = { ...state, player, enemies };
 
       // Magnet: pull orb closer
-      if (state.activePowerups.magnet) {
+      if (state.activePowerups.magnet && now < state.activePowerups.magnet) {
         const odx = Math.sign(player.x - state.orb.x);
         const ody = Math.sign(player.y - state.orb.y);
         next.orb = { x: state.orb.x + odx, y: state.orb.y + ody };
@@ -135,7 +295,6 @@ function reducer(state, action) {
 
       // Orb collection
       if (player.x === next.orb.x && player.y === next.orb.y) {
-        const now = Date.now();
         const isCombo = now - state.lastOrbTime < COMBO_WINDOW;
         const newCombo = isCombo ? state.combo + 1 : 1;
         const mult = comboMultiplier(newCombo);
@@ -150,7 +309,8 @@ function reducer(state, action) {
           maxCombo: Math.max(state.maxCombo, newCombo),
           totalOrbs: newTotalOrbs,
           scoreFloats: [...state.scoreFloats, { id: now, x: player.x, y: player.y, text: `+${points}` }],
-          difficulty: 1 + Math.floor(newTotalOrbs / 5)
+          difficulty: 1 + Math.floor(newTotalOrbs / 5),
+          abilityCharge: clamp(state.abilityCharge + 28, 0, ABILITY_MAX)
         };
 
         // XP gain
@@ -174,24 +334,40 @@ function reducer(state, action) {
         if (newTotalOrbs % 8 === 0 && enemies.length < 6) {
           next.enemies = [...next.enemies, randomCellAway(player)];
         }
+
+        if (state.mission?.kind === "collect") {
+          next.mission = {
+            ...state.mission,
+            progress: Math.min(state.mission.target, state.mission.progress + 1)
+          };
+        }
+        if (state.mission?.kind === "combo") {
+          next.mission = {
+            ...state.mission,
+            progress: Math.max(state.mission.progress, newCombo)
+          };
+        }
       }
 
       // Powerup collection
       if (state.powerup && player.x === state.powerup.x && player.y === state.powerup.y) {
         const pType = state.powerup.type;
         next.powerup = null;
-        next.activePowerups = { ...state.activePowerups, [pType.id]: Date.now() + pType.duration };
+        next.activePowerups = { ...state.activePowerups, [pType.id]: now + pType.duration };
         if (pType.id === "speed") next.usedSpeed = true;
       }
 
       // Enemy collision
-      const shielded = state.activePowerups.shield && Date.now() < state.activePowerups.shield;
+      const shielded = state.activePowerups.shield && now < state.activePowerups.shield;
       const hit = enemies.some((e) => e.x === player.x && e.y === player.y);
       if (hit && !shielded) {
         const newHp = state.hp - 1;
         next.hp = newHp;
         next.shaking = true;
         next.combo = 0;
+        if (state.mission?.kind === "survive") {
+          next = failMission(next);
+        }
         if (newHp <= 0) {
           next.running = false;
           next.gameOver = true;
@@ -202,15 +378,18 @@ function reducer(state, action) {
       }
 
       // Clean expired powerups
-      const now2 = Date.now();
       const ap = { ...next.activePowerups };
       for (const k of Object.keys(ap)) {
-        if (ap[k] < now2) delete ap[k];
+        if (ap[k] < now) delete ap[k];
       }
       next.activePowerups = ap;
 
       // Clean old score floats
-      next.scoreFloats = next.scoreFloats.filter((f) => Date.now() - f.id < 800);
+      next.scoreFloats = next.scoreFloats.filter((f) => now - f.id < 800);
+
+      if (next.mission && next.mission.kind !== "survive" && next.mission.progress >= next.mission.target) {
+        next = completeMission(next);
+      }
 
       // Check achievements
       const newAch = [];
@@ -232,7 +411,14 @@ function reducer(state, action) {
       if (newTimer <= 0) {
         return { ...state, timer: 0, running: false, gameOver: true };
       }
-      return { ...state, timer: newTimer };
+
+      const missionSecondsLeft = state.missionSecondsLeft - 1;
+      if (missionSecondsLeft <= 0) {
+        const missionResolved = state.mission?.kind === "survive" ? completeMission(state) : failMission(state);
+        return { ...missionResolved, timer: newTimer };
+      }
+
+      return { ...state, timer: newTimer, missionSecondsLeft };
     }
 
     case "SET_HERO": {
@@ -258,6 +444,90 @@ function reducer(state, action) {
     case "CLEAR_SHAKE":
       return { ...state, shaking: false };
 
+    case "CLEAR_MISSION_EVENT":
+      return { ...state, missionEvent: null };
+
+    case "CLEAR_ABILITY_EVENT":
+      return { ...state, abilityEvent: null };
+
+    case "DEBUG_PATCH_STATE":
+      return { ...state, ...(action.patch || {}) };
+
+    case "ACTIVATE_ABILITY": {
+      if (!state.running || state.gameOver) return state;
+      const now = Date.now();
+      const ability = HERO_ABILITIES[state.hero.id];
+      if (!ability || state.abilityCharge < ABILITY_MAX || now < state.abilityCooldownUntil) return state;
+
+      if (state.hero.id === "modeler") {
+        return {
+          ...state,
+          hp: Math.min(state.hero.hp, state.hp + 1),
+          abilityCharge: 0,
+          abilityCooldownUntil: now + ability.cooldownMs,
+          activePowerups: { ...state.activePowerups, shield: now + 4500 },
+          enemies: state.enemies.map(() => randomCellAway(state.player, 5)),
+          abilityEvent: { id: now, text: `${ability.name} deployed` }
+        };
+      }
+
+      if (state.hero.id === "sounder") {
+        return {
+          ...state,
+          combo: Math.max(state.combo, 2),
+          abilityCharge: 0,
+          abilityCooldownUntil: now + ability.cooldownMs,
+          enemyFreezeUntil: now + 3500,
+          abilityEvent: { id: now, text: `${ability.name} stunned the arena` }
+        };
+      }
+
+      return {
+        ...state,
+        abilityCharge: 0,
+        abilityCooldownUntil: now + ability.cooldownMs,
+        activePowerups: {
+          ...state.activePowerups,
+          speed: now + 5000,
+          magnet: now + 5000
+        },
+        abilityEvent: { id: now, text: `${ability.name} engaged` }
+      };
+    }
+
+    case 'EDIT_GENERATE': {
+      const newEntry = {
+        id: Date.now().toString(),
+        type: action.editType,
+        subType: action.subType,
+        prompt: action.prompt,
+        result: action.result,
+        appliedAt: null,
+        versionNum: (state.editHistory || []).filter(e => e.subType === action.subType).length + 1,
+        latencyMs: action.latencyMs,
+      };
+      return { ...state, editHistory: [...(state.editHistory || []), newEntry] };
+    }
+
+    case 'EDIT_APPLY': {
+      const entry = (state.editHistory || []).find(e => e.id === action.historyId);
+      if (!entry) return state;
+      const now = new Date().toISOString();
+      const updatedHistory = (state.editHistory || []).map(e =>
+        e.id === action.historyId ? { ...e, appliedAt: now } : e
+      );
+      if (entry.type === 'sound') {
+        const newSounds = { ...state.appliedSounds, [entry.subType]: entry.result?.audioUrl };
+        return { ...state, editHistory: updatedHistory, appliedSounds: newSounds };
+      } else {
+        const newAssets = { ...state.appliedAssets, [entry.subType]: entry.result?.modelUrl };
+        return { ...state, editHistory: updatedHistory, appliedAssets: newAssets };
+      }
+    }
+
+    case 'EDIT_REVERT':
+      return reducer(state, { ...action, type: 'EDIT_APPLY' });
+
     default:
       return state;
   }
@@ -276,19 +546,55 @@ async function jsonRequest(path, options = {}) {
 export default function App() {
   const [state, dispatch] = useReducer(reducer, heroes[0], initState);
   const keysRef = useRef({});
-  const [apiResult, setApiResult] = useState("idle");
-  const [modelResult, setModelResult] = useState("idle");
   const [log, setLog] = useState([]);
   const [spectators, setSpectators] = useState(0);
   const [odds, setOdds] = useState({ player: 1.9, enemy: 1.9 });
   const [betPools, setBetPools] = useState({ player: 0, enemy: 0 });
   const [betName, setBetName] = useState("guest_player");
+  const [editorTab, setEditorTab] = useState("sound");
   const [betSide, setBetSide] = useState("player");
   const [betAmount, setBetAmount] = useState(100);
   const [serverLogs, setServerLogs] = useState([]);
   const [highScores, setHighScores] = useState(loadHighScores());
+  const [studioBrief, setStudioBrief] = useState("Neon sponsor arena for creator-made hero collectibles");
+  const [studioPack, setStudioPack] = useState(null);
+  const [studioStatus, setStudioStatus] = useState("idle");
+  const [editorDrafts, setEditorDrafts] = useState({ sound: {}, asset: {} });
 
-  const { hero, running, gameOver, score, hp, player, orb, enemies, powerup, activePowerups, timer, combo, maxCombo, totalOrbs, xp, level, achievements, scoreFloats, shaking, difficulty } = state;
+  const {
+    hero,
+    running,
+    gameOver,
+    score,
+    hp,
+    player,
+    orb,
+    enemies,
+    powerup,
+    activePowerups,
+    timer,
+    combo,
+    maxCombo,
+    totalOrbs,
+    xp,
+    level,
+    achievements,
+    scoreFloats,
+    shaking,
+    difficulty,
+    abilityCharge,
+    abilityCooldownUntil,
+    enemyFreezeUntil,
+    mission,
+    missionSecondsLeft,
+    missionEvent,
+    abilityEvent,
+    editHistory,
+    appliedSounds,
+    appliedAssets
+  } = state;
+
+  const activeAbility = HERO_ABILITIES[hero.id];
 
   // Save progress on achievement / level change
   useEffect(() => {
@@ -311,9 +617,19 @@ export default function App() {
   useEffect(() => {
     const down = (e) => { keysRef.current = { ...keysRef.current, [e.key]: true }; };
     const up = (e) => { keysRef.current = { ...keysRef.current, [e.key]: false }; };
-    window.addEventListener("keydown", down);
+    const onKeyDown = (e) => {
+      down(e);
+      if ((e.code === "Space" || e.key === " ") && !e.repeat) {
+        e.preventDefault();
+        dispatch({ type: "ACTIVATE_ABILITY" });
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", up);
-    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", up);
+    };
   }, []);
 
   // Game loop
@@ -377,6 +693,60 @@ export default function App() {
     }
   }, [hp]);
 
+  useEffect(() => {
+    if (!missionEvent) return;
+    setLog((prev) => [missionEvent.text, ...prev].slice(0, 8));
+    dispatch({ type: "CLEAR_MISSION_EVENT" });
+  }, [missionEvent?.id]);
+
+  useEffect(() => {
+    if (!abilityEvent) return;
+    setLog((prev) => [abilityEvent.text, ...prev].slice(0, 8));
+    jsonRequest("/api/agent/log", {
+      method: "POST",
+      body: JSON.stringify({ level: "info", message: "ability activated", meta: { hero: hero.id, ability: abilityEvent.text } })
+    }).catch(() => null);
+    dispatch({ type: "CLEAR_ABILITY_EVENT" });
+  }, [abilityEvent?.id]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    window.__SAGA_DEBUG__ = {
+      dispatch,
+      getState: () => state
+    };
+    return () => {
+      delete window.__SAGA_DEBUG__;
+    };
+  }, [state]);
+
+  // Play orb sound
+  useEffect(() => {
+    if (totalOrbs > 0 && running && appliedSounds.orb) {
+      try { new Audio(appliedSounds.orb).play(); } catch(e) {}
+    }
+  }, [totalOrbs]);
+
+  // Play hit sound
+  const prevHpRef = useRef(hero.hp);
+  useEffect(() => {
+    if (hp < prevHpRef.current && hp > 0 && running && appliedSounds.hit) {
+      try { new Audio(appliedSounds.hit).play(); } catch(e) {}
+    }
+    prevHpRef.current = hp;
+  }, [hp]);
+
+  // Play win/lose sound on game over
+  useEffect(() => {
+    if (gameOver) {
+      const winner = score >= 50 ? "player" : "enemy";
+      const soundUrl = winner === "player" ? appliedSounds.win : appliedSounds.lose;
+      if (soundUrl) {
+        try { new Audio(soundUrl).play(); } catch(e) {}
+      }
+    }
+  }, [gameOver]);
+
   // Build tile data
   const tiles = useMemo(() => {
     const map = [];
@@ -393,54 +763,68 @@ export default function App() {
         if (x === orb.x && y === orb.y) {
           entity = "orb";
           classes += " has-orb";
+          if (appliedAssets.orb) classes += " custom-orb";
         }
         if (enemies.some((e) => e.x === x && e.y === y)) {
           entity = "enemy";
           classes += " has-enemy";
+          if (appliedAssets.enemy) classes += " custom-enemy";
+          if (enemyFrozen) classes += " frozen";
         }
         if (player.x === x && player.y === y) {
           entity = "player";
           classes += " has-player";
           if (activePowerups.shield && Date.now() < activePowerups.shield) classes += " shielded";
+          if (appliedAssets.player) classes += " custom-player";
         }
 
         map.push({ key: `${x}-${y}`, classes, entity, x, y });
       }
     }
     return map;
-  }, [player, orb, enemies, powerup, activePowerups]);
+  }, [player, orb, enemies, powerup, activePowerups, appliedAssets, enemyFrozen]);
 
   const hpPercent = (hp / hero.hp) * 100;
   const xpPercent = (xp / xpForLevel(level)) * 100;
   const totalPool = betPools.player + betPools.enemy || 1;
+  const abilityPercent = (abilityCharge / ABILITY_MAX) * 100;
+  const abilityCooldown = Math.max(0, Math.ceil((abilityCooldownUntil - Date.now()) / 1000));
+  const abilityReady = abilityCharge >= ABILITY_MAX && abilityCooldown <= 0;
+  const enemyFrozen = enemyFreezeUntil && Date.now() < enemyFreezeUntil;
 
-  async function requestTextToSound() {
-    setApiResult("requesting");
-    try {
-      const json = await jsonRequest("/api/varco/text2sound", {
-        method: "POST",
-        body: JSON.stringify({ prompt: `${hero.name} battle cry at ${score} points`, version: "v1", num_sample: 1 })
-      });
-      setApiResult(json?.result?.mocked ? "mocked" : "ok");
-      setLog((prev) => [`Sound: ${json?.result?.mocked ? "mocked" : "ok"}`, ...prev].slice(0, 8));
-    } catch (error) {
-      setApiResult("error");
-      setLog((prev) => [`Sound error: ${error.message}`, ...prev].slice(0, 8));
-    }
+  function updateEditorDraft(kind, key, value) {
+    setEditorDrafts((prev) => ({
+      ...prev,
+      [kind]: {
+        ...prev[kind],
+        [key]: value
+      }
+    }));
   }
 
-  async function requestImageTo3D() {
-    setModelResult("requesting");
+  function applyStudioSuggestion(kind, key, prompt) {
+    updateEditorDraft(kind, key, prompt);
+    setEditorTab(kind === "sound" ? "sound" : "asset");
+    setLog((prev) => [`Prompt loaded: ${key}`, ...prev].slice(0, 8));
+  }
+
+  async function generateStudioPack() {
+    setStudioStatus("loading");
     try {
-      const json = await jsonRequest("/api/varco/image-to-3d", {
+      const json = await jsonRequest("/api/varco/studio-pack", {
         method: "POST",
-        body: JSON.stringify({ image_url: `https://placeholder.varco.ai/${hero.id}.png` })
+        body: JSON.stringify({ brief: studioBrief, heroId: hero.id })
       });
-      setModelResult(json?.result?.mocked ? "mocked" : "ok");
-      setLog((prev) => [`3D: ${json?.result?.mocked ? "mocked" : "ok"}`, ...prev].slice(0, 8));
+      setStudioPack(json.studioPack);
+      setStudioStatus(json.studioPack.cache_hit ? "cached" : "ready");
+      setEditorDrafts({
+        sound: json.studioPack.sounds,
+        asset: json.studioPack.assets
+      });
+      setLog((prev) => [`Studio pack ${json.studioPack.cache_hit ? "cached" : "ready"}`, ...prev].slice(0, 8));
     } catch (error) {
-      setModelResult("error");
-      setLog((prev) => [`3D error: ${error.message}`, ...prev].slice(0, 8));
+      setStudioStatus("error");
+      setLog((prev) => [`Studio pack failed: ${error.message}`, ...prev].slice(0, 8));
     }
   }
 
@@ -463,7 +847,14 @@ export default function App() {
       const winner = score >= 50 ? "player" : "enemy";
       const json = await jsonRequest("/api/share/sns", {
         method: "POST",
-        body: JSON.stringify({ score, winner, hero: hero.name })
+        body: JSON.stringify({
+          score,
+          winner,
+          hero: hero.name,
+          variant: studioPack?.campaign?.headline || null,
+          assetVariant: editHistory.findLast?.((entry) => entry.type === "asset" && entry.appliedAt)?.prompt || null,
+          soundVariant: editHistory.findLast?.((entry) => entry.type === "sound" && entry.appliedAt)?.prompt || null
+        })
       });
       window.open(json.links[channel], "_blank", "noopener,noreferrer");
       setLog((prev) => [`Shared: ${channel}`, ...prev].slice(0, 8));
@@ -475,8 +866,6 @@ export default function App() {
   function handleReset() {
     dispatch({ type: "RESET" });
     setLog([]);
-    setApiResult("idle");
-    setModelResult("idle");
     jsonRequest("/api/match/start", { method: "POST" }).catch(() => null);
   }
 
@@ -547,6 +936,48 @@ export default function App() {
           </div>
         </div>
 
+        <div className="panel mission-panel" data-testid="mission-panel">
+          <div className="panel-title">Director Mission</div>
+          <div className="mission-header">
+            <strong>{mission.title}</strong>
+            <span>{missionSecondsLeft}s</span>
+          </div>
+          <div className="mission-progress-row">
+            <span>{missionProgressText(mission)}</span>
+            <span>{mission.rewardLabel}</span>
+          </div>
+          <div className="mission-progress-bar">
+            <div
+              className="mission-progress-fill"
+              style={{ width: `${mission.kind === "survive" ? ((mission.duration - missionSecondsLeft) / mission.duration) * 100 : (mission.progress / mission.target) * 100}%` }}
+            />
+          </div>
+        </div>
+
+        <div className="panel ability-panel" data-testid="ability-panel">
+          <div className="panel-title">Hero Ability</div>
+          <div className="ability-header">
+            <strong>{activeAbility.name}</strong>
+            <span>{activeAbility.hint}</span>
+          </div>
+          <div className="ability-summary">{activeAbility.summary}</div>
+          <div className="ability-bar-wrap">
+            <div className={`ability-bar-fill${abilityReady ? " ready" : ""}`} style={{ width: `${abilityPercent}%` }} />
+          </div>
+          <div className="ability-meta">
+            <span>{Math.round(abilityPercent)}% charged</span>
+            <span>{abilityReady ? "Ready" : `${abilityCooldown}s cd`}</span>
+          </div>
+          <button
+            type="button"
+            className={`ability-btn${abilityReady ? " ready" : ""}`}
+            onClick={() => dispatch({ type: "ACTIVATE_ABILITY" })}
+            disabled={!abilityReady}
+          >
+            {abilityReady ? `Activate ${activeAbility.name}` : "Build charge by collecting cores"}
+          </button>
+        </div>
+
         {/* Power-ups */}
         <div className="panel">
           <div className="panel-title">Power-ups</div>
@@ -574,6 +1005,10 @@ export default function App() {
             <span>P: {odds.player}x</span>
             <span>E: {odds.enemy}x</span>
           </div>
+          <div className="live-state-row">
+            <span>{enemyFrozen ? "ENEMIES FROZEN" : "ARENA HOT"}</span>
+            <span>{Object.values(appliedAssets).filter(Boolean).length} skins live</span>
+          </div>
           <div className="pool-bar">
             <div className="pool-bar-p" style={{ width: `${(betPools.player / totalPool) * 100}%` }} />
             <div className="pool-bar-e" style={{ width: `${(betPools.enemy / totalPool) * 100}%` }} />
@@ -594,6 +1029,12 @@ export default function App() {
 
       {/* ARENA */}
       <div className="arena-wrap">
+        <div className="arena-status-strip" data-testid="arena-status-strip">
+          <span>Mission: {mission.title}</span>
+          <span>Ability: {activeAbility.name}</span>
+          <span>Assets live: {Object.values(appliedAssets).filter(Boolean).length}/3</span>
+          <span>Sound cues live: {Object.values(appliedSounds).filter(Boolean).length}/5</span>
+        </div>
         <div className={`arena-3d${shaking ? " shake" : ""}`} role="application" aria-label="game grid">
           {tiles.map((t) => (
             <div key={t.key} className={t.classes}>
@@ -617,7 +1058,7 @@ export default function App() {
         </div>
 
         {gameOver && (
-          <div className="game-over-overlay">
+          <div className="game-over-overlay" data-testid="game-over-overlay">
             <div className="game-over-title">GAME OVER</div>
             <div className="game-over-score">Score: {score} | Best Combo: {maxCombo}x</div>
             <button type="button" onClick={handleReset}>Play Again</button>
@@ -641,18 +1082,76 @@ export default function App() {
           <button type="button" className="bet-btn" onClick={placeBet}>Place Bet</button>
         </div>
 
-        {/* VARCO API */}
-        <div className="panel">
-          <div className="panel-title">VARCO API</div>
-          <div className="api-btns">
-            <button type="button" className="api-btn" onClick={requestTextToSound}>
-              Generate Sound
-              <div className={`api-status ${apiResult}`}>Sound: {apiResult}</div>
-            </button>
-            <button type="button" className="api-btn" onClick={requestImageTo3D}>
-              Generate 3D Model
-              <div className={`api-status ${modelResult}`}>3D: {modelResult}</div>
-            </button>
+        <div className="panel promo-director" data-testid="studio-pack-panel">
+          <div className="panel-title">Promo Director</div>
+          <textarea
+            className="studio-brief-input"
+            value={studioBrief}
+            onChange={(e) => setStudioBrief(e.target.value)}
+            placeholder="Describe the campaign brief once, then reuse it across sounds, assets, and social copy."
+          />
+          <button type="button" className="bet-btn" onClick={generateStudioPack} disabled={studioStatus === "loading"}>
+            {studioStatus === "loading" ? "Building Pack..." : "Generate Studio Pack"}
+          </button>
+          {studioPack && (
+            <div className="studio-pack-card">
+              <div className="studio-pack-header">
+                <strong>{studioPack.campaign.headline}</strong>
+                <span>{studioPack.cache_hit ? "cached" : "fresh"}</span>
+              </div>
+              <p>{studioPack.campaign.tagline}</p>
+              <div className="studio-savings">
+                <span>{studioPack.savings.estimatedCallsSaved} calls saved</span>
+                <span>{studioPack.savings.estimatedCallsWithPack}/{studioPack.savings.estimatedCallsWithoutPack} planned</span>
+              </div>
+              <div className="studio-suggestion-group">
+                <div className="studio-suggestion-title">Sound Prompts</div>
+                {Object.entries(studioPack.sounds).map(([key, prompt]) => (
+                  <button key={key} type="button" className="studio-chip" onClick={() => applyStudioSuggestion("sound", key, prompt)}>
+                    {key}
+                  </button>
+                ))}
+              </div>
+              <div className="studio-suggestion-group">
+                <div className="studio-suggestion-title">Asset Directions</div>
+                {Object.entries(studioPack.assets).map(([key, prompt]) => (
+                  <button key={key} type="button" className="studio-chip" onClick={() => applyStudioSuggestion("asset", key, prompt)}>
+                    {key}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* VARCO STUDIO EDITOR */}
+        <div className="panel" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div className="panel-title">VARCO Studio Editor</div>
+          <div className="editor-tabs">
+            <button className={`editor-tab-btn ${editorTab === "sound" ? "active" : ""}`} onClick={() => setEditorTab("sound")}>🎵 사운드</button>
+            <button className={`editor-tab-btn ${editorTab === "asset" ? "active" : ""}`} onClick={() => setEditorTab("asset")}>🧊 에셋</button>
+            <button className={`editor-tab-btn ${editorTab === "history" ? "active" : ""}`} onClick={() => setEditorTab("history")}>📋 이력</button>
+          </div>
+          <div className="editor-panel">
+            {editorTab === "sound" && (
+              <SoundEditor
+                editHistory={editHistory}
+                dispatch={dispatch}
+                studioPack={studioPack}
+                draftPrompts={editorDrafts.sound}
+                onDraftChange={(key, value) => updateEditorDraft("sound", key, value)}
+              />
+            )}
+            {editorTab === "asset" && (
+              <AssetEditor
+                editHistory={editHistory}
+                dispatch={dispatch}
+                studioPack={studioPack}
+                draftPrompts={editorDrafts.asset}
+                onDraftChange={(key, value) => updateEditorDraft("asset", key, value)}
+              />
+            )}
+            {editorTab === "history" && <EditHistory editHistory={editHistory} dispatch={dispatch} />}
           </div>
         </div>
 
