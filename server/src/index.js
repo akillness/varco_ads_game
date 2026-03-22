@@ -85,7 +85,8 @@ const matchState = {
   spectators: 137,
   pools: { player: 0, enemy: 0 },
   bets: [],
-  agentLogs: []
+  agentLogs: [],
+  swingEvent: null
 };
 
 function addAgentLog(level, message, meta = null) {
@@ -353,6 +354,7 @@ app.get("/api/match/state", (_req, res) => {
       startedAt: matchState.startedAt,
       spectators: matchState.spectators,
       pools: matchState.pools,
+      swingEvent: matchState.swingEvent,
       odds: computeOdds(),
       totalBets: matchState.bets.length
     }
@@ -365,6 +367,7 @@ app.post("/api/match/start", (_req, res) => {
   matchState.startedAt = new Date().toISOString();
   matchState.pools = { player: 0, enemy: 0 };
   matchState.bets = [];
+  matchState.swingEvent = null;
   addAgentLog("info", "신규 매치 시작", { matchId: matchState.matchId });
   return res.json({ ok: true, matchId: matchState.matchId });
 });
@@ -404,6 +407,46 @@ app.post("/api/match/bet", (req, res) => {
   matchState.pools[side] += normalizedAmount;
   addAgentLog("info", "신규 배팅 접수", { userName: bet.userName, side, amount: normalizedAmount });
   return res.json({ ok: true, bet, pools: matchState.pools, odds: computeOdds() });
+});
+
+app.post("/api/match/swing-event", (req, res) => {
+  const {
+    type,
+    title,
+    body,
+    targetCell = null,
+    startPlayerCell = null,
+    expiresAt = null,
+    timer = null
+  } = req.body || {};
+
+  if (!type || !title || !body) {
+    return res.status(400).json({ ok: false, message: "type, title, body are required" });
+  }
+
+  matchState.swingEvent = {
+    id: crypto.randomUUID(),
+    type,
+    title,
+    body,
+    targetCell,
+    startPlayerCell,
+    expiresAt,
+    timer,
+    matchId: matchState.matchId,
+    createdAt: new Date().toISOString()
+  };
+
+  addAgentLog("info", "30초 판세 전환 이벤트 발동", {
+    type,
+    title,
+    targetCell,
+    startPlayerCell,
+    timer,
+    matchId: matchState.matchId
+  });
+
+  return res.json({ ok: true, swingEvent: matchState.swingEvent });
 });
 
 app.get("/api/agent/logs", (_req, res) => {

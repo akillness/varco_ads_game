@@ -149,6 +149,10 @@ function comboMultiplier(combo) {
   if (combo >= 2) return 1.5;
   return 1.0;
 }
+function manhattan(a, b) {
+  if (!a || !b) return Infinity;
+  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+}
 
 function xpForLevel(level) { return 50 + level * 30; }
 function getDirectorPhase(timer) {
@@ -248,6 +252,80 @@ function createDirectorBeat(title, text, now = Date.now()) {
   };
 }
 
+function createSwingEvent(type, title, text, targetCell = null, now = Date.now()) {
+  return {
+    id: now,
+    type,
+    title,
+    text,
+    targetCell,
+    startPlayerCell: null
+  };
+}
+
+function triggerSwingEvent(state, timer) {
+  const now = Date.now();
+  const eventIndex = Math.abs(state.totalOrbs + state.level + timer) % 3;
+
+  if (eventIndex === 0) {
+    const powerType = POWERUP_TYPES[(state.level + state.totalOrbs) % POWERUP_TYPES.length];
+    return {
+      ...state,
+      swingEventTriggered: true,
+      swingEvent: createSwingEvent(
+        "rare-drop-ping",
+        "Rare Drop Ping",
+        "희귀 보상 코어가 떨어졌다. 지금 라인을 바꾸면 큰 보상을 가져갈 수 있다.",
+        state.bonusOrb || randomCellAway(state.player, 4),
+        now
+      ),
+      swingEventEndsAt: now + 5000,
+      bonusOrb: state.bonusOrb || randomCellAway(state.player, 4),
+      powerup: state.powerup || { ...randomCellAway(state.player, 4), type: powerType },
+      abilityCharge: clamp(state.abilityCharge + 20, 0, ABILITY_MAX),
+      directorBeat: createDirectorBeat("30s Swing", "희귀 보상 드랍. 지금 이동 경로를 바꿔라.", now),
+      directorBeatEndsAt: now + 8000
+    };
+  }
+
+  if (eventIndex === 1) {
+    return {
+      ...state,
+      swingEventTriggered: true,
+      swingEvent: createSwingEvent(
+        "zone-shift-alert",
+        "Zone Shift Alert",
+        "안전 루트가 무너졌다. 오브젝트 위치와 적 압박이 동시에 바뀐다.",
+        randomCellAway(state.player, 5),
+        now
+      ),
+      swingEventEndsAt: now + 5000,
+      orb: randomCellAway(state.player, 5),
+      enemies: state.enemies.length < 6 ? [...state.enemies, randomCellAway(state.player, 4)] : state.enemies,
+      directorBeat: createDirectorBeat("30s Swing", "루트 붕괴. 즉시 새 경로를 잡아야 한다.", now),
+      directorBeatEndsAt: now + 8000
+    };
+  }
+
+  const bountyTarget = state.enemies[0] || randomCellAway(state.player, 4);
+
+  return {
+    ...state,
+    swingEventTriggered: true,
+    swingEvent: createSwingEvent(
+      "bounty-signal",
+      "Bounty Signal",
+      "근처 목표가 강조됐다. 추격해 보상을 노릴지, 무시하고 생존을 우선할지 선택해야 한다.",
+      bountyTarget,
+      now
+    ),
+    swingEventEndsAt: now + 5000,
+    abilityCharge: clamp(state.abilityCharge + 15, 0, ABILITY_MAX),
+    directorBeat: createDirectorBeat("30s Swing", "현상금 신호 포착. 지금 추격할지 결정해야 한다.", now),
+    directorBeatEndsAt: now + 8000
+  };
+}
+
 function triggerDirectorBeat(state, timer) {
   const now = Date.now();
   const eventIndex = Math.abs(timer + state.totalOrbs + state.level) % 3;
@@ -336,6 +414,10 @@ const initState = (hero) => {
     abilityEvent: null,
     directorBeat: createDirectorBeat("Launch Window", getDirectorPhase(GAME_TIME).callout),
     directorBeatEndsAt: Date.now() + 5000,
+    swingEventTriggered: false,
+    swingTriggerAt: 25 + Math.floor(Math.random() * 11),
+    swingEvent: null,
+    swingEventEndsAt: 0,
     bonusOrb: null,
     editHistory: [],
     appliedSounds: { orb: null, hit: null, win: null, lose: null, bgm: null },
@@ -489,6 +571,10 @@ function reducer(state, action) {
         next.directorBeat = null;
         next.directorBeatEndsAt = 0;
       }
+      if (next.swingEventEndsAt && next.swingEventEndsAt < now) {
+        next.swingEvent = null;
+        next.swingEventEndsAt = 0;
+      }
 
       // Clean old score floats
       next.scoreFloats = next.scoreFloats.filter((f) => now - f.id < 800);
@@ -541,6 +627,16 @@ function reducer(state, action) {
       if (missionSecondsLeft <= 0) {
         const missionResolved = state.mission?.kind === "survive" ? completeMission(next) : failMission(next);
         next = { ...missionResolved, timer: newTimer };
+      }
+
+      if (newTimer === state.swingTriggerAt && !state.swingEventTriggered) {
+        next = triggerSwingEvent(next, newTimer);
+        if (next.swingEvent) {
+          next.swingEvent = {
+            ...next.swingEvent,
+            startPlayerCell: { ...state.player }
+          };
+        }
       }
 
       if (newTimer > 0 && newTimer % 12 === 0) {
@@ -721,6 +817,7 @@ export default function App() {
   const [studioCache, setStudioCache] = useState(null);
   const [selectedMarketingAngle, setSelectedMarketingAngle] = useState(null);
   const [editorDrafts, setEditorDrafts] = useState({ sound: {}, asset: {} });
+  const latestStateRef = useRef(state);
 
   const {
     hero,
@@ -751,11 +848,16 @@ export default function App() {
     missionEvent,
     abilityEvent,
     directorBeat,
+    swingEvent,
     bonusOrb,
     editHistory,
     appliedSounds,
     appliedAssets
   } = state;
+
+  useEffect(() => {
+    latestStateRef.current = state;
+  }, [state]);
 
   const activeAbility = HERO_ABILITIES[hero.id];
   const directorPhase = getDirectorPhase(timer);
@@ -895,6 +997,56 @@ export default function App() {
   }, [directorBeat?.id]);
 
   useEffect(() => {
+    if (!swingEvent) return;
+    setLog((prev) => [`${swingEvent.title}: ${swingEvent.text}`, ...prev].slice(0, 8));
+    jsonRequest("/api/match/swing-event", {
+      method: "POST",
+      body: JSON.stringify({
+        type: swingEvent.type,
+        title: swingEvent.title,
+        body: swingEvent.text,
+        targetCell: swingEvent.targetCell || null,
+        startPlayerCell: swingEvent.startPlayerCell || null,
+        expiresAt: swingEventEndsAt || null,
+        timer
+      })
+    }).catch(() => null);
+  }, [swingEvent?.id]);
+
+  useEffect(() => {
+    if (!swingEvent?.id) return;
+    const origin = swingEvent.startPlayerCell;
+    const target = swingEvent.targetCell;
+    if (!origin || !target) return;
+
+    const t = setTimeout(() => {
+      const latest = latestStateRef.current;
+      const routeChanged = latest.player.x !== origin.x || latest.player.y !== origin.y;
+      const targetApproached =
+        manhattan(latest.player, target) < manhattan(origin, target);
+
+      jsonRequest("/api/agent/log", {
+        method: "POST",
+        body: JSON.stringify({
+          level: "info",
+          message: "swing event follow-up",
+          meta: {
+            matchTimer: latest.timer,
+            eventType: swingEvent.type,
+            playerPositionAtTrigger: origin,
+            playerPosition10sAfter: latest.player,
+            targetCell: target,
+            pathChangedWithin10s: routeChanged,
+            targetApproachedWithin10s: targetApproached
+          }
+        })
+      }).catch(() => null);
+    }, 10000);
+
+    return () => clearTimeout(t);
+  }, [swingEvent?.id]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return undefined;
     window.__SAGA_DEBUG__ = {
       dispatch,
@@ -974,6 +1126,9 @@ export default function App() {
           if (appliedAssets.enemy) classes += " custom-enemy";
           if (enemyFrozen) classes += " frozen";
         }
+        if (swingEvent?.targetCell && swingEvent.targetCell.x === x && swingEvent.targetCell.y === y) {
+          classes += " swing-target";
+        }
         if (player.x === x && player.y === y) {
           entity = "player";
           classes += " has-player";
@@ -985,7 +1140,7 @@ export default function App() {
       }
     }
     return map;
-  }, [player, orb, bonusOrb, enemies, powerup, activePowerups, appliedAssets, enemyFrozen]);
+  }, [player, orb, bonusOrb, enemies, powerup, activePowerups, appliedAssets, enemyFrozen, swingEvent]);
 
   const hpPercent = (hp / hero.hp) * 100;
   const xpPercent = (xp / xpForLevel(level)) * 100;
@@ -1213,6 +1368,12 @@ export default function App() {
               <span>{directorBeat.text}</span>
             </div>
           )}
+          {swingEvent && (
+            <div className="director-beat-card" data-testid="swing-event-card">
+              <strong>{swingEvent.title}</strong>
+              <span>{swingEvent.text}</span>
+            </div>
+          )}
           <div className="director-kpis">
             <div>
               <span>Bonus core</span>
@@ -1284,6 +1445,7 @@ export default function App() {
           <span>Phase: {directorPhase.label}</span>
           <span>Mission: {mission.title}</span>
           <span>Ability: {activeAbility.name}</span>
+          <span>Swing: {state.swingEventTriggered ? "Triggered" : "Pending"}</span>
           <span>Assets live: {liveAssetCount}/3</span>
           <span>Sound cues live: {liveSoundCount}/5</span>
         </div>

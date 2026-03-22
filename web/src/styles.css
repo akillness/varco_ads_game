@@ -418,6 +418,11 @@ main {
   color: #fff;
 }
 
+.tile.swing-target::before {
+  box-shadow: 0 0 0 2px rgba(255, 170, 0, 0.95), 0 0 18px rgba(255, 170, 0, 0.45);
+  border-color: rgba(255, 170, 0, 0.9);
+}
+
 /* Score float animation */
 .score-float {
   position: absolute;
