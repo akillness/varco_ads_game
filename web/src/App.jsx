@@ -802,6 +802,7 @@ export default function App() {
   const [state, dispatch] = useReducer(reducer, heroes[0], initState);
   const keysRef = useRef({});
   const [log, setLog] = useState([]);
+  const [currentMatchId, setCurrentMatchId] = useState(null);
   const [spectators, setSpectators] = useState(0);
   const [odds, setOdds] = useState({ player: 1.9, enemy: 1.9 });
   const [betPools, setBetPools] = useState({ player: 0, enemy: 0 });
@@ -861,6 +862,22 @@ export default function App() {
 
   const activeAbility = HERO_ABILITIES[hero.id];
   const directorPhase = getDirectorPhase(timer);
+  const elapsedSeconds = GAME_TIME - timer;
+
+  async function trackEvent(message, meta = {}) {
+    try {
+      await jsonRequest("/api/agent/log", {
+        method: "POST",
+        body: JSON.stringify({
+          level: "info",
+          message,
+          meta
+        })
+      });
+    } catch {
+      /* telemetry is non-blocking */
+    }
+  }
 
   // Save progress on achievement / level change
   useEffect(() => {
@@ -874,7 +891,11 @@ export default function App() {
       setHighScores(loadHighScores());
       jsonRequest("/api/match/finish", {
         method: "POST",
-        body: JSON.stringify({ winner: score >= 50 ? "player" : "enemy" })
+        body: JSON.stringify({
+          winner: score >= 50 ? "player" : "enemy",
+          elapsedSeconds,
+          playerId: hero.id
+        })
       }).catch(() => null);
     }
   }, [gameOver]);
@@ -931,7 +952,16 @@ export default function App() {
 
   // Server polling
   useEffect(() => {
-    jsonRequest("/api/match/start", { method: "POST" }).catch(() => null);
+    jsonRequest("/api/match/start", { method: "POST" })
+      .then((json) => {
+        setCurrentMatchId(json.matchId);
+        return trackEvent("match_started", {
+          matchId: json.matchId,
+          playerId: hero.id,
+          elapsedSeconds: 0
+        });
+      })
+      .catch(() => null);
     refreshCacheStats().catch(() => null);
     const poll = setInterval(async () => {
       try {
@@ -939,6 +969,7 @@ export default function App() {
           jsonRequest("/api/match/state"),
           jsonRequest("/api/agent/logs")
         ]);
+        setCurrentMatchId(match.match.matchId);
         setSpectators(match.match.spectators);
         setOdds(match.match.odds);
         setBetPools(match.match.pools);
@@ -1025,22 +1056,29 @@ export default function App() {
       const targetApproached =
         manhattan(latest.player, target) < manhattan(origin, target);
 
-      jsonRequest("/api/agent/log", {
-        method: "POST",
-        body: JSON.stringify({
-          level: "info",
-          message: "swing event follow-up",
-          meta: {
-            matchTimer: latest.timer,
-            eventType: swingEvent.type,
-            playerPositionAtTrigger: origin,
-            playerPosition10sAfter: latest.player,
-            targetCell: target,
-            pathChangedWithin10s: routeChanged,
-            targetApproachedWithin10s: targetApproached
-          }
-        })
-      }).catch(() => null);
+      const commonMeta = {
+        matchId: currentMatchId,
+        playerId: latest.hero.id,
+        elapsedSeconds: GAME_TIME - latest.timer,
+        eventType: swingEvent.type,
+        targetCell: target,
+        playerPositionAtTrigger: origin,
+        playerPosition10sAfter: latest.player
+      };
+
+      if (routeChanged) {
+        trackEvent("player_route_changed", {
+          ...commonMeta,
+          pathChangedWithin10s: true
+        });
+      }
+
+      if (targetApproached) {
+        trackEvent("event_target_approached", {
+          ...commonMeta,
+          targetApproachedWithin10s: true
+        });
+      }
     }, 10000);
 
     return () => clearTimeout(t);
@@ -1241,9 +1279,25 @@ export default function App() {
   }
 
   function handleReset() {
+    if (running && !gameOver) {
+      trackEvent("match_abandoned", {
+        matchId: currentMatchId,
+        playerId: hero.id,
+        elapsedSeconds
+      });
+    }
     dispatch({ type: "RESET" });
     setLog([]);
-    jsonRequest("/api/match/start", { method: "POST" }).catch(() => null);
+    jsonRequest("/api/match/start", { method: "POST" })
+      .then((json) => {
+        setCurrentMatchId(json.matchId);
+        return trackEvent("match_started", {
+          matchId: json.matchId,
+          playerId: hero.id,
+          elapsedSeconds: 0
+        });
+      })
+      .catch(() => null);
   }
 
   return (
