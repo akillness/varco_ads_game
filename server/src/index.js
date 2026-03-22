@@ -368,17 +368,25 @@ app.post("/api/match/start", (_req, res) => {
   matchState.pools = { player: 0, enemy: 0 };
   matchState.bets = [];
   matchState.swingEvent = null;
-  addAgentLog("info", "신규 매치 시작", { matchId: matchState.matchId });
+  addAgentLog("info", "match_started", {
+    matchId: matchState.matchId,
+    elapsedSeconds: 0
+  });
   return res.json({ ok: true, matchId: matchState.matchId });
 });
 
 app.post("/api/match/finish", (req, res) => {
-  const { winner = "player" } = req.body || {};
+  const { winner = "player", elapsedSeconds = null, playerId = null } = req.body || {};
   if (!["player", "enemy"].includes(winner)) {
     return res.status(400).json({ ok: false, message: "winner must be player or enemy" });
   }
   matchState.status = "finished";
-  addAgentLog("info", "매치 종료", { winner, matchId: matchState.matchId });
+  addAgentLog("info", "match_ended", {
+    winner,
+    matchId: matchState.matchId,
+    playerId,
+    elapsedSeconds
+  });
   return res.json({ ok: true, winner, settledBets: matchState.bets.length });
 });
 
@@ -437,7 +445,7 @@ app.post("/api/match/swing-event", (req, res) => {
     createdAt: new Date().toISOString()
   };
 
-  addAgentLog("info", "30초 판세 전환 이벤트 발동", {
+  addAgentLog("info", "swing_event_triggered", {
     type,
     title,
     targetCell,
