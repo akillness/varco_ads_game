@@ -27,10 +27,10 @@ function generateBeepWav(freq = 440, durationMs = 500) {
 
 
 const PORT = Number(process.env.PORT || 8787);
-const VARCO_API_BASE = process.env.VARCO_API_BASE || "https://api.varco.ai";
+const VARCO_API_BASE = process.env.VARCO_API_BASE || "https://openapi.ai.nc.com";
 const VARCO_OPENAPI_KEY = process.env.VARCO_OPENAPI_KEY || "";
 const VARCO_TEXT2SOUND_PATH = process.env.VARCO_TEXT2SOUND_PATH || "/sound/varco/v1/api/text2sound";
-const VARCO_IMAGE_TO_3D_PATH = process.env.VARCO_IMAGE_TO_3D_PATH || "/3d/varco/v1/api/imagetothree";
+const VARCO_IMAGE_TO_3D_PATH = process.env.VARCO_IMAGE_TO_3D_PATH || "/3d/varco/v1/image-to-3d";
 const CACHE_TTL_MS = 1000 * 60 * 30;
 
 const heroProfiles = {
@@ -275,6 +275,10 @@ function buildUrl(path) {
   return `${VARCO_API_BASE}${path.startsWith("/") ? "" : "/"}${path}`;
 }
 
+function looksLikeHtmlResponse(text = "", contentType = "") {
+  return contentType.includes("text/html") || /^\s*<!doctype html/i.test(text) || /^\s*<html/i.test(text);
+}
+
 async function callVarco(path, body, extraHeaders = {}, options = {}) {
   const cacheScope = options.cacheScope || path;
   const cachePayload = { path, body, extraHeaders };
@@ -310,6 +314,7 @@ async function callVarco(path, body, extraHeaders = {}, options = {}) {
   });
 
   const text = await response.text();
+  const contentType = response.headers.get("content-type") || "";
   let data = null;
   try {
     data = text ? JSON.parse(text) : null;
@@ -317,8 +322,18 @@ async function callVarco(path, body, extraHeaders = {}, options = {}) {
     data = { raw: text };
   }
 
+  if (looksLikeHtmlResponse(text, contentType)) {
+    const error = new Error("VARCO API returned HTML instead of JSON");
+    error.status = 502;
+    error.data = {
+      contentType,
+      preview: text.slice(0, 200)
+    };
+    throw error;
+  }
+
   if (!response.ok) {
-    const error = new Error("VARCO API request failed");
+    const error = new Error(data?.error || data?.message || "VARCO API request failed");
     error.status = response.status;
     error.data = data;
     throw error;
