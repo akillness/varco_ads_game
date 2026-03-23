@@ -259,26 +259,57 @@ function createSwingEvent(type, title, text, targetCell = null, now = Date.now()
     title,
     text,
     targetCell,
-    startPlayerCell: null
+    startPlayerCell: null,
+    eventVariant: type,
+    zoneShiftMode: null
   };
+}
+
+function pickWeightedSwingVariant(state, timer) {
+  const weights = [
+    {
+      type: "rare-drop-ping",
+      weight: 3 + (state.totalOrbs < 3 ? 2 : 0)
+    },
+    {
+      type: "zone-shift-alert",
+      weight: 2 + (state.hp <= 2 ? 2 : 0) + (state.enemies.length >= 4 ? 1 : 0)
+    },
+    {
+      type: "bounty-signal",
+      weight: 2 + (state.abilityCharge >= 50 ? 1 : 0) + (state.enemies.length > 0 ? 1 : 0)
+    }
+  ];
+  const totalWeight = weights.reduce((sum, entry) => sum + entry.weight, 0);
+  const pivot = Math.abs(state.totalOrbs * 31 + state.level * 17 + timer * 13) % totalWeight;
+
+  let cursor = 0;
+  for (const entry of weights) {
+    cursor += entry.weight;
+    if (pivot < cursor) return entry.type;
+  }
+  return weights[0].type;
 }
 
 function triggerSwingEvent(state, timer) {
   const now = Date.now();
-  const eventIndex = Math.abs(state.totalOrbs + state.level + timer) % 3;
+  const eventVariant = pickWeightedSwingVariant(state, timer);
 
-  if (eventIndex === 0) {
+  if (eventVariant === "rare-drop-ping") {
     const powerType = POWERUP_TYPES[(state.level + state.totalOrbs) % POWERUP_TYPES.length];
     return {
       ...state,
       swingEventTriggered: true,
-      swingEvent: createSwingEvent(
+      swingEvent: {
+        ...createSwingEvent(
         "rare-drop-ping",
         "Rare Drop Ping",
         "희귀 보상 코어가 떨어졌다. 지금 라인을 바꾸면 큰 보상을 가져갈 수 있다.",
         state.bonusOrb || randomCellAway(state.player, 4),
         now
-      ),
+        ),
+        eventVariant
+      },
       swingEventEndsAt: now + 5000,
       bonusOrb: state.bonusOrb || randomCellAway(state.player, 4),
       powerup: state.powerup || { ...randomCellAway(state.player, 4), type: powerType },
@@ -288,21 +319,38 @@ function triggerSwingEvent(state, timer) {
     };
   }
 
-  if (eventIndex === 1) {
+  if (eventVariant === "zone-shift-alert") {
+    const zoneShiftMode = state.difficulty >= 3 ? "map-impact" : "warning";
+    const zoneTarget = randomCellAway(state.player, 5);
     return {
       ...state,
       swingEventTriggered: true,
-      swingEvent: createSwingEvent(
+      swingEvent: {
+        ...createSwingEvent(
         "zone-shift-alert",
         "Zone Shift Alert",
-        "안전 루트가 무너졌다. 오브젝트 위치와 적 압박이 동시에 바뀐다.",
-        randomCellAway(state.player, 5),
+        zoneShiftMode === "map-impact"
+          ? "안전 루트가 무너졌다. 오브젝트 위치와 적 압박이 동시에 바뀐다."
+          : "안전 구역 경고가 떴다. 경로를 바꿀지 유지할지 빠르게 결정해야 한다.",
+        zoneTarget,
+        now
+        ),
+        eventVariant,
+        zoneShiftMode
+      },
+      swingEventEndsAt: now + 5000,
+      orb: zoneShiftMode === "map-impact" ? zoneTarget : state.orb,
+      enemies:
+        zoneShiftMode === "map-impact" && state.enemies.length < 6
+          ? [...state.enemies, randomCellAway(state.player, 4)]
+          : state.enemies,
+      directorBeat: createDirectorBeat(
+        "30s Swing",
+        zoneShiftMode === "map-impact"
+          ? "루트 붕괴. 즉시 새 경로를 잡아야 한다."
+          : "경고만 떴다. 지금 경로를 바꿀지 유지할지 판단해야 한다.",
         now
       ),
-      swingEventEndsAt: now + 5000,
-      orb: randomCellAway(state.player, 5),
-      enemies: state.enemies.length < 6 ? [...state.enemies, randomCellAway(state.player, 4)] : state.enemies,
-      directorBeat: createDirectorBeat("30s Swing", "루트 붕괴. 즉시 새 경로를 잡아야 한다.", now),
       directorBeatEndsAt: now + 8000
     };
   }
@@ -312,13 +360,16 @@ function triggerSwingEvent(state, timer) {
   return {
     ...state,
     swingEventTriggered: true,
-    swingEvent: createSwingEvent(
+    swingEvent: {
+      ...createSwingEvent(
       "bounty-signal",
       "Bounty Signal",
       "근처 목표가 강조됐다. 추격해 보상을 노릴지, 무시하고 생존을 우선할지 선택해야 한다.",
       bountyTarget,
       now
-    ),
+      ),
+      eventVariant
+    },
     swingEventEndsAt: now + 5000,
     abilityCharge: clamp(state.abilityCharge + 15, 0, ABILITY_MAX),
     directorBeat: createDirectorBeat("30s Swing", "현상금 신호 포착. 지금 추격할지 결정해야 한다.", now),
@@ -1061,6 +1112,8 @@ export default function App() {
         playerId: latest.hero.id,
         elapsedSeconds: GAME_TIME - latest.timer,
         eventType: swingEvent.type,
+        eventVariant: swingEvent.eventVariant || swingEvent.type,
+        zoneShiftMode: swingEvent.zoneShiftMode || null,
         targetCell: target,
         playerPositionAtTrigger: origin,
         playerPosition10sAfter: latest.player
