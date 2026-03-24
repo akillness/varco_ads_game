@@ -1,10 +1,11 @@
 # VARCO API 사용 문서
 
 ## 서버 환경 변수
-- `VARCO_API_BASE`: 기본 `https://api.varco.ai`
+- `VARCO_API_BASE`: 기본 `https://openapi.ai.nc.com`
 - `VARCO_OPENAPI_KEY`: VARCO 발급 키
 - `VARCO_TEXT2SOUND_PATH`: 기본 `/sound/varco/v1/api/text2sound`
-- `VARCO_IMAGE_TO_3D_PATH`: 기본 `/3d/varco/v1/api/imagetothree`
+- `VARCO_IMAGE_TO_3D_PATH`: 기본 `/3d/varco/v1/image-to-3d`
+- `VARCO_IMAGE_RESULT_PATH`: 기본 `/inference/result`
 
 ## 내부 프록시 API
 
@@ -42,6 +43,14 @@
   "image_url": "https://example.com/agent.png"
 }
 ```
+
+동작:
+- 로컬 API는 `image` data URL 또는 `image_url` 을 받아 upstream `multipart/form-data` 로 relay
+- upstream 성공 기준은 `202 accepted`
+- 응답은 `requestId`, `requestTime`, `message` 를 포함
+
+결과 조회:
+`GET /api/varco/image-to-3d/result/:requestId`
 
 ### 4) Generic Proxy
 `POST /api/varco/proxy`
