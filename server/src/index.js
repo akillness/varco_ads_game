@@ -31,7 +31,9 @@ const VARCO_API_BASE = process.env.VARCO_API_BASE || "https://openapi.ai.nc.com"
 const VARCO_OPENAPI_KEY = process.env.VARCO_OPENAPI_KEY || "";
 const VARCO_TEXT2SOUND_PATH = process.env.VARCO_TEXT2SOUND_PATH || "/sound/varco/v1/api/text2sound";
 const VARCO_IMAGE_TO_3D_PATH = process.env.VARCO_IMAGE_TO_3D_PATH || "/3d/varco/v1/image-to-3d";
+const VARCO_IMAGE_RESULT_PATH = process.env.VARCO_IMAGE_RESULT_PATH || "/inference/result";
 const CACHE_TTL_MS = 1000 * 60 * 30;
+const mockImageJobs = new Map();
 
 const heroProfiles = {
   modeler: {
@@ -275,6 +277,13 @@ function buildUrl(path) {
   return `${VARCO_API_BASE}${path.startsWith("/") ? "" : "/"}${path}`;
 }
 
+function varcoHeaders(extraHeaders = {}) {
+  return {
+    openapi_key: VARCO_OPENAPI_KEY,
+    ...extraHeaders
+  };
+}
+
 function looksLikeHtmlResponse(text = "", contentType = "") {
   return contentType.includes("text/html") || /^\s*<!doctype html/i.test(text) || /^\s*<html/i.test(text);
 }
@@ -307,8 +316,7 @@ async function callVarco(path, body, extraHeaders = {}, options = {}) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      openapi_key: VARCO_OPENAPI_KEY,
-      ...extraHeaders
+      ...varcoHeaders(extraHeaders)
     },
     body: JSON.stringify(body)
   });
@@ -346,6 +354,134 @@ async function callVarco(path, body, extraHeaders = {}, options = {}) {
   };
   setCached(cacheScope, cachePayload, result);
   return { ...result, cache_hit: false };
+}
+
+async function imageInputToFile(payload) {
+  if (typeof payload.image === "string" && payload.image.startsWith("data:")) {
+    const match = payload.image.match(/^data:([^;]+);base64,(.+)$/);
+    if (!match) {
+      throw Object.assign(new Error("invalid image data URL"), { status: 400 });
+    }
+    const mimeType = match[1];
+    if (!mimeType.includes("png")) {
+      throw Object.assign(new Error("image data URL must be PNG"), { status: 400 });
+    }
+    const buffer = Buffer.from(match[2], "base64");
+    return {
+      blob: new Blob([buffer], { type: mimeType }),
+      filename: "upload.png"
+    };
+  }
+
+  if (typeof payload.image_url === "string" && payload.image_url) {
+    const response = await fetch(payload.image_url);
+    if (!response.ok) {
+      throw Object.assign(new Error("image_url fetch failed"), { status: 400 });
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const mimeType = response.headers.get("content-type") || "image/png";
+    if (!mimeType.includes("png")) {
+      throw Object.assign(new Error("image_url must point to a PNG image"), { status: 400 });
+    }
+    return {
+      blob: new Blob([arrayBuffer], { type: mimeType }),
+      filename: "remote.png"
+    };
+  }
+
+  throw Object.assign(new Error("image or image_url field is required"), { status: 400 });
+}
+
+async function callVarcoMultipart(path, formData, options = {}) {
+  if (!VARCO_OPENAPI_KEY) {
+    const requestId = `mock-image3d-${Date.now()}`;
+    mockImageJobs.set(requestId, {
+      status: "succeeded",
+      requestId,
+      requestTime: new Date().toISOString(),
+      model_url: "https://modelviewer.dev/shared-assets/models/Astronaut.glb"
+    });
+    return {
+      mocked: true,
+      requestId,
+      requestTime: new Date().toISOString(),
+      message: "mock accepted"
+    };
+  }
+
+  const response = await fetch(buildUrl(path), {
+    method: "POST",
+    headers: varcoHeaders(),
+    body: formData
+  });
+
+  const text = await response.text();
+  const contentType = response.headers.get("content-type") || "";
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = { raw: text };
+  }
+
+  if (looksLikeHtmlResponse(text, contentType)) {
+    const error = new Error("VARCO API returned HTML instead of JSON");
+    error.status = 502;
+    error.data = { contentType, preview: text.slice(0, 200) };
+    throw error;
+  }
+
+  if (![200, 202].includes(response.status)) {
+    const error = new Error(data?.error || data?.message || "VARCO multipart request failed");
+    error.status = response.status;
+    error.data = data;
+    throw error;
+  }
+
+  return {
+    ...data,
+    accepted: response.status === 202
+  };
+}
+
+async function callVarcoResult(requestId) {
+  if (requestId.startsWith("mock-image3d-")) {
+    const mocked = mockImageJobs.get(requestId);
+    if (!mocked) {
+      throw Object.assign(new Error("mock requestId not found"), { status: 404 });
+    }
+    return mocked;
+  }
+
+  const response = await fetch(buildUrl(`${VARCO_IMAGE_RESULT_PATH}/${requestId}`), {
+    method: "GET",
+    headers: varcoHeaders()
+  });
+
+  const text = await response.text();
+  const contentType = response.headers.get("content-type") || "";
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = { raw: text };
+  }
+
+  if (looksLikeHtmlResponse(text, contentType)) {
+    const error = new Error("VARCO result poll returned HTML instead of JSON");
+    error.status = 502;
+    error.data = { contentType, preview: text.slice(0, 200) };
+    throw error;
+  }
+
+  if (!response.ok) {
+    const error = new Error(data?.error || data?.message || "VARCO result poll failed");
+    error.status = response.status;
+    error.data = data;
+    throw error;
+  }
+
+  return data;
 }
 
 app.get("/api/health", (_req, res) => {
@@ -568,12 +704,34 @@ app.post("/api/varco/text2sound", async (req, res) => {
 app.post("/api/varco/image-to-3d", async (req, res) => {
   try {
     const payload = req.body || {};
-    if (!payload.image && !payload.image_url) {
-      return res.status(400).json({ message: "image or image_url field is required" });
+    const imageFile = await imageInputToFile(payload);
+    const formData = new FormData();
+    formData.append("image", imageFile.blob, imageFile.filename);
+    if (payload.target_face_type) formData.append("target_face_type", String(payload.target_face_type));
+    if (payload.target_face_num !== undefined) formData.append("target_face_num", String(payload.target_face_num));
+    if (payload.generate_texture !== undefined) formData.append("generate_texture", String(payload.generate_texture));
+    if (payload.seed !== undefined) formData.append("seed", String(payload.seed));
+
+    const result = await callVarcoMultipart(VARCO_IMAGE_TO_3D_PATH, formData);
+    return res.status(result.accepted ? 202 : 200).json({ ok: true, result });
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      ok: false,
+      message: error.message,
+      data: error.data || null
+    });
+  }
+});
+
+app.get("/api/varco/image-to-3d/result/:requestId", async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    if (!requestId) {
+      return res.status(400).json({ ok: false, message: "requestId is required" });
     }
 
-    const result = await callVarco(VARCO_IMAGE_TO_3D_PATH, payload, {}, { cacheScope: "image-to-3d" });
-    return res.json({ ok: true, result });
+    const result = await callVarcoResult(requestId);
+    return res.status(result?.status === "processing" ? 202 : 200).json({ ok: true, result });
   } catch (error) {
     return res.status(error.status || 500).json({
       ok: false,
