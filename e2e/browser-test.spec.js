@@ -303,6 +303,105 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("asset-generation-result")).toHaveCount(0);
   });
 
+  test("asset editor ignores stale success after switching asset cards mid-conversion", async ({ page }) => {
+    let releasePoll;
+    const pollRelease = new Promise((resolve) => {
+      releasePoll = resolve;
+    });
+
+    await page.route("**/api/varco/image-to-3d", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          result: {
+            requestId: "mock-request-stale-success",
+            accepted: true,
+            message: "mock accepted"
+          }
+        })
+      });
+    });
+
+    await page.route("**/api/varco/image-to-3d/result/mock-request-stale-success", async (route) => {
+      await pollRelease;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          result: {
+            requestId: "mock-request-stale-success",
+            status: "succeeded",
+            model_url: "https://modelviewer.dev/shared-assets/models/Astronaut.glb"
+          }
+        })
+      });
+    });
+
+    await page.getByRole("button", { name: /에셋/ }).click();
+    await page.locator(".asset-editor .regenerate-btn").click();
+    await expect(page.getByTestId("asset-conversion-status")).toContainText("mock-request-stale-success");
+
+    await page.getByTestId("asset-card-enemy").click();
+    await expect(page.getByTestId("asset-card-enemy")).toHaveClass(/selected/);
+    await expect(page.getByTestId("asset-conversion-status")).toHaveCount(0);
+    await expect(page.locator(".asset-editor .regenerate-btn")).toHaveText("▶ 3D 변환");
+
+    releasePoll();
+    await page.waitForTimeout(100);
+
+    await expect(page.getByTestId("asset-conversion-status")).toHaveCount(0);
+    await expect(page.getByTestId("asset-generation-result")).toHaveCount(0);
+  });
+
+  test("asset editor ignores stale failures after switching asset cards mid-conversion", async ({ page }) => {
+    let releasePoll;
+    const pollRelease = new Promise((resolve) => {
+      releasePoll = resolve;
+    });
+
+    await page.route("**/api/varco/image-to-3d", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          result: {
+            requestId: "mock-request-stale-fail",
+            accepted: true,
+            message: "mock accepted"
+          }
+        })
+      });
+    });
+
+    await page.route("**/api/varco/image-to-3d/result/mock-request-stale-fail", async (route) => {
+      await pollRelease;
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: false,
+          message: "Late failure should stay hidden"
+        })
+      });
+    });
+
+    await page.getByRole("button", { name: /에셋/ }).click();
+    await page.locator(".asset-editor .regenerate-btn").click();
+    await expect(page.getByTestId("asset-conversion-status")).toContainText("mock-request-stale-fail");
+
+    await page.getByTestId("asset-card-enemy").click();
+    await expect(page.getByTestId("asset-card-enemy")).toHaveClass(/selected/);
+    await expect(page.getByTestId("asset-conversion-status")).toHaveCount(0);
+    await expect(page.locator(".asset-editor .regenerate-btn")).toHaveText("▶ 3D 변환");
+
+    releasePoll();
+    await page.waitForTimeout(100);
+
+    await expect(page.getByTestId("asset-conversion-status")).toHaveCount(0);
+    await expect(page.getByTestId("asset-generation-result")).toHaveCount(0);
+  });
+
   test("debug bridge can drive game over and reset deterministically", async ({ page }) => {
     await page.evaluate(() => {
       window.__SAGA_DEBUG__.dispatch({

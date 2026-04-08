@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const ASSET_TYPES = [
   { id: 'orb', label: 'Orb', imagePath: '/cards/orb.svg' },
@@ -101,16 +101,25 @@ export default function AssetEditor({
   const [isConverting, setIsConverting] = useState(false);
   const [latestResult, setLatestResult] = useState(null);
   const [conversionStatus, setConversionStatus] = useState(null);
+  const conversionTokenRef = useRef(0);
 
   useEffect(() => {
     import('@google/model-viewer').catch(() => null);
   }, []);
 
+  function resetTransientState({ cancelInFlight = false } = {}) {
+    if (cancelInFlight) {
+      conversionTokenRef.current += 1;
+      setIsConverting(false);
+    }
+    setLatestResult(null);
+    setConversionStatus(null);
+  }
+
   useEffect(() => {
     if (selectedKey && selectedKey !== selectedAsset) {
       setSelectedAsset(selectedKey);
-      setLatestResult(null);
-      setConversionStatus(null);
+      resetTransientState({ cancelInFlight: true });
     }
   }, [selectedAsset, selectedKey]);
 
@@ -119,10 +128,19 @@ export default function AssetEditor({
   const directionPrompt = draftPrompts?.[selectedAsset] || currentAsset?.label || '';
 
   async function handleConvert() {
+    const conversionToken = conversionTokenRef.current + 1;
+    conversionTokenRef.current = conversionToken;
     setIsConverting(true);
-    setLatestResult(null);
-    setConversionStatus(null);
+    resetTransientState();
+    const assetAtStart = selectedAsset;
+    const promptAtStart = directionPrompt;
     const start = Date.now();
+    const isActiveConversion = () => conversionTokenRef.current === conversionToken;
+    const applyIfActive = (callback) => {
+      if (!isActiveConversion()) return;
+      callback();
+    };
+
     try {
       const imageUrl = window.location.origin + currentAsset.imagePath;
       const image = await rasterizeAssetToPngDataUrl(imageUrl);
@@ -136,13 +154,17 @@ export default function AssetEditor({
       const requestId = result?.requestId || data.requestId || null;
 
       if (!getModelUrl(result) && requestId) {
-        setConversionStatus({
-          tone: 'pending',
-          label: 'Request accepted',
-          detail: data.message || result.message || 'VARCO accepted the job and is preparing the 3D preview.',
-          requestId
+        applyIfActive(() => {
+          setConversionStatus({
+            tone: 'pending',
+            label: 'Request accepted',
+            detail: data.message || result.message || 'VARCO accepted the job and is preparing the 3D preview.',
+            requestId
+          });
         });
-        result = await pollForResult(requestId, setConversionStatus);
+        result = await pollForResult(requestId, (status) => {
+          applyIfActive(() => setConversionStatus(status));
+        });
       }
 
       const latencyMs = Date.now() - start;
@@ -152,25 +174,29 @@ export default function AssetEditor({
       }
 
       const cacheHit = Boolean(result?.cache_hit || data.cache_hit);
-      dispatch({ type: 'EDIT_GENERATE', editType: 'asset', subType: selectedAsset, prompt: directionPrompt, result: { modelUrl }, latencyMs, cacheHit });
-      setLatestResult({ modelUrl, latencyMs, cacheHit });
-      setConversionStatus(requestId ? {
-        tone: 'ready',
-        label: 'Preview ready',
-        detail: 'The 3D preview is ready to inspect and apply.',
-        requestId
-      } : null);
+      applyIfActive(() => {
+        dispatch({ type: 'EDIT_GENERATE', editType: 'asset', subType: assetAtStart, prompt: promptAtStart, result: { modelUrl }, latencyMs, cacheHit });
+        setLatestResult({ modelUrl, latencyMs, cacheHit });
+        setConversionStatus(requestId ? {
+          tone: 'ready',
+          label: 'Preview ready',
+          detail: 'The 3D preview is ready to inspect and apply.',
+          requestId
+        } : null);
+      });
     } catch (e) {
       console.error('3D conversion failed:', e);
       const errorDetail = e instanceof Error ? e.message : 'Unknown conversion error';
-      setConversionStatus({
-        tone: 'error',
-        label: e?.status && e.status !== 'processing' ? 'Conversion failed' : 'Conversion stalled',
-        detail: errorDetail,
-        requestId: e?.requestId || null
+      applyIfActive(() => {
+        setConversionStatus({
+          tone: 'error',
+          label: e?.status && e.status !== 'processing' ? 'Conversion failed' : 'Conversion stalled',
+          detail: errorDetail,
+          requestId: e?.requestId || null
+        });
       });
     } finally {
-      setIsConverting(false);
+      applyIfActive(() => setIsConverting(false));
     }
   }
 
@@ -189,8 +215,7 @@ export default function AssetEditor({
             data-testid={`asset-card-${asset.id}`}
             onClick={() => {
               setSelectedAsset(asset.id);
-              setLatestResult(null);
-              setConversionStatus(null);
+              resetTransientState({ cancelInFlight: true });
               onSelectKey(asset.id);
             }}
           >
