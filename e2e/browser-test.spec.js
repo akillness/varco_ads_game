@@ -82,6 +82,91 @@ test.describe("Web UI", () => {
     await expect(page.locator(".asset-editor .prompt-input")).toHaveValue(/rogue ad-bot/i);
   });
 
+  test("marketing copy card confirms clipboard copies and clears feedback when switching channels", async ({ page }) => {
+    await page.evaluate(() => {
+      window.__copiedText = "";
+      window.__clipboardResolves = [];
+      window.__resolveClipboardWrite = () => {
+        const resolve = window.__clipboardResolves.shift();
+        if (resolve) resolve();
+      };
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: (text) => new Promise((resolve) => {
+            window.__copiedText = text;
+            window.__clipboardResolves.push(resolve);
+          }),
+          readText: async () => window.__copiedText,
+        },
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    await studioPanel.locator("textarea").fill("Retro arcade launch for creator heroes");
+    await studioPanel.getByRole("button", { name: "Generate Studio Pack" }).click();
+
+    const copyCard = page.getByTestId("studio-copy-card");
+    const copyButton = page.getByTestId("studio-copy-button");
+
+    await copyButton.click();
+    const copiedText = await page.evaluate(() => window.__copiedText);
+    expect(copiedText).toContain("CTA:");
+    expect(copiedText).toContain("VARCO arena");
+
+    await studioPanel.getByRole("button", { name: "Instagram Reel", exact: true }).click();
+    await expect(copyCard).toContainText("Instagram Reel");
+    await expect(page.getByTestId("studio-copy-feedback")).toHaveCount(0);
+    await expect(copyButton).toHaveText("Copy launch copy");
+
+    await page.evaluate(() => window.__resolveClipboardWrite());
+    await page.waitForTimeout(50);
+    await expect(page.getByTestId("studio-copy-feedback")).toHaveCount(0);
+    await expect(copyButton).toHaveText("Copy launch copy");
+
+    await copyButton.click();
+    await page.evaluate(() => window.__resolveClipboardWrite());
+    await expect(copyButton).toHaveText("Copied launch copy");
+    await expect(page.getByTestId("studio-copy-feedback")).toContainText(/instagram reel copy copied\./i);
+  });
+
+  test("marketing copy feedback stays cleared when a new pack is generated mid-copy", async ({ page }) => {
+    await page.evaluate(() => {
+      window.__clipboardResolves = [];
+      window.__resolveClipboardWrite = () => {
+        const resolve = window.__clipboardResolves.shift();
+        if (resolve) resolve();
+      };
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: (text) => new Promise((resolve) => {
+            window.__clipboardResolves.push(resolve);
+          }),
+        },
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(page.getByTestId("studio-copy-card")).toBeVisible();
+
+    await page.getByTestId("studio-copy-button").click();
+    await briefInput.fill("Midnight remix pack for creator duels");
+    await generateButton.click();
+    await expect(page.getByTestId("studio-copy-card")).toContainText(/Midnight remix pack|creator duels/i);
+    await expect(page.getByTestId("studio-copy-feedback")).toHaveCount(0);
+
+    await page.evaluate(() => window.__resolveClipboardWrite());
+    await page.waitForTimeout(50);
+    await expect(page.getByTestId("studio-copy-feedback")).toHaveCount(0);
+    await expect(page.getByTestId("studio-copy-button")).toHaveText("Copy launch copy");
+  });
+
   test("real input can collect a core after director setup", async ({ page }) => {
     await page.getByRole("button", { name: "Start" }).click();
     await page.evaluate(() => {

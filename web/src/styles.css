@@ -1296,6 +1296,27 @@ main {
   color: #c9d1d9;
 }
 
+.studio-copy-feedback {
+  font-size: 10px;
+  line-height: 1.4;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.studio-copy-feedback-ready {
+  border-color: rgba(63, 185, 160, 0.35);
+  background: rgba(63, 185, 160, 0.14);
+  color: #d2f5eb;
+}
+
+.studio-copy-feedback-error {
+  border-color: rgba(240, 136, 62, 0.35);
+  background: rgba(240, 136, 62, 0.14);
+  color: #ffd7bd;
+}
+
 .studio-suggestion-group {
   display: flex;
   gap: 6px;

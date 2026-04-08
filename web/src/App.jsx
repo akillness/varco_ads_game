@@ -912,9 +912,11 @@ export default function App() {
   const [studioStatus, setStudioStatus] = useState("idle");
   const [studioCache, setStudioCache] = useState(null);
   const [selectedMarketingAngle, setSelectedMarketingAngle] = useState(null);
+  const [marketingCopyFeedback, setMarketingCopyFeedback] = useState(null);
   const [editorDrafts, setEditorDrafts] = useState({ sound: {}, asset: {} });
   const [editorSelection, setEditorSelection] = useState({ sound: "bgm", asset: "orb" });
   const latestStateRef = useRef(state);
+  const marketingCopyActionRef = useRef(0);
 
   const {
     hero,
@@ -1233,6 +1235,7 @@ export default function App() {
     } else {
       setSelectedMarketingAngle(null);
     }
+    clearMarketingCopyFeedback();
   }, [studioPack?.packId]);
 
   const totalPool = betPools.player + betPools.enemy || 1;
@@ -1307,10 +1310,20 @@ export default function App() {
     setLog((prev) => [`Prompt loaded: ${key}`, ...prev].slice(0, 8));
   }
 
+  function clearMarketingCopyFeedback() {
+    marketingCopyActionRef.current += 1;
+    setMarketingCopyFeedback(null);
+  }
+
+  function selectMarketingAngle(angle) {
+    setSelectedMarketingAngle(angle);
+    clearMarketingCopyFeedback();
+  }
+
   function loadQueueItem(item) {
     if (item.lane === "social") {
       const angle = studioPack?.marketingAngles?.find((entry) => entry.channel === item.key) || null;
-      setSelectedMarketingAngle(angle);
+      selectMarketingAngle(angle);
       setLog((prev) => [`Copy loaded: ${item.key}`, ...prev].slice(0, 8));
       return;
     }
@@ -1318,16 +1331,33 @@ export default function App() {
   }
 
   async function copyMarketingCopy() {
-    if (!selectedMarketingAngle?.copy || typeof navigator === "undefined" || !navigator.clipboard) return;
+    if (!selectedMarketingAngle?.copy) return;
+
+    const actionId = marketingCopyActionRef.current + 1;
+    marketingCopyActionRef.current = actionId;
+    setMarketingCopyFeedback(null);
+
+    if (typeof navigator === "undefined" || typeof navigator.clipboard?.writeText !== "function") {
+      if (marketingCopyActionRef.current !== actionId) return;
+      setMarketingCopyFeedback({ tone: "error", message: "Clipboard unavailable in this browser." });
+      setLog((prev) => ["Clipboard unavailable", ...prev].slice(0, 8));
+      return;
+    }
+
     try {
       await navigator.clipboard.writeText(`${selectedMarketingAngle.copy}\nCTA: ${selectedMarketingAngle.cta}`);
+      if (marketingCopyActionRef.current !== actionId) return;
+      setMarketingCopyFeedback({ tone: "ready", message: `${selectedMarketingAngle.label} copy copied.` });
       setLog((prev) => [`Copied ${selectedMarketingAngle.label} copy`, ...prev].slice(0, 8));
     } catch {
+      if (marketingCopyActionRef.current !== actionId) return;
+      setMarketingCopyFeedback({ tone: "error", message: "Clipboard copy blocked. Try again after granting permissions." });
       setLog((prev) => ["Clipboard copy blocked", ...prev].slice(0, 8));
     }
   }
 
   async function generateStudioPack() {
+    clearMarketingCopyFeedback();
     setStudioStatus("loading");
     try {
       const json = await jsonRequest("/api/varco/studio-pack", {
@@ -1340,7 +1370,7 @@ export default function App() {
         sound: json.studioPack.sounds,
         asset: json.studioPack.assets
       });
-      setSelectedMarketingAngle(json.studioPack.marketingAngles?.[0] || null);
+      selectMarketingAngle(json.studioPack.marketingAngles?.[0] || null);
       refreshCacheStats().catch(() => null);
       setLog((prev) => [`Studio pack ${json.studioPack.cache_hit ? "cached" : "ready"}`, ...prev].slice(0, 8));
     } catch (error) {
@@ -1726,7 +1756,7 @@ export default function App() {
                     key={angle.id}
                     type="button"
                     className={`studio-chip${selectedMarketingAngle?.id === angle.id ? " active" : ""}`}
-                    onClick={() => setSelectedMarketingAngle(angle)}
+                    onClick={() => selectMarketingAngle(angle)}
                   >
                     {angle.label}
                   </button>
@@ -1737,9 +1767,17 @@ export default function App() {
                   <strong>{selectedMarketingAngle.label}</strong>
                   <p>{selectedMarketingAngle.copy}</p>
                   <span>{selectedMarketingAngle.cta}</span>
-                  <button type="button" className="share-btn" onClick={copyMarketingCopy}>
-                    Copy launch copy
+                  <button type="button" className="share-btn" data-testid="studio-copy-button" onClick={copyMarketingCopy}>
+                    {marketingCopyFeedback?.tone === "ready" ? "Copied launch copy" : "Copy launch copy"}
                   </button>
+                  {marketingCopyFeedback && (
+                    <div
+                      className={`studio-copy-feedback studio-copy-feedback-${marketingCopyFeedback.tone}`}
+                      data-testid="studio-copy-feedback"
+                    >
+                      {marketingCopyFeedback.message}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
