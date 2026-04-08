@@ -6,6 +6,9 @@ const ASSET_TYPES = [
   { id: 'player', label: 'Player', imagePath: '/cards/player.svg' },
 ];
 
+const RESULT_POLL_ATTEMPTS = 4;
+const RESULT_POLL_INTERVAL_MS = 400;
+
 function rasterizeAssetToPngDataUrl(imageUrl) {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -26,6 +29,45 @@ function rasterizeAssetToPngDataUrl(imageUrl) {
   });
 }
 
+function getModelUrl(payload) {
+  return payload?.data?.[0]?.model_url || payload?.model_url || '';
+}
+
+function wait(ms) {
+  return new Promise(resolve => window.setTimeout(resolve, ms));
+}
+
+async function pollForResult(requestId, onStatusChange) {
+  for (let attempt = 1; attempt <= RESULT_POLL_ATTEMPTS; attempt += 1) {
+    onStatusChange({
+      tone: 'pending',
+      label: 'Request accepted',
+      detail: `Waiting for 3D preview · poll ${attempt}/${RESULT_POLL_ATTEMPTS}`,
+      requestId
+    });
+
+    const resultRes = await fetch(`/api/varco/image-to-3d/result/${requestId}`);
+    const resultJson = await resultRes.json();
+    const result = resultJson.result || resultJson;
+    const modelUrl = getModelUrl(result);
+    const status = typeof result?.status === 'string' ? result.status.toLowerCase() : '';
+
+    if (modelUrl) {
+      return result;
+    }
+
+    if (["failed", "error", "cancelled"].includes(status)) {
+      throw new Error(`3D conversion ${status}`);
+    }
+
+    if (attempt < RESULT_POLL_ATTEMPTS) {
+      await wait(RESULT_POLL_INTERVAL_MS);
+    }
+  }
+
+  throw new Error('3D preview is still processing. Try the conversion again in a moment.');
+}
+
 export default function AssetEditor({
   editHistory = [],
   dispatch,
@@ -38,6 +80,7 @@ export default function AssetEditor({
   const [selectedAsset, setSelectedAsset] = useState(selectedKey);
   const [isConverting, setIsConverting] = useState(false);
   const [latestResult, setLatestResult] = useState(null);
+  const [conversionStatus, setConversionStatus] = useState(null);
 
   useEffect(() => {
     import('@google/model-viewer').catch(() => null);
@@ -47,6 +90,7 @@ export default function AssetEditor({
     if (selectedKey && selectedKey !== selectedAsset) {
       setSelectedAsset(selectedKey);
       setLatestResult(null);
+      setConversionStatus(null);
     }
   }, [selectedAsset, selectedKey]);
 
@@ -56,6 +100,8 @@ export default function AssetEditor({
 
   async function handleConvert() {
     setIsConverting(true);
+    setLatestResult(null);
+    setConversionStatus(null);
     const start = Date.now();
     try {
       const imageUrl = window.location.origin + currentAsset.imagePath;
@@ -67,18 +113,40 @@ export default function AssetEditor({
       });
       const data = await res.json();
       let result = data.result || data;
-      if (!result?.data?.[0]?.model_url && result?.requestId) {
-        const resultRes = await fetch(`/api/varco/image-to-3d/result/${result.requestId}`);
-        const resultJson = await resultRes.json();
-        result = resultJson.result || result;
+      const requestId = result?.requestId || data.requestId || null;
+
+      if (!getModelUrl(result) && requestId) {
+        setConversionStatus({
+          tone: 'pending',
+          label: 'Request accepted',
+          detail: data.message || result.message || 'VARCO accepted the job and is preparing the 3D preview.',
+          requestId
+        });
+        result = await pollForResult(requestId, setConversionStatus);
       }
+
       const latencyMs = Date.now() - start;
-      const modelUrl = result?.data?.[0]?.model_url || result?.model_url || '';
+      const modelUrl = getModelUrl(result);
+      if (!modelUrl) {
+        throw new Error('3D result did not include a preview model.');
+      }
+
       const cacheHit = Boolean(result?.cache_hit || data.cache_hit);
       dispatch({ type: 'EDIT_GENERATE', editType: 'asset', subType: selectedAsset, prompt: directionPrompt, result: { modelUrl }, latencyMs, cacheHit });
       setLatestResult({ modelUrl, latencyMs, cacheHit });
+      setConversionStatus(requestId ? {
+        tone: 'ready',
+        label: 'Preview ready',
+        detail: 'The 3D preview is ready to inspect and apply.',
+        requestId
+      } : null);
     } catch (e) {
       console.error('3D conversion failed:', e);
+      setConversionStatus({
+        tone: 'error',
+        label: 'Conversion stalled',
+        detail: e instanceof Error ? e.message : 'Unknown conversion error'
+      });
     } finally {
       setIsConverting(false);
     }
@@ -100,6 +168,7 @@ export default function AssetEditor({
             onClick={() => {
               setSelectedAsset(asset.id);
               setLatestResult(null);
+              setConversionStatus(null);
               onSelectKey(asset.id);
             }}
           >
@@ -130,6 +199,17 @@ export default function AssetEditor({
         style={{ marginTop: '8px', width: '100%' }}>
         {isConverting ? '⏳ Converting to 3D...' : '▶ 3D 변환'}
       </button>
+
+      {conversionStatus && (
+        <div
+          className={`conversion-status conversion-status-${conversionStatus.tone}`}
+          data-testid="asset-conversion-status"
+        >
+          <strong>{conversionStatus.label}</strong>
+          <span>{conversionStatus.detail}</span>
+          {conversionStatus.requestId && <code>{conversionStatus.requestId}</code>}
+        </div>
+      )}
 
       {latestResult && (
         <div className="generation-result" data-testid="asset-generation-result">

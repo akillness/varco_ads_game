@@ -130,6 +130,58 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("arena-status-strip")).toContainText("Assets live: 1/3");
   });
 
+  test("asset editor shows accepted and ready states for requestId-based conversions", async ({ page }) => {
+    let pollCount = 0;
+
+    await page.route("**/api/varco/image-to-3d", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          result: {
+            requestId: "mock-request-123",
+            accepted: true,
+            message: "mock accepted"
+          }
+        })
+      });
+    });
+
+    await page.route("**/api/varco/image-to-3d/result/mock-request-123", async (route) => {
+      pollCount += 1;
+      if (pollCount === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          result: pollCount === 1
+            ? {
+                requestId: "mock-request-123",
+                status: "processing"
+              }
+            : {
+                requestId: "mock-request-123",
+                status: "succeeded",
+                model_url: "https://modelviewer.dev/shared-assets/models/Astronaut.glb"
+              }
+        })
+      });
+    });
+
+    await page.getByRole("button", { name: /에셋/ }).click();
+    await page.locator(".asset-editor .regenerate-btn").click();
+
+    const status = page.getByTestId("asset-conversion-status");
+    await expect(status).toContainText("Request accepted");
+    await expect(status).toContainText("mock-request-123");
+    await expect(status).toContainText("Waiting for 3D preview");
+    await expect(status).toContainText("Preview ready");
+    await expect(page.getByTestId("asset-generation-result")).toBeVisible();
+  });
+
   test("debug bridge can drive game over and reset deterministically", async ({ page }) => {
     await page.evaluate(() => {
       window.__SAGA_DEBUG__.dispatch({
