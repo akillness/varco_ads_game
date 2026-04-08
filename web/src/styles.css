@@ -991,8 +991,10 @@ main {
   flex-direction: column;
   align-items: center;
   gap: 4px;
+  width: 100%;
   padding: 8px 4px;
   background: var(--bg-secondary, #1a1a2e);
+  color: var(--text, #fff);
   border: 2px solid var(--border, #2a2a4a);
   border-radius: 8px;
   cursor: pointer;

@@ -64,17 +64,22 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("arena-status-strip")).toContainText("Mission:");
   });
 
-  test("generates a studio pack and injects prompts into the editor flow", async ({ page }) => {
+  test("generates a studio pack and routes prompt chips into the matching editor slot", async ({ page }) => {
     const studioPanel = page.getByTestId("studio-pack-panel");
     await studioPanel.locator("textarea").fill("Retro arcade launch for creator heroes");
     await studioPanel.getByRole("button", { name: "Generate Studio Pack" }).click();
 
     await expect(studioPanel).toContainText("calls saved");
     await expect(studioPanel).toContainText("Production Queue");
-    await studioPanel.getByRole("button", { name: "bgm", exact: true }).click();
 
-    const soundPrompt = page.locator(".sound-editor .prompt-input");
-    await expect(soundPrompt).toHaveValue(/Retro arcade launch/);
+    await studioPanel.getByRole("button", { name: "win", exact: true }).click();
+    await expect(page.getByTestId("sound-tab-win")).toHaveClass(/active/);
+    await expect(page.locator(".sound-editor .prompt-input")).toHaveValue(/Retro arcade launch/);
+
+    await studioPanel.getByRole("button", { name: "enemy", exact: true }).click();
+    await expect(page.getByRole("button", { name: /^🧊 에셋$/ })).toHaveClass(/active/);
+    await expect(page.getByTestId("asset-card-enemy")).toHaveClass(/selected/);
+    await expect(page.locator(".asset-editor .prompt-input")).toHaveValue(/rogue ad-bot/i);
   });
 
   test("real input can collect a core after director setup", async ({ page }) => {

@@ -913,6 +913,7 @@ export default function App() {
   const [studioCache, setStudioCache] = useState(null);
   const [selectedMarketingAngle, setSelectedMarketingAngle] = useState(null);
   const [editorDrafts, setEditorDrafts] = useState({ sound: {}, asset: {} });
+  const [editorSelection, setEditorSelection] = useState({ sound: "bgm", asset: "orb" });
   const latestStateRef = useRef(state);
 
   const {
@@ -1301,6 +1302,7 @@ export default function App() {
 
   function applyStudioSuggestion(kind, key, prompt) {
     updateEditorDraft(kind, key, prompt);
+    setEditorSelection((prev) => ({ ...prev, [kind]: key }));
     setEditorTab(kind === "sound" ? "sound" : "asset");
     setLog((prev) => [`Prompt loaded: ${key}`, ...prev].slice(0, 8));
   }
@@ -1759,6 +1761,8 @@ export default function App() {
                 dispatch={dispatch}
                 studioPack={studioPack}
                 draftPrompts={editorDrafts.sound}
+                selectedKey={editorSelection.sound}
+                onSelectKey={(key) => setEditorSelection((prev) => ({ ...prev, sound: key }))}
                 onDraftChange={(key, value) => updateEditorDraft("sound", key, value)}
               />
             )}
@@ -1768,6 +1772,8 @@ export default function App() {
                 dispatch={dispatch}
                 studioPack={studioPack}
                 draftPrompts={editorDrafts.asset}
+                selectedKey={editorSelection.asset}
+                onSelectKey={(key) => setEditorSelection((prev) => ({ ...prev, asset: key }))}
                 onDraftChange={(key, value) => updateEditorDraft("asset", key, value)}
               />
             )}

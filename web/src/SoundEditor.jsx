@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const SOUND_TYPES = [
   { id: 'bgm', label: 'BGM', prompt: 'ambient game background music' },
@@ -8,8 +8,16 @@ const SOUND_TYPES = [
   { id: 'lose', label: '패배음', prompt: 'game over defeat sound' },
 ];
 
-export default function SoundEditor({ editHistory = [], dispatch, studioPack = null, draftPrompts = {}, onDraftChange = () => {} }) {
-  const [activeTab, setActiveTab] = useState('bgm');
+export default function SoundEditor({
+  editHistory = [],
+  dispatch,
+  studioPack = null,
+  draftPrompts = {},
+  selectedKey = 'bgm',
+  onSelectKey = () => {},
+  onDraftChange = () => {}
+}) {
+  const [activeTab, setActiveTab] = useState(selectedKey);
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [latestResult, setLatestResult] = useState(null); // { audioUrl, latencyMs, id }
@@ -17,6 +25,14 @@ export default function SoundEditor({ editHistory = [], dispatch, studioPack = n
   const currentType = SOUND_TYPES.find(t => t.id === activeTab);
   const typeHistory = editHistory.filter(e => e.type === 'sound' && e.subType === activeTab);
   const appliedEntry = [...typeHistory].reverse().find(e => e.appliedAt);
+
+  useEffect(() => {
+    if (selectedKey && selectedKey !== activeTab) {
+      setActiveTab(selectedKey);
+      setPrompt(draftPrompts?.[selectedKey] || '');
+      setLatestResult(null);
+    }
+  }, [activeTab, draftPrompts, selectedKey]);
 
   const displayPrompt = prompt || draftPrompts?.[activeTab] || appliedEntry?.prompt || currentType?.prompt || '';
 
@@ -52,8 +68,18 @@ export default function SoundEditor({ editHistory = [], dispatch, studioPack = n
     <div className="sound-editor">
       <div className="sound-type-tabs">
         {SOUND_TYPES.map(t => (
-          <button key={t.id} className={`sound-tab-btn ${activeTab === t.id ? 'active' : ''}`}
-            onClick={() => { setActiveTab(t.id); setPrompt(draftPrompts?.[t.id] || ''); setLatestResult(null); }}>
+          <button
+            key={t.id}
+            type="button"
+            className={`sound-tab-btn ${activeTab === t.id ? 'active' : ''}`}
+            data-testid={`sound-tab-${t.id}`}
+            onClick={() => {
+              setActiveTab(t.id);
+              setPrompt(draftPrompts?.[t.id] || '');
+              setLatestResult(null);
+              onSelectKey(t.id);
+            }}
+          >
             {t.label}
           </button>
         ))}
