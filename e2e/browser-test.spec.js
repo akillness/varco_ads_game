@@ -3,6 +3,51 @@ import { test, expect } from "@playwright/test";
 const BASE = "http://127.0.0.1:5173";
 const API = "http://127.0.0.1:8787";
 
+function createStudioPackFixture(brief, { heroName = "Sound Crafter", suffix = "launch" } = {}) {
+  return {
+    ok: true,
+    studioPack: {
+      packId: `pack-${suffix}`,
+      heroName,
+      cache_hit: false,
+      campaign: {
+        headline: `${brief} headline`,
+        tagline: `${brief} tagline`
+      },
+      sounds: {
+        bgm: `${brief} bgm prompt`,
+        orb: `${brief} orb prompt`,
+        hit: `${brief} hit prompt`,
+        win: `${brief} win prompt`,
+        lose: `${brief} lose prompt`
+      },
+      assets: {
+        orb: `${brief} orb direction`,
+        enemy: `${brief} enemy direction`,
+        player: `${brief} player direction`
+      },
+      savings: {
+        estimatedCallsSaved: 2,
+        estimatedCallsWithPack: 3,
+        estimatedCallsWithoutPack: 5
+      },
+      productionQueue: [
+        { id: `queue-sound-${suffix}`, label: "Queue sound", lane: "sound", key: "bgm", prompt: `${brief} bgm prompt` },
+        { id: `queue-copy-${suffix}`, label: "Queue copy", lane: "social", key: "launch", prompt: `${brief} launch copy` }
+      ],
+      marketingAngles: [
+        {
+          id: `launch-${suffix}`,
+          channel: "launch",
+          label: `Launch ${suffix}`,
+          copy: `${brief} launch copy`,
+          cta: `${brief} CTA`
+        }
+      ]
+    }
+  };
+}
+
 test.describe("API contracts", () => {
   test("GET /api/health exposes cache stats", async ({ request }) => {
     const res = await request.get(`${API}/api/health`);
@@ -82,6 +127,56 @@ test.describe("Web UI", () => {
     await expect(page.locator(".asset-editor .prompt-input")).toHaveValue(/rogue ad-bot/i);
   });
 
+  test("studio pack ignores stale success after the brief changes and a newer pack is generated", async ({ page }) => {
+    let releaseFirstPack;
+    const firstPackPending = new Promise((resolve) => {
+      releaseFirstPack = resolve;
+    });
+    let requestCount = 0;
+
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      if (requestCount === 1) {
+        await firstPackPending;
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(createStudioPackFixture("Retro arcade launch for creator heroes", { suffix: "retro" }))
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(createStudioPackFixture("Midnight remix pack for creator duels", { suffix: "midnight" }))
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.locator("button.bet-btn").first();
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(generateButton).toHaveText("Building Pack...");
+
+    await briefInput.fill("Midnight remix pack for creator duels");
+    await expect(generateButton).toHaveText("Generate Studio Pack");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+
+    await generateButton.click();
+    await expect(page.locator(".studio-pack-card")).toContainText("Midnight remix pack for creator duels headline");
+    await expect(page.getByTestId("studio-copy-card")).toContainText("Midnight remix pack for creator duels launch copy");
+
+    releaseFirstPack();
+    await page.waitForTimeout(50);
+
+    await expect(page.locator(".studio-pack-card")).toContainText("Midnight remix pack for creator duels headline");
+    await expect(page.locator(".studio-pack-card")).not.toContainText("Retro arcade launch for creator heroes headline");
+    await expect(page.getByTestId("studio-copy-card")).toContainText("Midnight remix pack for creator duels launch copy");
+  });
+
   test("marketing copy card confirms clipboard copies and clears feedback when switching channels", async ({ page }) => {
     await page.evaluate(() => {
       window.__copiedText = "";
@@ -149,7 +244,7 @@ test.describe("Web UI", () => {
 
     const studioPanel = page.getByTestId("studio-pack-panel");
     const briefInput = studioPanel.locator("textarea");
-    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const generateButton = studioPanel.locator("button.bet-btn").first();
 
     await briefInput.fill("Retro arcade launch for creator heroes");
     await generateButton.click();

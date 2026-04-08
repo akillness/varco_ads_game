@@ -917,6 +917,7 @@ export default function App() {
   const [editorSelection, setEditorSelection] = useState({ sound: "bgm", asset: "orb" });
   const latestStateRef = useRef(state);
   const marketingCopyActionRef = useRef(0);
+  const studioPackRequestRef = useRef(0);
 
   const {
     hero,
@@ -1315,6 +1316,17 @@ export default function App() {
     setMarketingCopyFeedback(null);
   }
 
+  function resetStudioPackState({ cancelInFlight = false, nextStatus = "idle" } = {}) {
+    if (cancelInFlight) {
+      studioPackRequestRef.current += 1;
+    }
+    setStudioPack(null);
+    setStudioStatus(nextStatus);
+    setEditorDrafts({ sound: {}, asset: {} });
+    setSelectedMarketingAngle(null);
+    clearMarketingCopyFeedback();
+  }
+
   function selectMarketingAngle(angle) {
     setSelectedMarketingAngle(angle);
     clearMarketingCopyFeedback();
@@ -1357,25 +1369,38 @@ export default function App() {
   }
 
   async function generateStudioPack() {
-    clearMarketingCopyFeedback();
-    setStudioStatus("loading");
+    const requestToken = studioPackRequestRef.current + 1;
+    studioPackRequestRef.current = requestToken;
+    const briefAtStart = studioBrief;
+    const heroIdAtStart = hero.id;
+    const applyIfActive = (callback) => {
+      if (studioPackRequestRef.current !== requestToken) return;
+      callback();
+    };
+
+    resetStudioPackState({ nextStatus: "loading" });
     try {
       const json = await jsonRequest("/api/varco/studio-pack", {
         method: "POST",
-        body: JSON.stringify({ brief: studioBrief, heroId: hero.id })
+        body: JSON.stringify({ brief: briefAtStart, heroId: heroIdAtStart })
       });
-      setStudioPack(json.studioPack);
-      setStudioStatus(json.studioPack.cache_hit ? "cached" : "ready");
-      setEditorDrafts({
-        sound: json.studioPack.sounds,
-        asset: json.studioPack.assets
+      applyIfActive(() => {
+        setStudioPack(json.studioPack);
+        setStudioStatus(json.studioPack.cache_hit ? "cached" : "ready");
+        setEditorDrafts({
+          sound: json.studioPack.sounds,
+          asset: json.studioPack.assets
+        });
+        setSelectedMarketingAngle(json.studioPack.marketingAngles?.[0] || null);
+        clearMarketingCopyFeedback();
+        refreshCacheStats().catch(() => null);
+        setLog((prev) => [`Studio pack ${json.studioPack.cache_hit ? "cached" : "ready"}`, ...prev].slice(0, 8));
       });
-      selectMarketingAngle(json.studioPack.marketingAngles?.[0] || null);
-      refreshCacheStats().catch(() => null);
-      setLog((prev) => [`Studio pack ${json.studioPack.cache_hit ? "cached" : "ready"}`, ...prev].slice(0, 8));
     } catch (error) {
-      setStudioStatus("error");
-      setLog((prev) => [`Studio pack failed: ${error.message}`, ...prev].slice(0, 8));
+      applyIfActive(() => {
+        setStudioStatus("error");
+        setLog((prev) => [`Studio pack failed: ${error.message}`, ...prev].slice(0, 8));
+      });
     }
   }
 
@@ -1697,7 +1722,12 @@ export default function App() {
           <textarea
             className="studio-brief-input"
             value={studioBrief}
-            onChange={(e) => setStudioBrief(e.target.value)}
+            onChange={(e) => {
+              setStudioBrief(e.target.value);
+              if (studioStatus === "loading" || studioPack) {
+                resetStudioPackState({ cancelInFlight: studioStatus === "loading" });
+              }
+            }}
             placeholder="Describe the campaign brief once, then reuse it across sounds, assets, and social copy."
           />
           <button type="button" className="bet-btn" onClick={generateStudioPack} disabled={studioStatus === "loading"}>
