@@ -197,9 +197,36 @@ test.describe("Web UI", () => {
     await soundPrompt.fill("victory sting for sponsor-ready arcade arena");
     await page.locator(".sound-editor .regenerate-btn").click();
 
+    await expect(page.getByTestId("sound-generation-status")).toContainText("Sound ready");
     await expect(page.getByTestId("sound-generation-result")).toBeVisible();
     await page.getByTestId("sound-generation-result").getByRole("button", { name: /Apply/ }).click();
     await expect(page.getByTestId("sound-version-history")).toContainText("적용됨");
+  });
+
+  test("sound editor surfaces upstream failure details without creating a stale version", async ({ page }) => {
+    await page.route("**/api/varco/text2sound", async (route) => {
+      await route.fulfill({
+        status: 502,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: false,
+          message: "Upstream sound render timed out",
+          data: {
+            requestId: "mock-sound-fail"
+          }
+        })
+      });
+    });
+
+    await page.locator(".sound-editor .prompt-input").fill("late-night sponsor sting");
+    await page.locator(".sound-editor .regenerate-btn").click();
+
+    const status = page.getByTestId("sound-generation-status");
+    await expect(status).toContainText("Sound generation failed");
+    await expect(status).toContainText("Upstream sound render timed out");
+    await expect(status).toContainText("mock-sound-fail");
+    await expect(page.getByTestId("sound-generation-result")).toHaveCount(0);
+    await expect(page.getByTestId("sound-version-history")).toHaveCount(0);
   });
 
   test("sound editor ignores stale success after switching tabs mid-generation", async ({ page }) => {
@@ -234,16 +261,63 @@ test.describe("Web UI", () => {
     await page.getByTestId("sound-tab-win").click();
     await expect(page.getByTestId("sound-tab-win")).toHaveClass(/active/);
     await expect(page.locator(".sound-editor .regenerate-btn")).toHaveText("▶ 재생성");
+    await expect(page.getByTestId("sound-generation-status")).toHaveCount(0);
     await expect(page.getByTestId("sound-generation-result")).toHaveCount(0);
 
     releaseGeneration();
     await page.waitForTimeout(100);
 
+    await expect(page.getByTestId("sound-generation-status")).toHaveCount(0);
     await expect(page.getByTestId("sound-generation-result")).toHaveCount(0);
     await expect(page.getByTestId("sound-version-history")).toHaveCount(0);
 
     await page.getByTestId("sound-tab-bgm").click();
     await expect(page.getByTestId("sound-tab-bgm")).toHaveClass(/active/);
+    await expect(page.getByTestId("sound-generation-status")).toHaveCount(0);
+    await expect(page.getByTestId("sound-generation-result")).toHaveCount(0);
+    await expect(page.getByTestId("sound-version-history")).toHaveCount(0);
+  });
+
+  test("sound editor ignores stale failures after switching tabs mid-generation", async ({ page }) => {
+    let releaseGeneration;
+    const generationRelease = new Promise((resolve) => {
+      releaseGeneration = resolve;
+    });
+
+    await page.route("**/api/varco/text2sound", async (route) => {
+      await generationRelease;
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: false,
+          message: "Queued render failed after tab switch",
+          data: {
+            requestId: "mock-sound-stale-fail"
+          }
+        })
+      });
+    });
+
+    await page.locator(".sound-editor .prompt-input").fill("glitch sponsor outro");
+    await page.locator(".sound-editor .regenerate-btn").click();
+    await expect(page.locator(".sound-editor .regenerate-btn")).toHaveText("⏳ Generating...");
+
+    await page.getByTestId("sound-tab-win").click();
+    await expect(page.getByTestId("sound-tab-win")).toHaveClass(/active/);
+    await expect(page.locator(".sound-editor .regenerate-btn")).toHaveText("▶ 재생성");
+    await expect(page.getByTestId("sound-generation-status")).toHaveCount(0);
+
+    releaseGeneration();
+    await page.waitForTimeout(100);
+
+    await expect(page.getByTestId("sound-generation-status")).toHaveCount(0);
+    await expect(page.getByTestId("sound-generation-result")).toHaveCount(0);
+    await expect(page.getByTestId("sound-version-history")).toHaveCount(0);
+
+    await page.getByTestId("sound-tab-bgm").click();
+    await expect(page.getByTestId("sound-tab-bgm")).toHaveClass(/active/);
+    await expect(page.getByTestId("sound-generation-status")).toHaveCount(0);
     await expect(page.getByTestId("sound-generation-result")).toHaveCount(0);
     await expect(page.getByTestId("sound-version-history")).toHaveCount(0);
   });

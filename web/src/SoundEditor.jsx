@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 
+function createSoundGenerationError(message, details = {}) {
+  const error = new Error(message);
+  Object.assign(error, details);
+  return error;
+}
+
 const SOUND_TYPES = [
   { id: 'bgm', label: 'BGM', prompt: 'ambient game background music' },
   { id: 'orb', label: 'Orb 수집음', prompt: 'collect orb pickup sound' },
@@ -21,6 +27,7 @@ export default function SoundEditor({
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [latestResult, setLatestResult] = useState(null); // { audioUrl, latencyMs, id }
+  const [generationStatus, setGenerationStatus] = useState(null);
   const generationTokenRef = useRef(0);
 
   const currentType = SOUND_TYPES.find(t => t.id === activeTab);
@@ -33,6 +40,7 @@ export default function SoundEditor({
       setIsGenerating(false);
     }
     setLatestResult(null);
+    setGenerationStatus(null);
   }
 
   useEffect(() => {
@@ -50,6 +58,12 @@ export default function SoundEditor({
     generationTokenRef.current = generationToken;
     setIsGenerating(true);
     setLatestResult(null);
+    setGenerationStatus({
+      tone: 'pending',
+      label: 'Generating sound',
+      detail: 'VARCO is building a reusable sound cue from the current prompt.',
+      resultId: null
+    });
 
     const start = Date.now();
     const activeTabAtStart = activeTab;
@@ -69,17 +83,53 @@ export default function SoundEditor({
       const data = await res.json();
       const latencyMs = Date.now() - start;
       const audioUrl = data.result?.data?.[0]?.audio || data.data?.[0]?.audio || '';
-      const id = data.result?.version_id || data.version_id || Date.now().toString();
+      const responseMeta = data?.data || data?.result?.data?.[0] || null;
+      const id =
+        data.result?.version_id ||
+        data.version_id ||
+        data.result?.requestId ||
+        data.requestId ||
+        responseMeta?.version_id ||
+        responseMeta?.requestId ||
+        null;
       const cacheHit = Boolean(data.result?.cache_hit || data.cache_hit);
+
+      if (!res.ok || data?.ok === false) {
+        throw createSoundGenerationError(
+          data?.message || `Sound generation failed (${res.status})`,
+          { resultId: id }
+        );
+      }
+
+      if (!audioUrl) {
+        throw createSoundGenerationError('Sound result did not include an audio preview.', {
+          resultId: id
+        });
+      }
 
       applyIfActive(() => {
         dispatch({ type: 'EDIT_GENERATE', editType: 'sound', subType: activeTabAtStart, prompt: promptAtStart, result: { audioUrl }, latencyMs, cacheHit });
         setLatestResult({ audioUrl, latencyMs, id, cacheHit });
+        setGenerationStatus({
+          tone: 'ready',
+          label: 'Sound ready',
+          detail: 'The generated cue is ready to preview and apply.',
+          resultId: id
+        });
       });
     } catch (e) {
       if (isActiveGeneration()) {
         console.error('Sound generation failed:', e);
       }
+      const errorDetail = e instanceof Error ? e.message : 'Unknown sound generation error';
+      applyIfActive(() => {
+        setGenerationStatus({
+          tone: 'error',
+          label: 'Sound generation failed',
+          detail: errorDetail,
+          resultId: e?.resultId || null
+        });
+      });
     } finally {
       applyIfActive(() => setIsGenerating(false));
     }
@@ -132,6 +182,17 @@ export default function SoundEditor({
           {isGenerating ? '⏳ Generating...' : '▶ 재생성'}
         </button>
       </div>
+
+      {generationStatus && (
+        <div
+          className={`conversion-status conversion-status-${generationStatus.tone}`}
+          data-testid="sound-generation-status"
+        >
+          <strong>{generationStatus.label}</strong>
+          <span>{generationStatus.detail}</span>
+          {generationStatus.resultId && <code>{generationStatus.resultId}</code>}
+        </div>
+      )}
 
       {latestResult && (
         <div className="generation-result" data-testid="sound-generation-result">
