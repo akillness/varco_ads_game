@@ -411,15 +411,59 @@ function triggerDirectorBeat(state, timer) {
   };
 }
 
+const HIGH_SCORE_LIMIT = 5;
+
+function compareHighScores(a, b) {
+  return (
+    b.score - a.score ||
+    b.combo - a.combo ||
+    b.createdAt.localeCompare(a.createdAt) ||
+    a.hero.localeCompare(b.hero)
+  );
+}
+
+function normalizeHighScoreEntry(entry) {
+  if (!entry || typeof entry !== "object") return null;
+
+  const score = Number(entry.score);
+  const combo = Number(entry.combo ?? 0);
+  const hero = typeof entry.hero === "string" && entry.hero.trim() ? entry.hero.trim() : "Unknown Agent";
+  const createdAt = typeof entry.createdAt === "string" && entry.createdAt
+    ? entry.createdAt
+    : typeof entry.date === "string" && entry.date
+      ? `${entry.date}T00:00:00.000Z`
+      : "1970-01-01T00:00:00.000Z";
+
+  if (!Number.isFinite(score)) return null;
+
+  return {
+    hero,
+    score,
+    combo: Number.isFinite(combo) ? combo : 0,
+    createdAt,
+    date: typeof entry.date === "string" && entry.date ? entry.date : createdAt.slice(0, 10)
+  };
+}
+
 function loadHighScores() {
-  try { return JSON.parse(localStorage.getItem("saga_highscores") || "[]").slice(0, 5); }
-  catch { return []; }
+  try {
+    return JSON.parse(localStorage.getItem("saga_highscores") || "[]")
+      .map(normalizeHighScoreEntry)
+      .filter(Boolean)
+      .sort(compareHighScores)
+      .slice(0, HIGH_SCORE_LIMIT);
+  }
+  catch {
+    return [];
+  }
 }
 function saveHighScore(entry) {
-  const scores = loadHighScores();
-  scores.push(entry);
-  scores.sort((a, b) => b.score - a.score);
-  localStorage.setItem("saga_highscores", JSON.stringify(scores.slice(0, 5)));
+  const scores = [...loadHighScores(), normalizeHighScoreEntry(entry)]
+    .filter(Boolean)
+    .sort(compareHighScores)
+    .slice(0, HIGH_SCORE_LIMIT);
+
+  localStorage.setItem("saga_highscores", JSON.stringify(scores));
 }
 
 function loadProgress() {
@@ -938,7 +982,14 @@ export default function App() {
   // Save high score on game over
   useEffect(() => {
     if (gameOver && score > 0) {
-      saveHighScore({ hero: hero.name, score, combo: maxCombo, date: new Date().toISOString().slice(0, 10) });
+      const completedAt = new Date().toISOString();
+      saveHighScore({
+        hero: hero.name,
+        score,
+        combo: maxCombo,
+        date: completedAt.slice(0, 10),
+        createdAt: completedAt
+      });
       setHighScores(loadHighScores());
       jsonRequest("/api/match/finish", {
         method: "POST",
@@ -1753,12 +1804,13 @@ export default function App() {
         {/* Leaderboard */}
         <div className="panel">
           <div className="panel-title">High Scores</div>
-          <ul className="leaderboard">
+          <ul className="leaderboard" data-testid="high-scores-list">
             {highScores.length === 0 && <li style={{ color: "#8b949e", fontSize: "11px" }}>No scores yet</li>}
             {highScores.map((hs, i) => (
-              <li key={`${i}-${hs.score}`}>
+              <li key={`${hs.hero}-${hs.score}-${hs.combo}-${hs.createdAt}-${i}`} data-testid="high-score-item">
                 <span className="rank">#{i + 1}</span>
                 <span>{hs.hero}</span>
+                <span style={{ color: "#8b949e", fontSize: "11px" }}>Combo {hs.combo} · {hs.date}</span>
                 <span className="lb-score">{hs.score}</span>
               </li>
             ))}

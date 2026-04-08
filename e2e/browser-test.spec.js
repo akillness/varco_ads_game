@@ -141,4 +141,58 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("game-over-overlay")).toHaveCount(0);
     await expect(page.locator(".stat-val.score")).toHaveText("0");
   });
+
+  test("leaderboard sorts tied scores by combo and recency", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        {
+          hero: "3D Modeler",
+          score: 120,
+          combo: 3,
+          date: "2026-04-01",
+          createdAt: "2026-04-01T10:00:00.000Z"
+        },
+        {
+          hero: "Sound Crafter",
+          score: 120,
+          combo: 5,
+          date: "2026-04-02",
+          createdAt: "2026-04-02T10:00:00.000Z"
+        },
+        {
+          hero: "SyncFace Weaver",
+          score: 120,
+          combo: 5,
+          date: "2026-04-03",
+          createdAt: "2026-04-03T10:00:00.000Z"
+        }
+      ]));
+    });
+    await page.reload();
+
+    const rows = page.getByTestId("high-score-item");
+    await expect(rows).toHaveCount(3);
+    await expect(rows.nth(0)).toContainText("#1");
+    await expect(rows.nth(0)).toContainText("SyncFace Weaver");
+    await expect(rows.nth(0)).toContainText("Combo 5 · 2026-04-03");
+    await expect(rows.nth(1)).toContainText("Sound Crafter");
+    await expect(rows.nth(2)).toContainText("3D Modeler");
+  });
+
+  test("leaderboard keeps duplicate legacy rows visible after normalization", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        { hero: "Sound Crafter", score: 88, combo: 2, date: "2026-04-01" },
+        { hero: "Sound Crafter", score: 88, combo: 2, date: "2026-04-01" },
+        { hero: "3D Modeler", score: 70, combo: 1, date: "2026-04-02" }
+      ]));
+    });
+    await page.reload();
+
+    const rows = page.getByTestId("high-score-item");
+    await expect(rows).toHaveCount(3);
+    await expect(rows.nth(0)).toContainText("Sound Crafter");
+    await expect(rows.nth(1)).toContainText("Sound Crafter");
+    await expect(rows.nth(2)).toContainText("3D Modeler");
+  });
 });
