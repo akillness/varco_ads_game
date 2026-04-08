@@ -917,6 +917,78 @@ test.describe("Web UI", () => {
     await expect(page.locator(".stat-val.score")).toHaveText("0");
   });
 
+  test("game over overlay highlights a new #1 leaderboard finish", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        {
+          hero: "3D Modeler",
+          score: 120,
+          combo: 4,
+          date: "2026-04-01",
+          createdAt: "2026-04-01T10:00:00.000Z"
+        },
+        {
+          hero: "Sound Crafter",
+          score: 95,
+          combo: 3,
+          date: "2026-04-02",
+          createdAt: "2026-04-02T10:00:00.000Z"
+        }
+      ]));
+    });
+    await page.reload();
+
+    await page.evaluate(() => {
+      window.__SAGA_DEBUG__.dispatch({
+        type: "DEBUG_PATCH_STATE",
+        patch: {
+          running: true,
+          timer: 1,
+          score: 145,
+          combo: 6,
+          maxCombo: 6,
+          hero: { id: "faceweaver", name: "SyncFace Weaver", hp: 4, speed: 2, desc: "HP 4 / SPD 2" }
+        }
+      });
+      window.__SAGA_DEBUG__.dispatch({ type: "TIMER_TICK" });
+    });
+
+    await expect(page.getByTestId("game-over-placement")).toContainText("New #1 high score");
+    await expect(page.getByTestId("game-over-placement")).toContainText("SyncFace Weaver takes the lead");
+
+    const rows = page.getByTestId("high-score-item");
+    await expect(rows.nth(0)).toContainText("#1");
+    await expect(rows.nth(0)).toContainText("SyncFace Weaver");
+    await expect(rows.nth(0)).toContainText("145");
+  });
+
+  test("game over overlay reports when a run misses the top 5 leaderboard", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        { hero: "3D Modeler", score: 180, combo: 6, date: "2026-04-01", createdAt: "2026-04-01T10:00:00.000Z" },
+        { hero: "Sound Crafter", score: 160, combo: 5, date: "2026-04-02", createdAt: "2026-04-02T10:00:00.000Z" },
+        { hero: "SyncFace Weaver", score: 140, combo: 4, date: "2026-04-03", createdAt: "2026-04-03T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 130, combo: 4, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z" },
+        { hero: "Sound Crafter", score: 120, combo: 3, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z" }
+      ]));
+    });
+    await page.reload();
+
+    await page.evaluate(() => {
+      window.__SAGA_DEBUG__.dispatch({
+        type: "DEBUG_PATCH_STATE",
+        patch: { running: true, timer: 1, score: 90, combo: 2, maxCombo: 2 }
+      });
+      window.__SAGA_DEBUG__.dispatch({ type: "TIMER_TICK" });
+    });
+
+    await expect(page.getByTestId("game-over-placement")).toContainText("Run archived outside the top 5.");
+    const rows = page.getByTestId("high-score-item");
+    await expect(rows).toHaveCount(5);
+    await expect(rows.nth(4)).toContainText("120");
+    await expect(page.getByTestId("high-scores-list")).not.toContainText("90");
+  });
+
   test("leaderboard sorts tied scores by combo and recency", async ({ page }) => {
     await page.evaluate(() => {
       localStorage.setItem("saga_highscores", JSON.stringify([

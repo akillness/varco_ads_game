@@ -462,7 +462,37 @@ main {
 .game-over-score {
   font-size: 20px;
   color: var(--combo);
+  margin-bottom: 12px;
+}
+
+.game-over-placement {
+  max-width: 320px;
   margin-bottom: 16px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(13, 17, 23, 0.82);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.game-over-placement-top {
+  border-color: rgba(255, 176, 31, 0.55);
+  box-shadow: 0 0 18px rgba(255, 176, 31, 0.18);
+  color: var(--combo);
+}
+
+.game-over-placement-qualified {
+  border-color: rgba(88, 166, 255, 0.4);
+  color: var(--orb);
+}
+
+.game-over-placement-archived {
+  border-color: rgba(255, 122, 89, 0.35);
+  color: #ffb4a0;
 }
 
 .game-over-overlay button {

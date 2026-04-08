@@ -479,6 +479,14 @@ function normalizeHighScoreEntry(entry) {
   };
 }
 
+function isSameHighScoreEntry(a, b) {
+  return Boolean(a) && Boolean(b)
+    && a.hero === b.hero
+    && a.score === b.score
+    && a.combo === b.combo
+    && a.createdAt === b.createdAt;
+}
+
 function loadHighScores() {
   try {
     return JSON.parse(localStorage.getItem("saga_highscores") || "[]")
@@ -491,13 +499,54 @@ function loadHighScores() {
     return [];
   }
 }
+
 function saveHighScore(entry) {
-  const scores = [...loadHighScores(), normalizeHighScoreEntry(entry)]
+  const previousScores = loadHighScores();
+  const normalizedEntry = normalizeHighScoreEntry(entry);
+  if (!normalizedEntry) {
+    return {
+      scores: previousScores,
+      placement: null,
+      qualified: false,
+      entry: null
+    };
+  }
+
+  const sortedScores = [...previousScores, normalizedEntry]
     .filter(Boolean)
-    .sort(compareHighScores)
-    .slice(0, HIGH_SCORE_LIMIT);
+    .sort(compareHighScores);
+  const placementIndex = sortedScores.findIndex((scoreEntry) => isSameHighScoreEntry(scoreEntry, normalizedEntry));
+  const qualified = placementIndex !== -1 && placementIndex < HIGH_SCORE_LIMIT;
+  const scores = sortedScores.slice(0, HIGH_SCORE_LIMIT);
 
   localStorage.setItem("saga_highscores", JSON.stringify(scores));
+
+  return {
+    scores,
+    placement: qualified ? placementIndex + 1 : null,
+    qualified,
+    entry: normalizedEntry
+  };
+}
+
+function describeLeaderboardPlacement(result) {
+  if (!result?.entry) return null;
+  if (result.placement === 1) {
+    return {
+      tone: "top",
+      message: `New #1 high score — ${result.entry.hero} takes the lead.`
+    };
+  }
+  if (result.placement) {
+    return {
+      tone: "qualified",
+      message: `High score secured at #${result.placement}.`
+    };
+  }
+  return {
+    tone: "archived",
+    message: `Run archived outside the top ${HIGH_SCORE_LIMIT}.`
+  };
 }
 
 function loadProgress() {
@@ -947,6 +996,7 @@ export default function App() {
   const [betAmount, setBetAmount] = useState(100);
   const [serverLogs, setServerLogs] = useState([]);
   const [highScores, setHighScores] = useState(loadHighScores());
+  const [leaderboardUpdate, setLeaderboardUpdate] = useState(null);
   const [studioBrief, setStudioBrief] = useState("Neon sponsor arena for creator-made hero collectibles");
   const [studioPack, setStudioPack] = useState(null);
   const [studioStatus, setStudioStatus] = useState("idle");
@@ -964,6 +1014,7 @@ export default function App() {
   const studioPackRequestRef = useRef(0);
   const betActionRef = useRef(0);
   const shareActionRef = useRef(0);
+  const gameOverHandledRef = useRef(false);
 
   const {
     hero,
@@ -1032,30 +1083,37 @@ export default function App() {
 
   // Save high score on game over
   useEffect(() => {
-    if (gameOver && score > 0) {
-      const completedAt = new Date().toISOString();
-      saveHighScore({
-        hero: hero.name,
-        score,
-        combo: maxCombo,
-        date: completedAt.slice(0, 10),
-        createdAt: completedAt
-      });
-      setHighScores(loadHighScores());
-      jsonRequest("/api/match/finish", {
-        method: "POST",
-        body: JSON.stringify({
-          winner: score >= 50 ? "player" : "enemy",
-          elapsedSeconds,
-          playerId: hero.id
-        })
-      })
-        .then((json) => {
-          setMatchStatus(json.status || "finished");
-        })
-        .catch(() => null);
+    if (!gameOver) {
+      gameOverHandledRef.current = false;
+      return;
     }
-  }, [gameOver]);
+    if (gameOverHandledRef.current || score <= 0) return;
+
+    gameOverHandledRef.current = true;
+    const completedAt = new Date().toISOString();
+    const highScoreResult = saveHighScore({
+      hero: hero.name,
+      score,
+      combo: maxCombo,
+      date: completedAt.slice(0, 10),
+      createdAt: completedAt
+    });
+    setHighScores(highScoreResult.scores);
+    setLeaderboardUpdate(describeLeaderboardPlacement(highScoreResult));
+
+    jsonRequest("/api/match/finish", {
+      method: "POST",
+      body: JSON.stringify({
+        winner: score >= 50 ? "player" : "enemy",
+        elapsedSeconds,
+        playerId: hero.id
+      })
+    })
+      .then((json) => {
+        setMatchStatus(json.status || "finished");
+      })
+      .catch(() => null);
+  }, [elapsedSeconds, gameOver, hero.id, hero.name, maxCombo, score]);
 
   async function refreshCacheStats() {
     try {
@@ -1583,6 +1641,8 @@ export default function App() {
         elapsedSeconds
       });
     }
+    gameOverHandledRef.current = false;
+    setLeaderboardUpdate(null);
     dispatch({ type: "RESET" });
     setLog([]);
     setMatchStatus("idle");
@@ -1834,6 +1894,14 @@ export default function App() {
           <div className="game-over-overlay" data-testid="game-over-overlay">
             <div className="game-over-title">GAME OVER</div>
             <div className="game-over-score">Score: {score} | Best Combo: {maxCombo}x</div>
+            {leaderboardUpdate && (
+              <div
+                className={`game-over-placement game-over-placement-${leaderboardUpdate.tone}`}
+                data-testid="game-over-placement"
+              >
+                {leaderboardUpdate.message}
+              </div>
+            )}
             <button type="button" onClick={handleReset}>Play Again</button>
           </div>
         )}
