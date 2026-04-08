@@ -92,6 +92,18 @@ test.describe("API contracts", () => {
     expect(secondJson.ok).toBe(true);
     expect(secondJson.result.cache_hit).toBe(true);
   });
+
+  test("POST /api/match/bet rejects invalid bet payloads", async ({ request }) => {
+    const res = await request.post(`${API}/api/match/bet`, {
+      data: { userName: "arena_fan", side: "player", amount: 0 }
+    });
+
+    expect(res.ok()).toBeFalsy();
+    expect(res.status()).toBe(400);
+    const json = await res.json();
+    expect(json.ok).toBe(false);
+    expect(json.message).toContain("amount(number > 0) is required");
+  });
 });
 
 test.describe("Web UI", () => {
@@ -285,6 +297,62 @@ test.describe("Web UI", () => {
     await expect(page.locator(".stat-val.score")).toHaveText("10");
     await page.keyboard.up("ArrowRight");
     await expect(page.getByTestId("director-panel")).toContainText(/Launch Window|Broadcast Rush|Overdrive|Final Push/);
+  });
+
+  test("betting panel confirms accepted bets and clears feedback when the draft changes", async ({ page }) => {
+    await page.route("**/api/match/bet", async (route) => {
+      const payload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          bet: {
+            id: "bet-mock-1",
+            userName: payload.userName,
+            side: payload.side,
+            amount: payload.amount,
+            matchId: "match-mock-1",
+            createdAt: "2026-04-09T07:30:00.000Z"
+          },
+          pools: {
+            player: payload.side === "player" ? payload.amount : 0,
+            enemy: payload.side === "enemy" ? payload.amount : 0
+          },
+          odds: {
+            player: payload.side === "player" ? 1.4 : 2.2,
+            enemy: payload.side === "enemy" ? 1.4 : 2.2
+          }
+        })
+      });
+    });
+
+    await page.getByTestId("bet-name-input").fill(" arena_fan ");
+    await page.getByTestId("bet-side-select").selectOption("enemy");
+    await page.getByTestId("bet-amount-input").fill("150");
+    await page.getByTestId("bet-submit-button").click();
+
+    await expect(page.getByTestId("bet-feedback")).toContainText("arena_fan backed Enemy Win for 150.");
+    await expect(page.getByTestId("bet-submit-button")).toHaveText("Place Bet");
+    await expect(page.locator(".pool-bar-e")).toHaveAttribute("style", /width:\s*100%/);
+
+    await page.getByTestId("bet-amount-input").fill("200");
+    await expect(page.getByTestId("bet-feedback")).toHaveCount(0);
+  });
+
+  test("betting panel blocks empty bettor names before sending the request", async ({ page }) => {
+    let requestCount = 0;
+    await page.route("**/api/match/bet", async (route) => {
+      requestCount += 1;
+      await route.abort();
+    });
+
+    await page.getByTestId("bet-name-input").fill("   ");
+    await page.getByTestId("bet-amount-input").fill("100");
+    await page.getByTestId("bet-submit-button").click();
+
+    await expect(page.getByTestId("bet-feedback")).toContainText("Enter a bettor name before placing a bet.");
+    expect(requestCount).toBe(0);
   });
 
   test("sound editor generates and applies a reusable cue", async ({ page }) => {

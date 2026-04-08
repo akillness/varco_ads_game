@@ -529,6 +529,16 @@ main {
 
 .bet-btn:hover { box-shadow: 0 0 12px var(--brand-glow); }
 
+.bet-btn:disabled {
+  cursor: progress;
+  opacity: 0.72;
+  box-shadow: none;
+}
+
+.bet-feedback {
+  margin-top: 8px;
+}
+
 /* API actions */
 .api-btns {
   display: grid;

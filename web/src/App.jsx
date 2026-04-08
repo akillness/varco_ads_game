@@ -919,6 +919,8 @@ export default function App() {
   const [studioCache, setStudioCache] = useState(null);
   const [selectedMarketingAngle, setSelectedMarketingAngle] = useState(null);
   const [marketingCopyFeedback, setMarketingCopyFeedback] = useState(null);
+  const [betFeedback, setBetFeedback] = useState(null);
+  const [betPending, setBetPending] = useState(false);
   const [shareFeedback, setShareFeedback] = useState(null);
   const [sharePendingChannel, setSharePendingChannel] = useState(null);
   const [editorDrafts, setEditorDrafts] = useState({ sound: {}, asset: {} });
@@ -926,6 +928,7 @@ export default function App() {
   const latestStateRef = useRef(state);
   const marketingCopyActionRef = useRef(0);
   const studioPackRequestRef = useRef(0);
+  const betActionRef = useRef(0);
   const shareActionRef = useRef(0);
 
   const {
@@ -1365,6 +1368,25 @@ export default function App() {
     applyStudioSuggestion(item.lane, item.key, item.prompt);
   }
 
+  function clearBetFeedback() {
+    betActionRef.current += 1;
+    setBetPending(false);
+    setBetFeedback(null);
+  }
+
+  function betSideLabel(side) {
+    return side === "enemy" ? "Enemy Win" : "Player Win";
+  }
+
+  function validateBetDraft(name, amount) {
+    if (!name.trim()) return "Enter a bettor name before placing a bet.";
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      return "Enter a bet amount greater than 0.";
+    }
+    return null;
+  }
+
   async function copyMarketingCopy() {
     if (!selectedMarketingAngle?.copy) return;
 
@@ -1428,15 +1450,36 @@ export default function App() {
   }
 
   async function placeBet() {
+    const userName = betName.trim();
+    const amount = Number(betAmount);
+    const validationMessage = validateBetDraft(userName, amount);
+    if (validationMessage) {
+      setBetFeedback({ tone: "error", message: validationMessage });
+      setLog((prev) => [`Bet blocked: ${validationMessage}`, ...prev].slice(0, 8));
+      return;
+    }
+
+    const actionId = betActionRef.current + 1;
+    betActionRef.current = actionId;
+    setBetPending(true);
+    setBetFeedback({ tone: "pending", message: `Submitting ${betSideLabel(betSide)} for ${amount}.` });
+
     try {
       const json = await jsonRequest("/api/match/bet", {
         method: "POST",
-        body: JSON.stringify({ userName: betName, side: betSide, amount: Number(betAmount) })
+        body: JSON.stringify({ userName, side: betSide, amount })
       });
+      if (betActionRef.current !== actionId) return;
+      setBetName(userName);
+      setBetPending(false);
       setBetPools(json.pools);
       setOdds(json.odds);
-      setLog((prev) => [`Bet: ${betSide} ${betAmount}`, ...prev].slice(0, 8));
+      setBetFeedback({ tone: "ready", message: `${userName} backed ${betSideLabel(betSide)} for ${amount}.` });
+      setLog((prev) => [`Bet: ${betSide} ${amount}`, ...prev].slice(0, 8));
     } catch (error) {
+      if (betActionRef.current !== actionId) return;
+      setBetPending(false);
+      setBetFeedback({ tone: "error", message: error.message || "Bet failed." });
       setLog((prev) => [`Bet failed: ${error.message}`, ...prev].slice(0, 8));
     }
   }
@@ -1748,14 +1791,52 @@ export default function App() {
         <div className="panel">
           <div className="panel-title">Betting</div>
           <div className="bet-inputs">
-            <input value={betName} onChange={(e) => setBetName(e.target.value)} placeholder="user name" />
-            <select value={betSide} onChange={(e) => setBetSide(e.target.value)}>
+            <input
+              data-testid="bet-name-input"
+              value={betName}
+              onChange={(e) => {
+                clearBetFeedback();
+                setBetName(e.target.value);
+              }}
+              placeholder="user name"
+            />
+            <select
+              data-testid="bet-side-select"
+              value={betSide}
+              onChange={(e) => {
+                clearBetFeedback();
+                setBetSide(e.target.value);
+              }}
+            >
               <option value="player">Player Win</option>
               <option value="enemy">Enemy Win</option>
             </select>
-            <input type="number" min="10" step="10" value={betAmount} onChange={(e) => setBetAmount(e.target.value)} />
+            <input
+              data-testid="bet-amount-input"
+              type="number"
+              min="10"
+              step="10"
+              value={betAmount}
+              onChange={(e) => {
+                clearBetFeedback();
+                setBetAmount(e.target.value);
+              }}
+            />
           </div>
-          <button type="button" className="bet-btn" onClick={placeBet}>Place Bet</button>
+          <button
+            type="button"
+            className="bet-btn"
+            data-testid="bet-submit-button"
+            onClick={placeBet}
+            disabled={betPending}
+          >
+            {betPending ? "Placing Bet..." : "Place Bet"}
+          </button>
+          {betFeedback && (
+            <div className={`bet-feedback share-feedback share-feedback-${betFeedback.tone}`} data-testid="bet-feedback">
+              {betFeedback.message}
+            </div>
+          )}
         </div>
 
         <div className="panel promo-director" data-testid="studio-pack-panel">
