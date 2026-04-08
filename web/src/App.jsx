@@ -170,6 +170,34 @@ function missionProgressText(mission) {
   return `${mission.progress}/${mission.target}`;
 }
 
+function formatMatchRef(matchId) {
+  if (!matchId) return "pending sync";
+  return matchId.split("-").pop()?.slice(0, 6) || matchId.slice(0, 6);
+}
+
+function getBettingStatusSnapshot(matchStatus, timer, elapsedSeconds, matchId) {
+  const matchRef = formatMatchRef(matchId);
+  if (matchStatus === "running") {
+    return {
+      chip: "LIVE WINDOW",
+      tone: "live",
+      detail: `Betting open • ${Math.max(timer, 0)}s left in match ${matchRef}.`
+    };
+  }
+  if (matchStatus === "finished") {
+    return {
+      chip: "CLOSED",
+      tone: "closed",
+      detail: `Betting closed • match ${matchRef} ended after ${Math.max(elapsedSeconds, 0)}s.`
+    };
+  }
+  return {
+    chip: "STANDBY",
+    tone: "idle",
+    detail: "Betting opens when the live match is ready."
+  };
+}
+
 function moveEnemy(enemy, player, difficulty) {
   const steps = Math.min(2, 1 + Math.floor(difficulty / 4));
   let current = { ...enemy };
@@ -980,6 +1008,7 @@ export default function App() {
   const activeAbility = HERO_ABILITIES[hero.id];
   const directorPhase = getDirectorPhase(timer);
   const elapsedSeconds = GAME_TIME - timer;
+  const bettingStatus = getBettingStatusSnapshot(matchStatus, timer, elapsedSeconds, currentMatchId);
 
   async function trackEvent(message, meta = {}) {
     try {
@@ -1857,12 +1886,11 @@ export default function App() {
           >
             {betPending ? "Placing Bet..." : "Place Bet"}
           </button>
-          <div className="bet-status-note" data-testid="bet-status-note">
-            {matchStatus === "running"
-              ? "Betting open for the current live match."
-              : matchStatus === "finished"
-                ? "Betting closed — reset to start the next live match."
-                : "Betting opens when the live match is ready."}
+          <div className="bet-status-strip" data-testid="bet-status-strip">
+            <span className={`bet-status-chip bet-status-chip-${bettingStatus.tone}`} data-testid="bet-status-chip">
+              {bettingStatus.chip}
+            </span>
+            <span className="bet-status-note" data-testid="bet-status-note">{bettingStatus.detail}</span>
           </div>
           {betFeedback && (
             <div className={`bet-feedback share-feedback share-feedback-${betFeedback.tone}`} data-testid="bet-feedback">

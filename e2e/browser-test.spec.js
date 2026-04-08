@@ -363,6 +363,21 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("bet-feedback")).toHaveCount(0);
   });
 
+  test("betting panel shows a live countdown badge for the current wager window", async ({ page }) => {
+    await expect(page.getByTestId("bet-status-chip")).toHaveText("LIVE WINDOW");
+    await expect(page.getByTestId("bet-status-note")).toContainText("Betting open");
+    await expect(page.getByTestId("bet-status-note")).toContainText("60s left in match");
+
+    await page.evaluate(() => {
+      window.__SAGA_DEBUG__.dispatch({
+        type: "DEBUG_PATCH_STATE",
+        patch: { running: true, timer: 12, score: 18, combo: 2, maxCombo: 2 }
+      });
+    });
+
+    await expect(page.getByTestId("bet-status-note")).toContainText("12s left in match");
+  });
+
   test("betting panel blocks empty bettor names before sending the request", async ({ page }) => {
     let requestCount = 0;
     await page.route("**/api/match/bet", async (route) => {
@@ -389,7 +404,9 @@ test.describe("Web UI", () => {
     });
 
     await expect(page.getByTestId("game-over-overlay")).toBeVisible();
+    await expect(page.getByTestId("bet-status-chip")).toHaveText("CLOSED");
     await expect(page.getByTestId("bet-status-note")).toContainText("Betting closed");
+    await expect(page.getByTestId("bet-status-note")).toContainText("ended after 60s");
 
     await page.getByTestId("bet-submit-button").click();
     await expect(page.getByTestId("bet-feedback")).toContainText("Betting is closed until the next match starts.");
@@ -417,6 +434,7 @@ test.describe("Web UI", () => {
     await page.getByTestId("bet-submit-button").click();
 
     await expect(page.getByTestId("bet-feedback")).toContainText("betting is closed while match status is finished");
+    await expect(page.getByTestId("bet-status-chip")).toHaveText("CLOSED");
     await expect(page.getByTestId("bet-status-note")).toContainText("Betting closed");
     await expect(page.getByTestId("bet-name-input")).toHaveValue("arena_fan");
     await expect(page.getByTestId("bet-amount-input")).toHaveValue("120");
