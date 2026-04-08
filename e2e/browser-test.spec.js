@@ -182,6 +182,42 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("asset-generation-result")).toBeVisible();
   });
 
+  test("asset editor preserves request id when requestId-based poll requests fail", async ({ page }) => {
+    await page.route("**/api/varco/image-to-3d", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          result: {
+            requestId: "mock-request-fail",
+            accepted: true,
+            message: "mock accepted"
+          }
+        })
+      });
+    });
+
+    await page.route("**/api/varco/image-to-3d/result/mock-request-fail", async (route) => {
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: false,
+          message: "Upstream render timed out"
+        })
+      });
+    });
+
+    await page.getByRole("button", { name: /에셋/ }).click();
+    await page.locator(".asset-editor .regenerate-btn").click();
+
+    const status = page.getByTestId("asset-conversion-status");
+    await expect(status).toContainText("Conversion failed");
+    await expect(status).toContainText("Upstream render timed out");
+    await expect(status).toContainText("mock-request-fail");
+    await expect(page.getByTestId("asset-generation-result")).toHaveCount(0);
+  });
+
   test("debug bridge can drive game over and reset deterministically", async ({ page }) => {
     await page.evaluate(() => {
       window.__SAGA_DEBUG__.dispatch({

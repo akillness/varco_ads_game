@@ -37,6 +37,12 @@ function wait(ms) {
   return new Promise(resolve => window.setTimeout(resolve, ms));
 }
 
+function createConversionError(message, details = {}) {
+  const error = new Error(message);
+  Object.assign(error, details);
+  return error;
+}
+
 async function pollForResult(requestId, onStatusChange) {
   for (let attempt = 1; attempt <= RESULT_POLL_ATTEMPTS; attempt += 1) {
     onStatusChange({
@@ -48,6 +54,14 @@ async function pollForResult(requestId, onStatusChange) {
 
     const resultRes = await fetch(`/api/varco/image-to-3d/result/${requestId}`);
     const resultJson = await resultRes.json();
+
+    if (!resultRes.ok || resultJson?.ok === false) {
+      throw createConversionError(
+        resultJson?.message || `3D conversion request failed (${resultRes.status})`,
+        { requestId, status: 'error' }
+      );
+    }
+
     const result = resultJson.result || resultJson;
     const modelUrl = getModelUrl(result);
     const status = typeof result?.status === 'string' ? result.status.toLowerCase() : '';
@@ -57,7 +71,10 @@ async function pollForResult(requestId, onStatusChange) {
     }
 
     if (["failed", "error", "cancelled"].includes(status)) {
-      throw new Error(`3D conversion ${status}`);
+      throw createConversionError(
+        result?.message || `3D conversion ${status}`,
+        { requestId, status }
+      );
     }
 
     if (attempt < RESULT_POLL_ATTEMPTS) {
@@ -65,7 +82,10 @@ async function pollForResult(requestId, onStatusChange) {
     }
   }
 
-  throw new Error('3D preview is still processing. Try the conversion again in a moment.');
+  throw createConversionError(
+    '3D preview is still processing. Try the conversion again in a moment.',
+    { requestId, status: 'processing' }
+  );
 }
 
 export default function AssetEditor({
@@ -142,10 +162,12 @@ export default function AssetEditor({
       } : null);
     } catch (e) {
       console.error('3D conversion failed:', e);
+      const errorDetail = e instanceof Error ? e.message : 'Unknown conversion error';
       setConversionStatus({
         tone: 'error',
-        label: 'Conversion stalled',
-        detail: e instanceof Error ? e.message : 'Unknown conversion error'
+        label: e?.status && e.status !== 'processing' ? 'Conversion failed' : 'Conversion stalled',
+        detail: errorDetail,
+        requestId: e?.requestId || null
       });
     } finally {
       setIsConverting(false);
