@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const SOUND_TYPES = [
   { id: 'bgm', label: 'BGM', prompt: 'ambient game background music' },
@@ -21,29 +21,50 @@ export default function SoundEditor({
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [latestResult, setLatestResult] = useState(null); // { audioUrl, latencyMs, id }
+  const generationTokenRef = useRef(0);
 
   const currentType = SOUND_TYPES.find(t => t.id === activeTab);
   const typeHistory = editHistory.filter(e => e.type === 'sound' && e.subType === activeTab);
   const appliedEntry = [...typeHistory].reverse().find(e => e.appliedAt);
 
+  function resetTransientState({ cancelInFlight = false } = {}) {
+    if (cancelInFlight) {
+      generationTokenRef.current += 1;
+      setIsGenerating(false);
+    }
+    setLatestResult(null);
+  }
+
   useEffect(() => {
     if (selectedKey && selectedKey !== activeTab) {
       setActiveTab(selectedKey);
       setPrompt(draftPrompts?.[selectedKey] || '');
-      setLatestResult(null);
+      resetTransientState({ cancelInFlight: true });
     }
   }, [activeTab, draftPrompts, selectedKey]);
 
   const displayPrompt = prompt || draftPrompts?.[activeTab] || appliedEntry?.prompt || currentType?.prompt || '';
 
   async function handleRegenerate() {
+    const generationToken = generationTokenRef.current + 1;
+    generationTokenRef.current = generationToken;
     setIsGenerating(true);
+    setLatestResult(null);
+
     const start = Date.now();
+    const activeTabAtStart = activeTab;
+    const promptAtStart = displayPrompt;
+    const isActiveGeneration = () => generationTokenRef.current === generationToken;
+    const applyIfActive = (callback) => {
+      if (!isActiveGeneration()) return;
+      callback();
+    };
+
     try {
       const res = await fetch('/api/varco/text2sound', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: displayPrompt, version: 'v1', num_sample: 1 }),
+        body: JSON.stringify({ prompt: promptAtStart, version: 'v1', num_sample: 1 }),
       });
       const data = await res.json();
       const latencyMs = Date.now() - start;
@@ -51,12 +72,16 @@ export default function SoundEditor({
       const id = data.result?.version_id || data.version_id || Date.now().toString();
       const cacheHit = Boolean(data.result?.cache_hit || data.cache_hit);
 
-      dispatch({ type: 'EDIT_GENERATE', editType: 'sound', subType: activeTab, prompt: displayPrompt, result: { audioUrl }, latencyMs, cacheHit });
-      setLatestResult({ audioUrl, latencyMs, id, cacheHit });
+      applyIfActive(() => {
+        dispatch({ type: 'EDIT_GENERATE', editType: 'sound', subType: activeTabAtStart, prompt: promptAtStart, result: { audioUrl }, latencyMs, cacheHit });
+        setLatestResult({ audioUrl, latencyMs, id, cacheHit });
+      });
     } catch (e) {
-      console.error('Sound generation failed:', e);
+      if (isActiveGeneration()) {
+        console.error('Sound generation failed:', e);
+      }
     } finally {
-      setIsGenerating(false);
+      applyIfActive(() => setIsGenerating(false));
     }
   }
 
@@ -76,7 +101,7 @@ export default function SoundEditor({
             onClick={() => {
               setActiveTab(t.id);
               setPrompt(draftPrompts?.[t.id] || '');
-              setLatestResult(null);
+              resetTransientState({ cancelInFlight: true });
               onSelectKey(t.id);
             }}
           >

@@ -202,6 +202,52 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("sound-version-history")).toContainText("적용됨");
   });
 
+  test("sound editor ignores stale success after switching tabs mid-generation", async ({ page }) => {
+    let releaseGeneration;
+    const generationRelease = new Promise((resolve) => {
+      releaseGeneration = resolve;
+    });
+
+    await page.route("**/api/varco/text2sound", async (route) => {
+      await generationRelease;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          result: {
+            version_id: "mock-sound-stale-success",
+            data: [
+              {
+                audio: "https://cdn.example.com/mock-sound-stale-success.mp3"
+              }
+            ]
+          }
+        })
+      });
+    });
+
+    await page.locator(".sound-editor .prompt-input").fill("slow-burn sponsor anthem");
+    await page.locator(".sound-editor .regenerate-btn").click();
+    await expect(page.locator(".sound-editor .regenerate-btn")).toHaveText("⏳ Generating...");
+
+    await page.getByTestId("sound-tab-win").click();
+    await expect(page.getByTestId("sound-tab-win")).toHaveClass(/active/);
+    await expect(page.locator(".sound-editor .regenerate-btn")).toHaveText("▶ 재생성");
+    await expect(page.getByTestId("sound-generation-result")).toHaveCount(0);
+
+    releaseGeneration();
+    await page.waitForTimeout(100);
+
+    await expect(page.getByTestId("sound-generation-result")).toHaveCount(0);
+    await expect(page.getByTestId("sound-version-history")).toHaveCount(0);
+
+    await page.getByTestId("sound-tab-bgm").click();
+    await expect(page.getByTestId("sound-tab-bgm")).toHaveClass(/active/);
+    await expect(page.getByTestId("sound-generation-result")).toHaveCount(0);
+    await expect(page.getByTestId("sound-version-history")).toHaveCount(0);
+  });
+
   test("asset editor converts and applies a 3D variant", async ({ page }) => {
     await page.getByRole("button", { name: /에셋/ }).click();
 
