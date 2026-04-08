@@ -33,6 +33,10 @@ function getModelUrl(payload) {
   return payload?.data?.[0]?.model_url || payload?.model_url || '';
 }
 
+function getRequestId(payload) {
+  return payload?.requestId || payload?.data?.requestId || null;
+}
+
 function wait(ms) {
   return new Promise(resolve => window.setTimeout(resolve, ms));
 }
@@ -151,7 +155,14 @@ export default function AssetEditor({
       });
       const data = await res.json();
       let result = data.result || data;
-      const requestId = result?.requestId || data.requestId || null;
+      const requestId = getRequestId(result) || getRequestId(data);
+
+      if (!res.ok || data?.ok === false) {
+        throw createConversionError(
+          data?.message || `3D conversion failed (${res.status})`,
+          { requestId, status: 'error' }
+        );
+      }
 
       if (!getModelUrl(result) && requestId) {
         applyIfActive(() => {

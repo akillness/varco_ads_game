@@ -423,6 +423,39 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("asset-generation-result")).toHaveCount(0);
   });
 
+  test("asset editor surfaces initial proxy failures without polling and preserves nested request ids", async ({ page }) => {
+    let pollTriggered = false;
+
+    await page.route("**/api/varco/image-to-3d", async (route) => {
+      await route.fulfill({
+        status: 502,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: false,
+          message: "Upstream image-to-3d render timed out",
+          data: {
+            requestId: "mock-request-initial-fail"
+          }
+        })
+      });
+    });
+
+    await page.route("**/api/varco/image-to-3d/result/**", async (route) => {
+      pollTriggered = true;
+      await route.abort();
+    });
+
+    await page.getByRole("button", { name: /에셋/ }).click();
+    await page.locator(".asset-editor .regenerate-btn").click();
+
+    const status = page.getByTestId("asset-conversion-status");
+    await expect(status).toContainText("Conversion failed");
+    await expect(status).toContainText("Upstream image-to-3d render timed out");
+    await expect(status).toContainText("mock-request-initial-fail");
+    await expect(page.getByTestId("asset-generation-result")).toHaveCount(0);
+    expect(pollTriggered).toBe(false);
+  });
+
   test("asset editor ignores stale success after switching asset cards mid-conversion", async ({ page }) => {
     let releasePoll;
     const pollRelease = new Promise((resolve) => {
