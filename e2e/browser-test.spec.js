@@ -650,6 +650,103 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("asset-generation-result")).toHaveCount(0);
   });
 
+  test("share panel keeps the newest share action and ignores stale completions", async ({ page }) => {
+    await page.evaluate(() => {
+      window.__openedUrls = [];
+      window.open = (url) => {
+        window.__openedUrls.push(url);
+        return null;
+      };
+    });
+
+    let releaseFirstShare;
+    const firstSharePending = new Promise((resolve) => {
+      releaseFirstShare = resolve;
+    });
+    let shareRequestCount = 0;
+
+    await page.route("**/api/share/sns", async (route) => {
+      shareRequestCount += 1;
+      if (shareRequestCount === 1) {
+        await firstSharePending;
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            ok: true,
+            links: {
+              x: "https://share.example/x-first",
+              facebook: "https://share.example/facebook-first",
+              telegram: "https://share.example/telegram-first"
+            }
+          })
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          links: {
+            x: "https://share.example/x-second",
+            facebook: "https://share.example/facebook-second",
+            telegram: "https://share.example/telegram-second"
+          }
+        })
+      });
+    });
+
+    const shareButtonX = page.getByTestId("share-button-x");
+    const shareButtonTelegram = page.getByTestId("share-button-telegram");
+
+    await shareButtonX.click();
+    await expect(shareButtonX).toHaveText("Sharing X...");
+    await expect(page.getByTestId("share-feedback")).toContainText("Preparing X share link...");
+
+    await shareButtonTelegram.click();
+    await expect(shareButtonTelegram).toHaveText("Shared Telegram");
+    await expect(page.getByTestId("share-feedback")).toContainText("Opened Telegram share link.");
+    await expect(page.getByTestId("share-button-x")).toHaveText("Share X");
+
+    let openedUrls = await page.evaluate(() => window.__openedUrls.slice());
+    expect(openedUrls).toEqual(["https://share.example/telegram-second"]);
+
+    releaseFirstShare();
+    await page.waitForTimeout(50);
+
+    await expect(page.getByTestId("share-feedback")).toContainText("Opened Telegram share link.");
+    openedUrls = await page.evaluate(() => window.__openedUrls.slice());
+    expect(openedUrls).toEqual(["https://share.example/telegram-second"]);
+  });
+
+  test("share panel surfaces backend failures without opening a share window", async ({ page }) => {
+    await page.evaluate(() => {
+      window.__openedUrls = [];
+      window.open = (url) => {
+        window.__openedUrls.push(url);
+        return null;
+      };
+    });
+
+    await page.route("**/api/share/sns", async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: false, message: "share backend unavailable" })
+      });
+    });
+
+    const shareButtonFacebook = page.getByTestId("share-button-facebook");
+    await shareButtonFacebook.click();
+
+    await expect(page.getByTestId("share-feedback")).toContainText("share backend unavailable");
+    await expect(shareButtonFacebook).toHaveText("Share Facebook");
+    const openedUrls = await page.evaluate(() => window.__openedUrls.slice());
+    expect(openedUrls).toEqual([]);
+  });
+
   test("debug bridge can drive game over and reset deterministically", async ({ page }) => {
     await page.evaluate(() => {
       window.__SAGA_DEBUG__.dispatch({

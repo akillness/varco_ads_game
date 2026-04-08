@@ -54,6 +54,12 @@ const HERO_ABILITIES = {
   }
 };
 
+const SHARE_CHANNEL_LABELS = {
+  x: "X",
+  facebook: "Facebook",
+  telegram: "Telegram"
+};
+
 const MISSION_TEMPLATES = [
   {
     kind: "collect",
@@ -913,11 +919,14 @@ export default function App() {
   const [studioCache, setStudioCache] = useState(null);
   const [selectedMarketingAngle, setSelectedMarketingAngle] = useState(null);
   const [marketingCopyFeedback, setMarketingCopyFeedback] = useState(null);
+  const [shareFeedback, setShareFeedback] = useState(null);
+  const [sharePendingChannel, setSharePendingChannel] = useState(null);
   const [editorDrafts, setEditorDrafts] = useState({ sound: {}, asset: {} });
   const [editorSelection, setEditorSelection] = useState({ sound: "bgm", asset: "orb" });
   const latestStateRef = useRef(state);
   const marketingCopyActionRef = useRef(0);
   const studioPackRequestRef = useRef(0);
+  const shareActionRef = useRef(0);
 
   const {
     hero,
@@ -1339,6 +1348,13 @@ export default function App() {
     clearMarketingCopyFeedback();
   }
 
+  function shareButtonLabel(channel) {
+    const label = SHARE_CHANNEL_LABELS[channel] || channel;
+    if (sharePendingChannel === channel) return `Sharing ${label}...`;
+    if (shareFeedback?.tone === "ready" && shareFeedback.channel === channel) return `Shared ${label}`;
+    return `Share ${label}`;
+  }
+
   function loadQueueItem(item) {
     if (item.lane === "social") {
       const angle = studioPack?.marketingAngles?.find((entry) => entry.channel === item.key) || null;
@@ -1426,6 +1442,12 @@ export default function App() {
   }
 
   async function shareResult(channel) {
+    const actionId = shareActionRef.current + 1;
+    shareActionRef.current = actionId;
+    const channelLabel = SHARE_CHANNEL_LABELS[channel] || channel;
+    setSharePendingChannel(channel);
+    setShareFeedback({ tone: "pending", channel, message: `Preparing ${channelLabel} share link...` });
+
     try {
       const winner = score >= 50 ? "player" : "enemy";
       const json = await jsonRequest("/api/share/sns", {
@@ -1439,9 +1461,21 @@ export default function App() {
           soundVariant: editHistory.findLast?.((entry) => entry.type === "sound" && entry.appliedAt)?.prompt || null
         })
       });
-      window.open(json.links[channel], "_blank", "noopener,noreferrer");
+      if (shareActionRef.current !== actionId) return;
+
+      const shareUrl = json.links?.[channel];
+      if (!shareUrl) {
+        throw new Error(`${channelLabel} share link unavailable.`);
+      }
+
+      window.open(shareUrl, "_blank", "noopener,noreferrer");
+      setSharePendingChannel(null);
+      setShareFeedback({ tone: "ready", channel, message: `Opened ${channelLabel} share link.` });
       setLog((prev) => [`Shared: ${channel}`, ...prev].slice(0, 8));
     } catch (error) {
+      if (shareActionRef.current !== actionId) return;
+      setSharePendingChannel(null);
+      setShareFeedback({ tone: "error", channel, message: error.message || `${channelLabel} share failed.` });
       setLog((prev) => [`Share failed: ${error.message}`, ...prev].slice(0, 8));
     }
   }
@@ -1860,10 +1894,15 @@ export default function App() {
         <div className="panel">
           <div className="panel-title">Share</div>
           <div className="share-btns">
-            <button type="button" className="share-btn" onClick={() => shareResult("x")}>X</button>
-            <button type="button" className="share-btn" onClick={() => shareResult("facebook")}>FB</button>
-            <button type="button" className="share-btn" onClick={() => shareResult("telegram")}>TG</button>
+            <button type="button" className="share-btn" data-testid="share-button-x" onClick={() => shareResult("x")}>{shareButtonLabel("x")}</button>
+            <button type="button" className="share-btn" data-testid="share-button-facebook" onClick={() => shareResult("facebook")}>{shareButtonLabel("facebook")}</button>
+            <button type="button" className="share-btn" data-testid="share-button-telegram" onClick={() => shareResult("telegram")}>{shareButtonLabel("telegram")}</button>
           </div>
+          {shareFeedback && (
+            <div className={`share-feedback share-feedback-${shareFeedback.tone}`} data-testid="share-feedback">
+              {shareFeedback.message}
+            </div>
+          )}
         </div>
 
         {/* Achievements */}

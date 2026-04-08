@@ -581,6 +581,10 @@ main {
 
 .share-btn:hover { border-color: var(--orb); }
 
+.share-feedback {
+  margin-top: 8px;
+}
+
 /* Achievements */
 .achievement-list {
   display: flex;
@@ -1296,7 +1300,8 @@ main {
   color: #c9d1d9;
 }
 
-.studio-copy-feedback {
+.studio-copy-feedback,
+.share-feedback {
   font-size: 10px;
   line-height: 1.4;
   padding: 6px 8px;
@@ -1305,16 +1310,24 @@ main {
   background: rgba(255, 255, 255, 0.04);
 }
 
-.studio-copy-feedback-ready {
+.studio-copy-feedback-ready,
+.share-feedback-ready {
   border-color: rgba(63, 185, 160, 0.35);
   background: rgba(63, 185, 160, 0.14);
   color: #d2f5eb;
 }
 
-.studio-copy-feedback-error {
+.studio-copy-feedback-error,
+.share-feedback-error {
   border-color: rgba(240, 136, 62, 0.35);
   background: rgba(240, 136, 62, 0.14);
   color: #ffd7bd;
+}
+
+.share-feedback-pending {
+  border-color: rgba(88, 166, 255, 0.35);
+  background: rgba(88, 166, 255, 0.14);
+  color: #d8ecff;
 }
 
 .studio-suggestion-group {
