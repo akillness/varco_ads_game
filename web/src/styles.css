@@ -539,6 +539,13 @@ main {
   margin-top: 8px;
 }
 
+.bet-status-note {
+  margin-top: 8px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: #8b949e;
+}
+
 /* API actions */
 .api-btns {
   display: grid;

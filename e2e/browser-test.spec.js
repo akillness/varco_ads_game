@@ -104,6 +104,29 @@ test.describe("API contracts", () => {
     expect(json.ok).toBe(false);
     expect(json.message).toContain("amount(number > 0) is required");
   });
+
+  test("POST /api/match/bet rejects bets after the match has finished", async ({ request }) => {
+    const start = await request.post(`${API}/api/match/start`);
+    expect(start.ok()).toBeTruthy();
+    const startJson = await start.json();
+
+    const finish = await request.post(`${API}/api/match/finish`, {
+      data: { winner: "player", elapsedSeconds: 60, playerId: "sounder" }
+    });
+    expect(finish.ok()).toBeTruthy();
+
+    const res = await request.post(`${API}/api/match/bet`, {
+      data: { userName: "arena_fan", side: "player", amount: 100 }
+    });
+
+    expect(res.ok()).toBeFalsy();
+    expect(res.status()).toBe(409);
+    const json = await res.json();
+    expect(json.ok).toBe(false);
+    expect(json.message).toContain("betting is closed");
+    expect(json.data.status).toBe("finished");
+    expect(json.data.matchId).toBe(startJson.matchId);
+  });
 });
 
 test.describe("Web UI", () => {
@@ -353,6 +376,50 @@ test.describe("Web UI", () => {
 
     await expect(page.getByTestId("bet-feedback")).toContainText("Enter a bettor name before placing a bet.");
     expect(requestCount).toBe(0);
+  });
+
+  test("betting panel shows closed-match guidance after the run ends", async ({ page }) => {
+    await page.getByRole("button", { name: "Start" }).click();
+    await page.evaluate(() => {
+      window.__SAGA_DEBUG__.dispatch({
+        type: "DEBUG_PATCH_STATE",
+        patch: { running: true, timer: 1, score: 40, combo: 2, maxCombo: 2 }
+      });
+      window.__SAGA_DEBUG__.dispatch({ type: "TIMER_TICK" });
+    });
+
+    await expect(page.getByTestId("game-over-overlay")).toBeVisible();
+    await expect(page.getByTestId("bet-status-note")).toContainText("Betting closed");
+
+    await page.getByTestId("bet-submit-button").click();
+    await expect(page.getByTestId("bet-feedback")).toContainText("Betting is closed until the next match starts.");
+  });
+
+  test("betting panel surfaces server-side match closures without clearing the draft", async ({ page }) => {
+    await page.route("**/api/match/bet", async (route) => {
+      await route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: false,
+          message: "betting is closed while match status is finished",
+          data: {
+            status: "finished",
+            matchId: "match-closed-1"
+          }
+        })
+      });
+    });
+
+    await page.getByTestId("bet-name-input").fill("arena_fan");
+    await page.getByTestId("bet-side-select").selectOption("enemy");
+    await page.getByTestId("bet-amount-input").fill("120");
+    await page.getByTestId("bet-submit-button").click();
+
+    await expect(page.getByTestId("bet-feedback")).toContainText("betting is closed while match status is finished");
+    await expect(page.getByTestId("bet-status-note")).toContainText("Betting closed");
+    await expect(page.getByTestId("bet-name-input")).toHaveValue("arena_fan");
+    await expect(page.getByTestId("bet-amount-input")).toHaveValue("120");
   });
 
   test("sound editor generates and applies a reusable cue", async ({ page }) => {

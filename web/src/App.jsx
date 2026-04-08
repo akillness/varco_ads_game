@@ -895,7 +895,12 @@ async function jsonRequest(path, options = {}) {
     ...options
   });
   const json = await res.json();
-  if (!res.ok) throw new Error(json.message || "request failed");
+  if (!res.ok) {
+    const error = new Error(json.message || "request failed");
+    error.status = res.status;
+    error.data = json.data;
+    throw error;
+  }
   return json;
 }
 
@@ -904,6 +909,7 @@ export default function App() {
   const keysRef = useRef({});
   const [log, setLog] = useState([]);
   const [currentMatchId, setCurrentMatchId] = useState(null);
+  const [matchStatus, setMatchStatus] = useState("idle");
   const [spectators, setSpectators] = useState(0);
   const [odds, setOdds] = useState({ player: 1.9, enemy: 1.9 });
   const [betPools, setBetPools] = useState({ player: 0, enemy: 0 });
@@ -1014,7 +1020,11 @@ export default function App() {
           elapsedSeconds,
           playerId: hero.id
         })
-      }).catch(() => null);
+      })
+        .then((json) => {
+          setMatchStatus(json.status || "finished");
+        })
+        .catch(() => null);
     }
   }, [gameOver]);
 
@@ -1073,6 +1083,7 @@ export default function App() {
     jsonRequest("/api/match/start", { method: "POST" })
       .then((json) => {
         setCurrentMatchId(json.matchId);
+        setMatchStatus(json.status || "running");
         return trackEvent("match_started", {
           matchId: json.matchId,
           playerId: hero.id,
@@ -1088,6 +1099,7 @@ export default function App() {
           jsonRequest("/api/agent/logs")
         ]);
         setCurrentMatchId(match.match.matchId);
+        setMatchStatus(match.match.status);
         setSpectators(match.match.spectators);
         setOdds(match.match.odds);
         setBetPools(match.match.pools);
@@ -1382,7 +1394,12 @@ export default function App() {
     if (!name.trim()) return "Enter a bettor name before placing a bet.";
     const numericAmount = Number(amount);
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-      return "Enter a bet amount greater than 0.";
+      return "Enter a bet amount greater than zero.";
+    }
+    if (matchStatus !== "running") {
+      return matchStatus === "finished"
+        ? "Betting is closed until the next match starts."
+        : "Betting will open when the live match starts.";
     }
     return null;
   }
@@ -1479,6 +1496,12 @@ export default function App() {
     } catch (error) {
       if (betActionRef.current !== actionId) return;
       setBetPending(false);
+      if (error?.data?.status) {
+        setMatchStatus(error.data.status);
+      }
+      if (error?.data?.matchId) {
+        setCurrentMatchId(error.data.matchId);
+      }
       setBetFeedback({ tone: "error", message: error.message || "Bet failed." });
       setLog((prev) => [`Bet failed: ${error.message}`, ...prev].slice(0, 8));
     }
@@ -1533,9 +1556,11 @@ export default function App() {
     }
     dispatch({ type: "RESET" });
     setLog([]);
+    setMatchStatus("idle");
     jsonRequest("/api/match/start", { method: "POST" })
       .then((json) => {
         setCurrentMatchId(json.matchId);
+        setMatchStatus(json.status || "running");
         return trackEvent("match_started", {
           matchId: json.matchId,
           playerId: hero.id,
@@ -1832,6 +1857,13 @@ export default function App() {
           >
             {betPending ? "Placing Bet..." : "Place Bet"}
           </button>
+          <div className="bet-status-note" data-testid="bet-status-note">
+            {matchStatus === "running"
+              ? "Betting open for the current live match."
+              : matchStatus === "finished"
+                ? "Betting closed — reset to start the next live match."
+                : "Betting opens when the live match is ready."}
+          </div>
           {betFeedback && (
             <div className={`bet-feedback share-feedback share-feedback-${betFeedback.tone}`} data-testid="bet-feedback">
               {betFeedback.message}
