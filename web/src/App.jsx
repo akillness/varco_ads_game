@@ -1327,6 +1327,13 @@ export default function App() {
     clearMarketingCopyFeedback();
   }
 
+  function marketingCopyButtonLabel() {
+    const angleLabel = selectedMarketingAngle?.label || "launch";
+    return marketingCopyFeedback?.tone === "ready"
+      ? `Copied ${angleLabel} copy`
+      : `Copy ${angleLabel} copy`;
+  }
+
   function selectMarketingAngle(angle) {
     setSelectedMarketingAngle(angle);
     clearMarketingCopyFeedback();
@@ -1798,7 +1805,7 @@ export default function App() {
                   <p>{selectedMarketingAngle.copy}</p>
                   <span>{selectedMarketingAngle.cta}</span>
                   <button type="button" className="share-btn" data-testid="studio-copy-button" onClick={copyMarketingCopy}>
-                    {marketingCopyFeedback?.tone === "ready" ? "Copied launch copy" : "Copy launch copy"}
+                    {marketingCopyButtonLabel()}
                   </button>
                   {marketingCopyFeedback && (
                     <div

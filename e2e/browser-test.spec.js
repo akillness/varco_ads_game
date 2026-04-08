@@ -212,16 +212,16 @@ test.describe("Web UI", () => {
     await studioPanel.getByRole("button", { name: "Instagram Reel", exact: true }).click();
     await expect(copyCard).toContainText("Instagram Reel");
     await expect(page.getByTestId("studio-copy-feedback")).toHaveCount(0);
-    await expect(copyButton).toHaveText("Copy launch copy");
+    await expect(copyButton).toHaveText("Copy Instagram Reel copy");
 
     await page.evaluate(() => window.__resolveClipboardWrite());
     await page.waitForTimeout(50);
     await expect(page.getByTestId("studio-copy-feedback")).toHaveCount(0);
-    await expect(copyButton).toHaveText("Copy launch copy");
+    await expect(copyButton).toHaveText("Copy Instagram Reel copy");
 
     await copyButton.click();
     await page.evaluate(() => window.__resolveClipboardWrite());
-    await expect(copyButton).toHaveText("Copied launch copy");
+    await expect(copyButton).toHaveText("Copied Instagram Reel copy");
     await expect(page.getByTestId("studio-copy-feedback")).toContainText(/instagram reel copy copied\./i);
   });
 
@@ -259,7 +259,7 @@ test.describe("Web UI", () => {
     await page.evaluate(() => window.__resolveClipboardWrite());
     await page.waitForTimeout(50);
     await expect(page.getByTestId("studio-copy-feedback")).toHaveCount(0);
-    await expect(page.getByTestId("studio-copy-button")).toHaveText("Copy launch copy");
+    await expect(page.getByTestId("studio-copy-button")).toHaveText("Copy X copy");
   });
 
   test("real input can collect a core after director setup", async ({ page }) => {
