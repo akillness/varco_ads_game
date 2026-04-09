@@ -929,9 +929,14 @@ test.describe("Web UI", () => {
     });
     await page.reload();
 
+    const leaderboardRecap = page.getByTestId("leaderboard-recap");
     await expect(page.getByTestId("leaderboard-recap-chip")).toHaveText("TOP TARGET");
     await expect(page.getByTestId("leaderboard-recap-detail")).toContainText("Beat 145 pts from SyncFace Weaver");
     await expect(page.getByTestId("leaderboard-recap-detail")).toContainText("120 pts currently enters the top 5");
+    await expect(leaderboardRecap).toHaveAttribute("tabindex", "0");
+    await expect(leaderboardRecap).toHaveAttribute("aria-label", "TOP TARGET. Beat 145 pts from SyncFace Weaver. 120 pts currently enters the top 5.");
+    await leaderboardRecap.focus();
+    await expect(leaderboardRecap).toBeFocused();
     await expect(page.getByTestId("leaderboard-season-detail")).toContainText("SyncFace Weaver leads the season with 145 pts and a 6x benchmark combo.");
     await expect(page.getByTestId("leaderboard-rival-detail")).toContainText("3D Modeler currently defends the final slot at 120 pts / 3x combo.");
 

@@ -1041,6 +1041,7 @@ main {
 }
 
 .leaderboard-archive-filter:focus-visible,
+.leaderboard-recap:focus-visible,
 .leaderboard-summary-card:focus-visible,
 .leaderboard-control-momentum:focus-visible,
 .leaderboard-control-card:focus-visible,

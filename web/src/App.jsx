@@ -3196,7 +3196,13 @@ export default function App() {
         {/* Leaderboard */}
         <div className="panel">
           <div className="panel-title">High Scores</div>
-          <div className={`leaderboard-recap leaderboard-recap-${leaderboardRecap.tone}`} data-testid="leaderboard-recap">
+          <div
+            className={`leaderboard-recap leaderboard-recap-${leaderboardRecap.tone}`}
+            data-testid="leaderboard-recap"
+            tabIndex={0}
+            aria-label={getArchiveSummaryAriaLabel(leaderboardRecap.chip, leaderboardRecap.detail)}
+            title={getArchiveSummaryAriaLabel(leaderboardRecap.chip, leaderboardRecap.detail)}
+          >
             <span className="leaderboard-recap-chip" data-testid="leaderboard-recap-chip">{leaderboardRecap.chip}</span>
             <span className="leaderboard-recap-detail" data-testid="leaderboard-recap-detail">{leaderboardRecap.detail}</span>
           </div>
