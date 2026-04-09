@@ -1136,6 +1136,47 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("leaderboard-control-list")).not.toContainText("Sound Crafter");
   });
 
+  test("leaderboard archive controls expose keyboard-friendly labels for hero filters and recent-form chips", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        { hero: "SyncFace Weaver", score: 145, combo: 6, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 141, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z" },
+        { hero: "SyncFace Weaver", score: 136, combo: 5, date: "2026-04-03", createdAt: "2026-04-03T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 133, combo: 4, date: "2026-04-02", createdAt: "2026-04-02T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 129, combo: 4, date: "2026-04-01", createdAt: "2026-04-01T10:00:00.000Z" }
+      ]));
+      localStorage.setItem("saga_highscore_history", JSON.stringify([
+        { hero: "Sound Crafter", score: 118, combo: 4, date: "2026-04-06", createdAt: "2026-04-06T08:00:00.000Z", placement: 6, qualified: false },
+        { hero: "SyncFace Weaver", score: 145, combo: 6, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z", placement: 1, qualified: true },
+        { hero: "Sound Crafter", score: 138, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T08:00:00.000Z", placement: 2, qualified: true },
+        { hero: "Sound Crafter", score: 131, combo: 5, date: "2026-04-03", createdAt: "2026-04-03T08:00:00.000Z", placement: 3, qualified: true },
+        { hero: "3D Modeler", score: 127, combo: 4, date: "2026-04-02", createdAt: "2026-04-02T08:00:00.000Z", placement: 5, qualified: true }
+      ]));
+    });
+    await page.reload();
+
+    const archiveFilters = page.getByTestId("leaderboard-archive-filters");
+    const allHeroesFilter = archiveFilters.getByRole("button", { name: "All heroes", exact: true });
+    const soundCrafterFilter = archiveFilters.getByRole("button", { name: "Sound Crafter", exact: true });
+    await expect(allHeroesFilter).toHaveAttribute("aria-pressed", "true");
+    await expect(allHeroesFilter).toHaveAttribute("aria-description", "Show archived runs for all heroes; currently selected.");
+    await expect(soundCrafterFilter).toHaveAttribute("aria-pressed", "false");
+    await expect(soundCrafterFilter).toHaveAttribute("aria-description", "Show archived runs for Sound Crafter.");
+
+    await soundCrafterFilter.click();
+    await expect(soundCrafterFilter).toHaveAttribute("aria-pressed", "true");
+    await expect(soundCrafterFilter).toHaveAttribute("aria-description", "Show archived runs for Sound Crafter; currently selected.");
+    await expect(allHeroesFilter).toHaveAttribute("aria-pressed", "false");
+    await expect(allHeroesFilter).toHaveAttribute("aria-description", "Show archived runs for all heroes.");
+
+    const formChips = page.getByTestId("leaderboard-archive-entry-form-chip");
+    await expect(formChips.first()).toHaveAttribute("tabindex", "0");
+    await expect(formChips.first()).toHaveAttribute("aria-label", "Sound Crafter. Current archived run. outside the top 5. 118 pts · 4x combo · 2026-04-06.");
+    await expect(formChips.nth(1)).toHaveAttribute("aria-label", "Sound Crafter. Previous archived run. rank 2. 138 pts · 5x combo · 2026-04-04.");
+    await formChips.first().focus();
+    await expect(formChips.first()).toBeFocused();
+  });
+
   test("leaderboard archive hero filter survives reloads and clears stale saved heroes", async ({ page }) => {
     await page.evaluate(() => {
       localStorage.setItem("saga_highscores", JSON.stringify([

@@ -1227,6 +1227,19 @@ function getArchiveEntryForm(history, entry, limit = 3) {
   }));
 }
 
+function getArchiveFormChipAriaLabel(hero, formEntry) {
+  const placementLabel = formEntry.qualified ? formEntry.label.replace("#", "rank ") : `outside the top ${HIGH_SCORE_LIMIT}`;
+  const timingLabel = formEntry.current ? "Current archived run" : "Previous archived run";
+  return `${hero}. ${timingLabel}. ${placementLabel}. ${formEntry.detail}.`;
+}
+
+function getArchiveFilterAriaLabel(filterLabel, isActive) {
+  const scope = filterLabel === "All heroes"
+    ? `Show archived runs for all heroes${isActive ? "; currently selected" : ""}.`
+    : `Show archived runs for ${filterLabel}${isActive ? "; currently selected" : ""}.`;
+  return scope;
+}
+
 function getArchiveEntryTrend(entry, previousEntry) {
   if (!entry) {
     return {
@@ -3176,17 +3189,23 @@ export default function App() {
             <div className="leaderboard-archive-label">{leaderboardSeasonArchive.label}</div>
             {leaderboardSeasonArchive.filters.length > 1 && (
               <div className="leaderboard-archive-filters" data-testid="leaderboard-archive-filters">
-                {leaderboardSeasonArchive.filters.map((filter) => (
-                  <button
-                    key={filter.id}
-                    type="button"
-                    className={`leaderboard-archive-filter${leaderboardSeasonArchive.activeFilter === filter.id ? " active" : ""}`}
-                    data-testid="leaderboard-archive-filter"
-                    onClick={() => setSelectedArchiveHero(filter.id)}
-                  >
-                    {filter.label}
-                  </button>
-                ))}
+                {leaderboardSeasonArchive.filters.map((filter) => {
+                  const isActive = leaderboardSeasonArchive.activeFilter === filter.id;
+                  return (
+                    <button
+                      key={filter.id}
+                      type="button"
+                      className={`leaderboard-archive-filter${isActive ? " active" : ""}`}
+                      data-testid="leaderboard-archive-filter"
+                      aria-pressed={isActive}
+                      aria-description={getArchiveFilterAriaLabel(filter.label, isActive)}
+                      title={getArchiveFilterAriaLabel(filter.label, isActive)}
+                      onClick={() => setSelectedArchiveHero(filter.id)}
+                    >
+                      {filter.label}
+                    </button>
+                  );
+                })}
               </div>
             )}
             <div className="leaderboard-archive-detail" data-testid="leaderboard-archive-detail">{leaderboardSeasonArchive.detail}</div>
@@ -3236,6 +3255,8 @@ export default function App() {
                               ].filter(Boolean).join(" ")}
                               data-testid="leaderboard-archive-entry-form-chip"
                               title={formEntry.detail}
+                              tabIndex={0}
+                              aria-label={getArchiveFormChipAriaLabel(entry.hero, formEntry)}
                             >
                               {formEntry.label}
                             </span>

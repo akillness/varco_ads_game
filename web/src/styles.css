@@ -1040,6 +1040,12 @@ main {
   border-color: rgba(88, 166, 255, 0.35);
 }
 
+.leaderboard-archive-filter:focus-visible {
+  outline: 2px solid rgba(88, 166, 255, 0.55);
+  outline-offset: 2px;
+  border-color: rgba(88, 166, 255, 0.45);
+}
+
 .leaderboard-archive-filter.active {
   border-color: rgba(88, 166, 255, 0.45);
   background: rgba(88, 166, 255, 0.14);
@@ -1136,6 +1142,11 @@ main {
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.06em;
+}
+
+.leaderboard-archive-entry-form-chip:focus-visible {
+  outline: 2px solid rgba(255, 176, 31, 0.55);
+  outline-offset: 2px;
 }
 
 .leaderboard-archive-entry-form-chip.current {
