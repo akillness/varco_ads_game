@@ -1136,7 +1136,7 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("leaderboard-control-list")).not.toContainText("Sound Crafter");
   });
 
-  test("leaderboard archive controls expose keyboard-friendly labels for hero filters and recent-form chips", async ({ page }) => {
+  test("leaderboard archive controls expose keyboard-friendly labels for filters, summary cards, and recent-form chips", async ({ page }) => {
     await page.evaluate(() => {
       localStorage.setItem("saga_highscores", JSON.stringify([
         { hero: "SyncFace Weaver", score: 145, combo: 6, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z" },
@@ -1168,6 +1168,23 @@ test.describe("Web UI", () => {
     await expect(soundCrafterFilter).toHaveAttribute("aria-description", "Show archived runs for Sound Crafter; currently selected.");
     await expect(allHeroesFilter).toHaveAttribute("aria-pressed", "false");
     await expect(allHeroesFilter).toHaveAttribute("aria-description", "Show archived runs for all heroes.");
+
+    const archiveStory = page.getByTestId("leaderboard-archive-story");
+    const archiveDelta = page.getByTestId("leaderboard-archive-delta");
+    const archiveTrend = page.getByTestId("leaderboard-archive-trend");
+    await expect(archiveStory).toHaveAttribute("tabindex", "0");
+    await expect(archiveStory).toHaveAttribute("aria-label", "SOUND CRAFTER STORY. Sound Crafter has 3 archived runs, peaked at #2, and last archived run landed outside the top 5.");
+    await expect(archiveDelta).toHaveAttribute("tabindex", "0");
+    await expect(archiveDelta).toHaveAttribute("aria-label", "SOUND CRAFTER RETURN PATH. Sound Crafter's latest archive is 20 pts below their last top-5 finish (#2 at 138 pts).");
+    await expect(archiveTrend).toHaveAttribute("tabindex", "0");
+    await expect(archiveTrend).toHaveAttribute("aria-label", "STREAK SNAPPED. Sound Crafter's best run was 2 straight top-5 archives.");
+    await archiveTrend.focus();
+    await expect(archiveTrend).toBeFocused();
+
+    const entryTrends = page.getByTestId("leaderboard-archive-entry-trend");
+    await expect(entryTrends.first()).toHaveAttribute("tabindex", "0");
+    await expect(entryTrends.first()).toHaveAttribute("aria-label", "Sound Crafter. SLIPPED. Sound Crafter fell from #2 to outside the top 5.");
+    await expect(entryTrends.nth(1)).toHaveAttribute("aria-label", "Sound Crafter. CLIMBING. Sound Crafter improved from #3 to #2.");
 
     const formChips = page.getByTestId("leaderboard-archive-entry-form-chip");
     await expect(formChips.first()).toHaveAttribute("tabindex", "0");

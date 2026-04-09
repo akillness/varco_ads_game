@@ -1240,6 +1240,14 @@ function getArchiveFilterAriaLabel(filterLabel, isActive) {
   return scope;
 }
 
+function getArchiveSummaryAriaLabel(label, detail) {
+  return `${label}. ${detail}`;
+}
+
+function getArchiveEntryTrendAriaLabel(hero, trendLabel, trendDetail) {
+  return `${hero}. ${trendLabel}. ${trendDetail}`;
+}
+
 function getArchiveEntryTrend(entry, previousEntry) {
   if (!entry) {
     return {
@@ -3209,15 +3217,33 @@ export default function App() {
               </div>
             )}
             <div className="leaderboard-archive-detail" data-testid="leaderboard-archive-detail">{leaderboardSeasonArchive.detail}</div>
-            <div className="leaderboard-archive-story" data-testid="leaderboard-archive-story">
+            <div
+              className="leaderboard-archive-story"
+              data-testid="leaderboard-archive-story"
+              tabIndex={0}
+              aria-label={getArchiveSummaryAriaLabel(leaderboardSeasonArchive.storyLabel, leaderboardSeasonArchive.storyDetail)}
+              title={getArchiveSummaryAriaLabel(leaderboardSeasonArchive.storyLabel, leaderboardSeasonArchive.storyDetail)}
+            >
               <span className="leaderboard-archive-story-label">{leaderboardSeasonArchive.storyLabel}</span>
               <span className="leaderboard-archive-story-detail">{leaderboardSeasonArchive.storyDetail}</span>
             </div>
-            <div className="leaderboard-archive-delta" data-testid="leaderboard-archive-delta">
+            <div
+              className="leaderboard-archive-delta"
+              data-testid="leaderboard-archive-delta"
+              tabIndex={0}
+              aria-label={getArchiveSummaryAriaLabel(leaderboardSeasonArchive.deltaLabel, leaderboardSeasonArchive.deltaDetail)}
+              title={getArchiveSummaryAriaLabel(leaderboardSeasonArchive.deltaLabel, leaderboardSeasonArchive.deltaDetail)}
+            >
               <span className="leaderboard-archive-delta-label">{leaderboardSeasonArchive.deltaLabel}</span>
               <span className="leaderboard-archive-delta-detail">{leaderboardSeasonArchive.deltaDetail}</span>
             </div>
-            <div className="leaderboard-archive-trend" data-testid="leaderboard-archive-trend">
+            <div
+              className="leaderboard-archive-trend"
+              data-testid="leaderboard-archive-trend"
+              tabIndex={0}
+              aria-label={getArchiveSummaryAriaLabel(leaderboardSeasonArchive.trendLabel, leaderboardSeasonArchive.trendDetail)}
+              title={getArchiveSummaryAriaLabel(leaderboardSeasonArchive.trendLabel, leaderboardSeasonArchive.trendDetail)}
+            >
               <span className="leaderboard-archive-trend-label">{leaderboardSeasonArchive.trendLabel}</span>
               <span className="leaderboard-archive-trend-detail">{leaderboardSeasonArchive.trendDetail}</span>
             </div>
@@ -3237,6 +3263,9 @@ export default function App() {
                     <div
                       className={`leaderboard-archive-entry-trend leaderboard-archive-entry-trend-${entry.trendTone}`}
                       data-testid="leaderboard-archive-entry-trend"
+                      tabIndex={0}
+                      aria-label={getArchiveEntryTrendAriaLabel(entry.hero, entry.trendLabel, entry.trendDetail)}
+                      title={getArchiveEntryTrendAriaLabel(entry.hero, entry.trendLabel, entry.trendDetail)}
                     >
                       <span className="leaderboard-archive-entry-trend-label">{entry.trendLabel}</span>
                       <span className="leaderboard-archive-entry-trend-detail">{entry.trendDetail}</span>
