@@ -982,13 +982,158 @@ function getLeaderboardMomentum(scores) {
   };
 }
 
+function getLeaderboardArchiveGapCopy(entry, target, messages) {
+  const gap = getLeaderboardTargetGap(entry, target);
+  if (gap?.kind === "score") return messages.score(gap.amount, target);
+  if (gap?.kind === "combo") return messages.combo(gap.amount, target);
+  if (gap?.kind === "tiebreak") return messages.tiebreak(target);
+  return messages.ahead(target);
+}
+
+function getLeaderboardArchiveDelta(scores, history, activeFilter = "all") {
+  if (!history.length) {
+    return {
+      label: "ARCHIVE DELTA",
+      detail: "Delta guidance unlocks after the first completed run."
+    };
+  }
+
+  const latestEntry = history[0] || null;
+  const cutoff = scores[Math.min(scores.length, HIGH_SCORE_LIMIT) - 1] || null;
+  const leader = scores[0] || null;
+
+  if (activeFilter !== "all") {
+    const heroHistory = history.filter((entry) => entry.hero === activeFilter);
+    const latestHeroEntry = heroHistory[0] || null;
+    const latestQualifiedEntry = heroHistory.find((entry) => entry.qualified) || null;
+    const bestQualifiedEntry = heroHistory
+      .filter((entry) => entry.qualified)
+      .sort((a, b) => (
+        (a.placement ?? Number.MAX_SAFE_INTEGER) - (b.placement ?? Number.MAX_SAFE_INTEGER)
+        || compareHighScores(a, b)
+      ))[0] || null;
+
+    if (!latestHeroEntry) {
+      return {
+        label: `${activeFilter.toUpperCase()} DELTA`,
+        detail: `${activeFilter} has no archived delta to compare yet.`
+      };
+    }
+
+    if (!latestHeroEntry.qualified) {
+      if (latestQualifiedEntry) {
+        return {
+          label: `${activeFilter.toUpperCase()} RETURN PATH`,
+          detail: getLeaderboardArchiveGapCopy(latestHeroEntry, latestQualifiedEntry, {
+            score: (amount, target) => `${activeFilter}'s latest archive is ${amount} pt${amount === 1 ? "" : "s"} below their last top-${HIGH_SCORE_LIMIT} finish (#${target.placement} at ${target.score} pts).`,
+            combo: (amount, target) => `${activeFilter}'s latest archive matches ${target.score} pts, but still needs ${amount} more combo to revisit their last top-${HIGH_SCORE_LIMIT} finish (#${target.placement}).`,
+            tiebreak: (target) => `${activeFilter}'s latest archive already matches their last top-${HIGH_SCORE_LIMIT} line at ${target.score} pts / ${target.combo}x and would reclaim that finish on recency.`,
+            ahead: (target) => `${activeFilter}'s latest archive has already cleared their last top-${HIGH_SCORE_LIMIT} line (#${target.placement}).`
+          })
+        };
+      }
+
+      if (cutoff) {
+        const pointsNeeded = Math.max(cutoff.score - latestHeroEntry.score + 1, 1);
+        return {
+          label: `${activeFilter.toUpperCase()} BREAKTHROUGH`,
+          detail: getLeaderboardArchiveGapCopy(latestHeroEntry, cutoff, {
+            score: () => `${activeFilter} needs about ${pointsNeeded} more pt${pointsNeeded === 1 ? "" : "s"} on the next archive to crack today's live top ${HIGH_SCORE_LIMIT}.`,
+            combo: (amount, target) => `${activeFilter} can match today's ${target.score}-pt cutline, but still needs ${amount} more combo to break into the live top ${HIGH_SCORE_LIMIT}.`,
+            tiebreak: (target) => `${activeFilter} already matches today's ${target.score}-pt / ${target.combo}x cutline and would flip into the live top ${HIGH_SCORE_LIMIT} on recency.`,
+            ahead: () => `${activeFilter} is already pacing above today's live cutline.`
+          })
+        };
+      }
+    }
+
+    if (bestQualifiedEntry) {
+      if (!isSameHighScoreEntry(latestHeroEntry, bestQualifiedEntry)) {
+        return {
+          label: `${activeFilter.toUpperCase()} SEASON-BEST CHASE`,
+          detail: getLeaderboardArchiveGapCopy(latestHeroEntry, bestQualifiedEntry, {
+            score: (amount, target) => `${activeFilter}'s latest archive is ${amount} pt${amount === 1 ? "" : "s"} shy of their season-best finish (#${target.placement} at ${target.score} pts).`,
+            combo: (amount, target) => `${activeFilter}'s latest archive matches ${target.score} pts, but still needs ${amount} more combo to tie their season-best finish (#${target.placement}).`,
+            tiebreak: (target) => `${activeFilter}'s latest archive already matches their season-best ${target.score}-pt / ${target.combo}x line and now owns it on recency.`,
+            ahead: (target) => `${activeFilter}'s latest archive has already pushed past their old season-best finish (#${target.placement}).`
+          })
+        };
+      }
+
+      return {
+        label: `${activeFilter.toUpperCase()} SEASON BEST`,
+        detail: `${activeFilter}'s latest archive already stands as their season-best finish at #${bestQualifiedEntry.placement}.`
+      };
+    }
+
+    return {
+      label: `${activeFilter.toUpperCase()} DELTA`,
+      detail: `${activeFilter} is still hunting their first archived top-${HIGH_SCORE_LIMIT} finish.`
+    };
+  }
+
+  if (!latestEntry) {
+    return {
+      label: "ARCHIVE DELTA",
+      detail: "Delta guidance unlocks after the first completed run."
+    };
+  }
+
+  if (!latestEntry.qualified) {
+    if (cutoff) {
+      const pointsNeeded = Math.max(cutoff.score - latestEntry.score + 1, 1);
+      return {
+        label: "CUTLINE DELTA",
+        detail: getLeaderboardArchiveGapCopy(latestEntry, cutoff, {
+          score: () => `${latestEntry.hero}'s latest archive needs about ${pointsNeeded} more pt${pointsNeeded === 1 ? "" : "s"} to re-enter today's live top ${HIGH_SCORE_LIMIT}.`,
+          combo: (amount, target) => `${latestEntry.hero}'s latest archive can match the ${target.score}-pt cutline, but still needs ${amount} more combo to re-enter today's live top ${HIGH_SCORE_LIMIT}.`,
+          tiebreak: (target) => `${latestEntry.hero}'s latest archive already matches the ${target.score}-pt / ${target.combo}x cutline and would flip back into the live top ${HIGH_SCORE_LIMIT} on recency.`,
+          ahead: () => `${latestEntry.hero}'s latest archive is already back above today's live cutline.`
+        })
+      };
+    }
+
+    return {
+      label: "CUTLINE DELTA",
+      detail: `${latestEntry.hero}'s latest archive is waiting for the first live cutline to form.`
+    };
+  }
+
+  if (latestEntry.placement === 1) {
+    return {
+      label: "BENCHMARK HOLD",
+      detail: `${latestEntry.hero}'s latest archive already owns the season benchmark at ${latestEntry.score} pts / ${latestEntry.combo}x.`
+    };
+  }
+
+  const rival = scores[Math.max((latestEntry.placement || 2) - 2, 0)] || leader;
+  if (!rival) {
+    return {
+      label: "ARCHIVE DELTA",
+      detail: `${latestEntry.hero}'s latest archive is setting the pace for the next board.`
+    };
+  }
+
+  return {
+    label: "LEADER GAP",
+    detail: getLeaderboardArchiveGapCopy(latestEntry, rival, {
+      score: (amount, target) => `${latestEntry.hero}'s latest archive is ${amount} pt${amount === 1 ? "" : "s"} shy of ${target.hero}'s higher live slot (#${target.placement || 1} at ${target.score} pts).`,
+      combo: (amount, target) => `${latestEntry.hero}'s latest archive matches ${target.score} pts, but still needs ${amount} more combo to steal ${target.hero}'s higher live slot.`,
+      tiebreak: (target) => `${latestEntry.hero}'s latest archive already matches ${target.hero}'s ${target.score}-pt / ${target.combo}x line and would flip that higher slot on recency.`,
+      ahead: (target) => `${latestEntry.hero}'s latest archive has already climbed above ${target.hero}'s higher live slot.`
+    })
+  };
+}
+
 function getLeaderboardSeasonArchive(scores, heroFilter = "all") {
   const history = loadHighScoreHistory(scores, { allowFallback: false });
+
   const heroFilters = Array.from(new Set(history.map((entry) => entry.hero)))
     .sort((a, b) => a.localeCompare(b));
   const supportsFiltering = heroFilters.length > 1;
   const requestedFilter = supportsFiltering ? heroFilter : "all";
   const activeFilter = requestedFilter === "all" || heroFilters.includes(requestedFilter) ? requestedFilter : "all";
+  const archiveDelta = getLeaderboardArchiveDelta(scores, history, activeFilter);
   const filteredHistory = (activeFilter === "all"
     ? history
     : history.filter((entry) => entry.hero === activeFilter)
@@ -1000,6 +1145,8 @@ function getLeaderboardSeasonArchive(scores, heroFilter = "all") {
       detail: "Archived season history appears after the first completed run.",
       storyLabel: "ARCHIVE STORY",
       storyDetail: "Archive summaries unlock after the first completed run.",
+      deltaLabel: archiveDelta.label,
+      deltaDetail: archiveDelta.detail,
       filters: [],
       activeFilter,
       entries: []
@@ -1044,6 +1191,8 @@ function getLeaderboardSeasonArchive(scores, heroFilter = "all") {
       : `Latest ${filteredHistory.length} archived run${filteredHistory.length === 1 ? "" : "s"} for ${activeFilter}.`,
     storyLabel: activeFilter === "all" ? "ARCHIVE STORY" : `${activeFilter.toUpperCase()} STORY`,
     storyDetail,
+    deltaLabel: archiveDelta.label,
+    deltaDetail: archiveDelta.detail,
     filters: supportsFiltering
       ? [
         { id: "all", label: "All heroes" },
@@ -2830,6 +2979,10 @@ export default function App() {
             <div className="leaderboard-archive-story" data-testid="leaderboard-archive-story">
               <span className="leaderboard-archive-story-label">{leaderboardSeasonArchive.storyLabel}</span>
               <span className="leaderboard-archive-story-detail">{leaderboardSeasonArchive.storyDetail}</span>
+            </div>
+            <div className="leaderboard-archive-delta" data-testid="leaderboard-archive-delta">
+              <span className="leaderboard-archive-delta-label">{leaderboardSeasonArchive.deltaLabel}</span>
+              <span className="leaderboard-archive-delta-detail">{leaderboardSeasonArchive.deltaDetail}</span>
             </div>
             {leaderboardSeasonArchive.entries.length > 0 ? (
               <div className="leaderboard-archive-list" data-testid="leaderboard-archive-list">

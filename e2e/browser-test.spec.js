@@ -1078,6 +1078,8 @@ test.describe("Web UI", () => {
     const archiveRows = page.getByTestId("leaderboard-archive-item");
     await expect(page.getByTestId("leaderboard-archive-detail")).toContainText("Latest 4 archived runs across the season table.");
     await expect(page.getByTestId("leaderboard-archive-story")).toContainText("3 heroes logged 5 archived runs. 4/5 stayed inside the top 5. Latest archive: Sound Crafter at 118 pts (outside the top 5).");
+    await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("CUTLINE DELTA");
+    await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("Sound Crafter's latest archive needs about 12 more pts to re-enter today's live top 5.");
     await expect(page.getByTestId("leaderboard-archive-filters")).toBeVisible();
     await expect(archiveRows).toHaveCount(4);
     await expect(archiveRows.nth(0)).toContainText("Sound Crafter");
@@ -1091,6 +1093,8 @@ test.describe("Web UI", () => {
     await archiveFilters.getByRole("button", { name: "Sound Crafter", exact: true }).click();
     await expect(page.getByTestId("leaderboard-archive-detail")).toContainText("Latest 3 archived runs for Sound Crafter.");
     await expect(page.getByTestId("leaderboard-archive-story")).toContainText("Sound Crafter has 3 archived runs, peaked at #2, and last archived run landed outside the top 5.");
+    await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("SOUND CRAFTER RETURN PATH");
+    await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("Sound Crafter's latest archive is 20 pts below their last top-5 finish (#2 at 138 pts).");
     await expect(archiveRows).toHaveCount(3);
     await expect(archiveRows.nth(0)).toContainText("118 pts · 4x combo · 2026-04-06");
     await expect(archiveRows.nth(2)).toContainText("131 pts · 5x combo · 2026-04-03");
@@ -1126,6 +1130,8 @@ test.describe("Web UI", () => {
     await archiveFilters.getByRole("button", { name: "Sound Crafter", exact: true }).click();
     await expect(page.getByTestId("leaderboard-archive-detail")).toContainText("Latest 2 archived runs for Sound Crafter.");
     await expect(page.getByTestId("leaderboard-archive-story")).toContainText("Sound Crafter has 2 archived runs, peaked at #2, and is riding a 2-run top-5 streak.");
+    await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("SOUND CRAFTER SEASON-BEST CHASE");
+    await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("Sound Crafter's latest archive is 20 pts shy of their season-best finish (#2 at 138 pts).");
     expect(await page.evaluate(() => localStorage.getItem("saga_archive_hero_filter"))).toBe("Sound Crafter");
 
     await page.reload();
@@ -1166,6 +1172,8 @@ test.describe("Web UI", () => {
     await page.reload();
 
     await expect(page.getByTestId("leaderboard-archive-detail")).toContainText("Latest 3 archived runs across the season table.");
+    await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("BENCHMARK HOLD");
+    await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("Sound Crafter's latest archive already owns the season benchmark at 142 pts / 6x.");
     await expect(page.getByTestId("leaderboard-archive-item")).toHaveCount(3);
     await expect(page.getByTestId("leaderboard-archive-item").nth(0)).toContainText("Sound Crafter");
     await expect(page.getByTestId("leaderboard-archive-filters")).toHaveCount(0);

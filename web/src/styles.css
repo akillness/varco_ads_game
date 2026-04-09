@@ -972,22 +972,33 @@ main {
 .leaderboard-archive-detail,
 .leaderboard-archive-empty,
 .leaderboard-archive-meta,
-.leaderboard-archive-story-detail {
+.leaderboard-archive-story-detail,
+.leaderboard-archive-delta-detail {
   font-size: 11px;
   line-height: 1.45;
   color: #dce6f4;
 }
 
-.leaderboard-archive-story {
+.leaderboard-archive-story,
+.leaderboard-archive-delta {
   display: grid;
   gap: 4px;
   padding: 8px 10px;
   border-radius: 10px;
+}
+
+.leaderboard-archive-story {
   border: 1px solid rgba(88, 166, 255, 0.18);
   background: rgba(88, 166, 255, 0.08);
 }
 
-.leaderboard-archive-story-label {
+.leaderboard-archive-delta {
+  border: 1px solid rgba(240, 136, 62, 0.2);
+  background: linear-gradient(135deg, rgba(240, 136, 62, 0.12), rgba(88, 166, 255, 0.05));
+}
+
+.leaderboard-archive-story-label,
+.leaderboard-archive-delta-label {
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.08em;
