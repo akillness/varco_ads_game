@@ -932,6 +932,8 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("leaderboard-recap-chip")).toHaveText("TOP TARGET");
     await expect(page.getByTestId("leaderboard-recap-detail")).toContainText("Beat 145 pts from SyncFace Weaver");
     await expect(page.getByTestId("leaderboard-recap-detail")).toContainText("120 pts currently enters the top 5");
+    await expect(page.getByTestId("leaderboard-season-detail")).toContainText("SyncFace Weaver leads the season with 145 pts and a 6x benchmark combo.");
+    await expect(page.getByTestId("leaderboard-rival-detail")).toContainText("3D Modeler currently defends the final slot at 120 pts / 3x combo.");
 
     await page.evaluate(() => {
       window.__SAGA_DEBUG__.dispatch({
@@ -949,6 +951,7 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("leaderboard-recap-chip")).toHaveText("LIVE #2");
     await expect(page.getByTestId("leaderboard-recap-detail")).toContainText("Current run would slot in at #2");
     await expect(page.getByTestId("leaderboard-recap-detail")).toContainText("12 more pts catches SyncFace Weaver above");
+    await expect(page.getByTestId("leaderboard-rival-detail")).toContainText("SyncFace Weaver holds #1 at 145 pts. 12 more pts steals that rival spot.");
   });
 
   test("leaderboard recap strip shows likely cutline guidance when the run is outside top 5", async ({ page }) => {
@@ -978,6 +981,8 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("leaderboard-recap-chip")).toHaveText("OUTSIDE TOP 5");
     await expect(page.getByTestId("leaderboard-recap-detail")).toContainText("Current run sits outside the board");
     await expect(page.getByTestId("leaderboard-recap-detail")).toContainText("About 31 more pts likely needed to qualify");
+    await expect(page.getByTestId("leaderboard-season-detail")).toContainText("SyncFace Weaver leads the season with 145 pts and a 6x benchmark combo.");
+    await expect(page.getByTestId("leaderboard-rival-detail")).toContainText("3D Modeler defends #5 at 120 pts. 31 more pts bumps them off the board.");
   });
 
   test("game over overlay highlights a new #1 leaderboard finish", async ({ page }) => {

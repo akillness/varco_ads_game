@@ -639,6 +639,67 @@ function getLeaderboardRecap(scores, entry) {
   };
 }
 
+function getLeaderboardSeasonSummary(scores, entry) {
+  const leader = scores[0] || null;
+  const cutoff = scores[Math.min(scores.length, HIGH_SCORE_LIMIT) - 1] || null;
+
+  if (!leader) {
+    return {
+      seasonDetail: "No leaderboard runs posted yet. The next clean run opens the season table.",
+      rivalDetail: (entry?.score || 0) > 0
+        ? `${entry.hero} can post the opening season mark at ${entry.score} pts.`
+        : "The first clean run claims the opening rivalry mark."
+    };
+  }
+
+  const leaderRuns = scores.filter((scoreEntry) => scoreEntry.hero === leader.hero).length;
+  const seasonDetail = leaderRuns > 1
+    ? `${leader.hero} leads the season with ${leader.score} pts and controls ${leaderRuns}/${scores.length} leaderboard slots.`
+    : `${leader.hero} leads the season with ${leader.score} pts and a ${leader.combo}x benchmark combo.`;
+
+  if ((entry?.score || 0) <= 0) {
+    if (scores.length < HIGH_SCORE_LIMIT) {
+      return {
+        seasonDetail,
+        rivalDetail: `${HIGH_SCORE_LIMIT - scores.length} leaderboard slot${HIGH_SCORE_LIMIT - scores.length === 1 ? " is" : "s are"} still open before the cutline locks.`
+      };
+    }
+
+    return {
+      seasonDetail,
+      rivalDetail: `${cutoff.hero} currently defends the final slot at ${cutoff.score} pts / ${cutoff.combo}x combo.`
+    };
+  }
+
+  const preview = previewHighScorePlacement(scores, {
+    ...entry,
+    createdAt: entry.createdAt || "9999-12-31T23:59:59.999Z"
+  });
+
+  if (preview.placement === 1) {
+    const leadMargin = Math.max(entry.score - leader.score, 1);
+    return {
+      seasonDetail,
+      rivalDetail: `${leader.hero} owns the current benchmark at ${leader.score} pts. ${entry.hero} is ${leadMargin} pt${leadMargin === 1 ? "" : "s"} ahead on live pace.`
+    };
+  }
+
+  if (preview.placement && preview.qualified) {
+    const rival = scores[preview.placement - 2] || leader;
+    const chasePoints = Math.max(rival.score - entry.score, 0);
+    return {
+      seasonDetail,
+      rivalDetail: `${rival.hero} holds #${preview.placement - 1} at ${rival.score} pts. ${chasePoints} more pt${chasePoints === 1 ? "" : "s"} steals that rival spot.`
+    };
+  }
+
+  const pointsNeeded = cutoff ? Math.max(cutoff.score - entry.score + 1, 1) : 1;
+  return {
+    seasonDetail,
+    rivalDetail: `${cutoff.hero} defends #${HIGH_SCORE_LIMIT} at ${cutoff.score} pts. ${pointsNeeded} more pt${pointsNeeded === 1 ? "" : "s"} bumps them off the board.`
+  };
+}
+
 function loadProgress() {
   try { return JSON.parse(localStorage.getItem("saga_progress") || "{}"); }
   catch { return {}; }
@@ -1157,13 +1218,16 @@ export default function App() {
   const directorPhase = getDirectorPhase(timer);
   const elapsedSeconds = GAME_TIME - timer;
   const bettingStatus = getBettingStatusSnapshot(matchStatus, timer, elapsedSeconds, currentMatchId);
-  const leaderboardRecap = getLeaderboardRecap(gameOver ? leaderboardBaselineRef.current : highScores, {
+  const leaderboardReference = gameOver ? leaderboardBaselineRef.current : highScores;
+  const leaderboardEntryPreview = {
     hero: hero.name,
     score,
     combo: maxCombo,
     date: "live-run",
     createdAt: "9999-12-31T23:59:59.999Z"
-  });
+  };
+  const leaderboardRecap = getLeaderboardRecap(leaderboardReference, leaderboardEntryPreview);
+  const leaderboardSeasonSummary = getLeaderboardSeasonSummary(leaderboardReference, leaderboardEntryPreview);
 
   async function trackEvent(message, meta = {}) {
     try {
@@ -2241,6 +2305,16 @@ export default function App() {
           <div className={`leaderboard-recap leaderboard-recap-${leaderboardRecap.tone}`} data-testid="leaderboard-recap">
             <span className="leaderboard-recap-chip" data-testid="leaderboard-recap-chip">{leaderboardRecap.chip}</span>
             <span className="leaderboard-recap-detail" data-testid="leaderboard-recap-detail">{leaderboardRecap.detail}</span>
+          </div>
+          <div className="leaderboard-summary-grid" data-testid="leaderboard-summary-grid">
+            <div className="leaderboard-summary-card" data-testid="leaderboard-season-summary">
+              <span className="leaderboard-summary-label">SEASON LEAD</span>
+              <span className="leaderboard-summary-detail" data-testid="leaderboard-season-detail">{leaderboardSeasonSummary.seasonDetail}</span>
+            </div>
+            <div className="leaderboard-summary-card" data-testid="leaderboard-rival-summary">
+              <span className="leaderboard-summary-label">RIVAL TARGET</span>
+              <span className="leaderboard-summary-detail" data-testid="leaderboard-rival-detail">{leaderboardSeasonSummary.rivalDetail}</span>
+            </div>
           </div>
           <ul className="leaderboard" data-testid="high-scores-list">
             {highScores.length === 0 && <li style={{ color: "#8b949e", fontSize: "11px" }}>No scores yet</li>}

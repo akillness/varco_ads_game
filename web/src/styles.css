@@ -769,10 +769,39 @@ main {
   display: grid;
   gap: 6px;
   margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(139, 148, 158, 0.2);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.leaderboard-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.leaderboard-summary-card {
+  display: grid;
+  gap: 6px;
   padding: 10px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(139, 148, 158, 0.18);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.leaderboard-summary-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #8b949e;
+}
+
+.leaderboard-summary-detail {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #c9d1d9;
 }
 
 .leaderboard-recap-chip {
@@ -780,9 +809,9 @@ main {
   align-items: center;
   justify-content: center;
   width: fit-content;
-  padding: 3px 8px;
+  padding: 4px 8px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(139, 148, 158, 0.25);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.08em;
