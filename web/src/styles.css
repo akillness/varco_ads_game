@@ -1573,6 +1573,11 @@ main {
   transition: all 0.2s;
 }
 .card-item:hover { border-color: var(--accent, #00d4ff); }
+.card-item:focus-visible {
+  outline: 2px solid rgba(88, 166, 255, 0.6);
+  outline-offset: 2px;
+  border-color: var(--accent, #00d4ff);
+}
 .card-item.selected {
   border-color: var(--accent, #00d4ff);
   background: rgba(0, 212, 255, 0.1);

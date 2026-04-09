@@ -408,6 +408,40 @@ test.describe("Web UI", () => {
     await expect(page.locator(".edit-history")).toBeVisible();
   });
 
+  test("asset editor cards support keyboard cycling and pressed-state accessibility", async ({ page }) => {
+    await page.getByRole("button", { name: /에셋/ }).click();
+
+    const assetCardGroup = page.getByTestId("asset-card-group");
+    const orbCard = page.getByTestId("asset-card-orb");
+    const enemyCard = page.getByTestId("asset-card-enemy");
+    const playerCard = page.getByTestId("asset-card-player");
+
+    await expect(assetCardGroup).toBeVisible();
+    await expect(orbCard).toHaveAttribute("aria-pressed", "true");
+    await expect(orbCard).toHaveAttribute("aria-description", "Show the Orb asset editor; currently selected.");
+    await expect(enemyCard).toHaveAttribute("aria-pressed", "false");
+    await expect(enemyCard).toHaveAttribute("title", "Show the Enemy asset editor.");
+
+    await orbCard.focus();
+    await expect(orbCard).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(enemyCard).toBeFocused();
+    await expect(enemyCard).toHaveClass(/selected/);
+    await expect(enemyCard).toHaveAttribute("aria-pressed", "true");
+
+    await page.keyboard.press("End");
+    await expect(playerCard).toBeFocused();
+    await expect(playerCard).toHaveClass(/selected/);
+
+    await page.keyboard.press("Home");
+    await expect(orbCard).toBeFocused();
+    await expect(orbCard).toHaveClass(/selected/);
+
+    await page.keyboard.press("ArrowLeft");
+    await expect(playerCard).toBeFocused();
+    await expect(playerCard).toHaveClass(/selected/);
+  });
+
   test("sound cue tabs support keyboard cycling and pressed-state accessibility", async ({ page }) => {
     const soundTabGroup = page.getByTestId("sound-tab-group");
     const bgmTab = soundTabGroup.getByRole("button", { name: "BGM", exact: true });

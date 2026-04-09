@@ -9,6 +9,46 @@ const ASSET_TYPES = [
 const RESULT_POLL_ATTEMPTS = 4;
 const RESULT_POLL_INTERVAL_MS = 400;
 
+function getAssetCardAriaLabel(label, isSelected) {
+  return isSelected
+    ? `Show the ${label} asset editor; currently selected.`
+    : `Show the ${label} asset editor.`;
+}
+
+function focusAssetCard(assetId) {
+  if (typeof document === 'undefined') return;
+  window.requestAnimationFrame(() => {
+    document.querySelector(`[data-testid="asset-card-${assetId}"]`)?.focus();
+  });
+}
+
+function handleAssetCardArrowKeyDown(event, currentId, onSelect) {
+  const navigationKeys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+  if (!navigationKeys.includes(event.key) || ASSET_TYPES.length < 2) {
+    return;
+  }
+
+  const currentIndex = ASSET_TYPES.findIndex((asset) => asset.id === currentId);
+  if (currentIndex < 0) return;
+
+  event.preventDefault();
+
+  let nextIndex = currentIndex;
+  if (event.key === 'ArrowRight') {
+    nextIndex = (currentIndex + 1) % ASSET_TYPES.length;
+  } else if (event.key === 'ArrowLeft') {
+    nextIndex = (currentIndex - 1 + ASSET_TYPES.length) % ASSET_TYPES.length;
+  } else if (event.key === 'Home') {
+    nextIndex = 0;
+  } else if (event.key === 'End') {
+    nextIndex = ASSET_TYPES.length - 1;
+  }
+
+  const nextAsset = ASSET_TYPES[nextIndex];
+  onSelect(nextAsset.id);
+  focusAssetCard(nextAsset.id);
+}
+
 function rasterizeAssetToPngDataUrl(imageUrl) {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -215,25 +255,38 @@ export default function AssetEditor({
     dispatch({ type: 'EDIT_APPLY', historyId });
   }
 
+  function selectAssetCard(assetId) {
+    setSelectedAsset(assetId);
+    resetTransientState({ cancelInFlight: true });
+    onSelectKey(assetId);
+  }
+
   return (
     <div className="asset-editor">
-      <div className="card-grid">
-        {ASSET_TYPES.map(asset => (
+      <div className="card-grid" data-testid="asset-card-group">
+        {ASSET_TYPES.map(asset => {
+          const isSelected = selectedAsset === asset.id;
+          const ariaLabel = getAssetCardAriaLabel(asset.label, isSelected);
+
+          return (
           <button
             key={asset.id}
             type="button"
-            className={`card-item ${selectedAsset === asset.id ? 'selected' : ''}`}
+            className={`card-item ${isSelected ? 'selected' : ''}`}
             data-testid={`asset-card-${asset.id}`}
+            aria-pressed={isSelected}
+            aria-description={ariaLabel}
+            title={ariaLabel}
             onClick={() => {
-              setSelectedAsset(asset.id);
-              resetTransientState({ cancelInFlight: true });
-              onSelectKey(asset.id);
+              selectAssetCard(asset.id);
             }}
+            onKeyDown={(event) => handleAssetCardArrowKeyDown(event, asset.id, selectAssetCard)}
           >
             <img src={asset.imagePath} alt={asset.label} width="60" height="60" />
             <div className="card-label">{asset.label}</div>
           </button>
-        ))}
+          );
+        })}
       </div>
 
       {studioPack && (
