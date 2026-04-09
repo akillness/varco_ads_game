@@ -1281,6 +1281,44 @@ function getArchiveFilterAriaLabel(filterLabel, isActive) {
   return scope;
 }
 
+function handleArchiveFilterKeyDown(event, currentFilterId, filters, onSelect) {
+  const navigationKeys = ["ArrowLeft", "ArrowRight", "Home", "End"];
+  if (!navigationKeys.includes(event.key) || !Array.isArray(filters) || filters.length < 2) {
+    return;
+  }
+
+  const currentIndex = filters.findIndex((filter) => filter.id === currentFilterId);
+  if (currentIndex === -1) {
+    return;
+  }
+
+  let nextIndex = currentIndex;
+  if (event.key === "ArrowRight") {
+    nextIndex = (currentIndex + 1) % filters.length;
+  } else if (event.key === "ArrowLeft") {
+    nextIndex = (currentIndex - 1 + filters.length) % filters.length;
+  } else if (event.key === "Home") {
+    nextIndex = 0;
+  } else if (event.key === "End") {
+    nextIndex = filters.length - 1;
+  }
+
+  if (nextIndex === currentIndex) {
+    return;
+  }
+
+  event.preventDefault();
+  onSelect(filters[nextIndex].id);
+
+  const buttonGroup = event.currentTarget?.parentElement;
+  if (!buttonGroup) {
+    return;
+  }
+
+  const buttons = Array.from(buttonGroup.querySelectorAll('button[data-testid="leaderboard-archive-filter"]'));
+  buttons[nextIndex]?.focus();
+}
+
 function getArchiveSummaryAriaLabel(label, detail) {
   return `${label}. ${detail}`;
 }
@@ -3317,6 +3355,12 @@ export default function App() {
                       aria-description={getArchiveFilterAriaLabel(filter.label, isActive)}
                       title={getArchiveFilterAriaLabel(filter.label, isActive)}
                       onClick={() => setSelectedArchiveHero(filter.id)}
+                      onKeyDown={(event) => handleArchiveFilterKeyDown(
+                        event,
+                        filter.id,
+                        leaderboardSeasonArchive.filters,
+                        setSelectedArchiveHero
+                      )}
                     >
                       {filter.label}
                     </button>

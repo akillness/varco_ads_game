@@ -1267,6 +1267,30 @@ test.describe("Web UI", () => {
     await expect(allHeroesFilter).toHaveAttribute("aria-pressed", "false");
     await expect(allHeroesFilter).toHaveAttribute("aria-description", "Show archived runs for all heroes.");
 
+    const syncFaceFilter = archiveFilters.getByRole("button", { name: "SyncFace Weaver", exact: true });
+    await soundCrafterFilter.focus();
+    await expect(soundCrafterFilter).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(syncFaceFilter).toBeFocused();
+    await expect(syncFaceFilter).toHaveAttribute("aria-pressed", "true");
+    await expect(soundCrafterFilter).toHaveAttribute("aria-pressed", "false");
+    await expect(page.getByTestId("leaderboard-archive-detail")).toContainText("Latest 1 archived run for SyncFace Weaver.");
+
+    await page.keyboard.press("Home");
+    await expect(allHeroesFilter).toBeFocused();
+    await expect(allHeroesFilter).toHaveAttribute("aria-pressed", "true");
+    await expect(syncFaceFilter).toHaveAttribute("aria-pressed", "false");
+    await expect(page.getByTestId("leaderboard-archive-detail")).toContainText("Latest 4 archived runs across the season table.");
+
+    await page.keyboard.press("End");
+    await expect(syncFaceFilter).toBeFocused();
+    await expect(syncFaceFilter).toHaveAttribute("aria-pressed", "true");
+
+    await page.keyboard.press("ArrowLeft");
+    await expect(soundCrafterFilter).toBeFocused();
+    await expect(soundCrafterFilter).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("leaderboard-archive-detail")).toContainText("Latest 3 archived runs for Sound Crafter.");
+
     const archiveStory = page.getByTestId("leaderboard-archive-story");
     const archiveDelta = page.getByTestId("leaderboard-archive-delta");
     const archiveTrend = page.getByTestId("leaderboard-archive-trend");
