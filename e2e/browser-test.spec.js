@@ -1714,6 +1714,60 @@ test.describe("Web UI", () => {
     await expect(formGroups.first()).toBeFocused();
   });
 
+  test("leaderboard board-control cards and archive form chips support keyboard cycling", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        { hero: "Sound Crafter", score: 132, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z" },
+        { hero: "SyncFace Weaver", score: 145, combo: 6, date: "2026-04-03", createdAt: "2026-04-03T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 128, combo: 4, date: "2026-04-02", createdAt: "2026-04-02T10:00:00.000Z" },
+        { hero: "Sound Crafter", score: 124, combo: 4, date: "2026-04-01", createdAt: "2026-04-01T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 120, combo: 3, date: "2026-03-30", createdAt: "2026-03-30T10:00:00.000Z" }
+      ]));
+      localStorage.setItem("saga_highscore_history", JSON.stringify([
+        { hero: "Sound Crafter", score: 132, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z", placement: 2, qualified: true },
+        { hero: "Sound Crafter", score: 129, combo: 5, date: "2026-04-03", createdAt: "2026-04-03T08:00:00.000Z", placement: 3, qualified: true },
+        { hero: "Sound Crafter", score: 121, combo: 4, date: "2026-04-02", createdAt: "2026-04-02T08:00:00.000Z", placement: 5, qualified: true },
+        { hero: "3D Modeler", score: 128, combo: 4, date: "2026-04-02", createdAt: "2026-04-02T10:00:00.000Z", placement: 3, qualified: true }
+      ]));
+    });
+    await page.reload();
+
+    const controlRows = page.getByTestId("leaderboard-control-item");
+    await expect(controlRows).toHaveCount(3);
+    await controlRows.nth(0).focus();
+    await expect(controlRows.nth(0)).toBeFocused();
+
+    await page.keyboard.press("ArrowDown");
+    await expect(controlRows.nth(1)).toBeFocused();
+
+    await page.keyboard.press("End");
+    await expect(controlRows.nth(2)).toBeFocused();
+
+    await page.keyboard.press("Home");
+    await expect(controlRows.nth(0)).toBeFocused();
+
+    await page.keyboard.press("ArrowUp");
+    await expect(controlRows.nth(2)).toBeFocused();
+
+    const formGroups = page.getByTestId("leaderboard-archive-entry-form");
+    const firstFormChips = formGroups.first().getByTestId("leaderboard-archive-entry-form-chip");
+    await expect(firstFormChips).toHaveCount(3);
+    await firstFormChips.nth(0).focus();
+    await expect(firstFormChips.nth(0)).toBeFocused();
+
+    await page.keyboard.press("ArrowRight");
+    await expect(firstFormChips.nth(1)).toBeFocused();
+
+    await page.keyboard.press("End");
+    await expect(firstFormChips.nth(2)).toBeFocused();
+
+    await page.keyboard.press("Home");
+    await expect(firstFormChips.nth(0)).toBeFocused();
+
+    await page.keyboard.press("ArrowLeft");
+    await expect(firstFormChips.nth(2)).toBeFocused();
+  });
+
   test("leaderboard archive hero filter survives reloads and clears stale saved heroes", async ({ page }) => {
     await page.evaluate(() => {
       localStorage.setItem("saga_highscores", JSON.stringify([

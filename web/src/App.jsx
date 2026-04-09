@@ -1394,6 +1394,49 @@ function handleStudioQueueKeyDown(event, currentQueueItemId, queueItems, onSelec
   );
 }
 
+function handleFocusableSiblingKeyDown(event, selector, keyMap) {
+  if (![...keyMap, "Home", "End"].includes(event.key)) {
+    return;
+  }
+
+  const siblingContainer = event.currentTarget?.parentElement;
+  if (!siblingContainer) {
+    return;
+  }
+
+  const siblings = Array.from(siblingContainer.querySelectorAll(selector));
+  const currentIndex = siblings.indexOf(event.currentTarget);
+  if (currentIndex === -1) {
+    return;
+  }
+
+  let nextIndex = currentIndex;
+  if (event.key === keyMap[0]) {
+    nextIndex = (currentIndex + 1) % siblings.length;
+  } else if (event.key === keyMap[1]) {
+    nextIndex = (currentIndex - 1 + siblings.length) % siblings.length;
+  } else if (event.key === "Home") {
+    nextIndex = 0;
+  } else if (event.key === "End") {
+    nextIndex = siblings.length - 1;
+  }
+
+  if (nextIndex === currentIndex) {
+    return;
+  }
+
+  event.preventDefault();
+  siblings[nextIndex]?.focus();
+}
+
+function handleLeaderboardControlKeyDown(event) {
+  handleFocusableSiblingKeyDown(event, '[data-testid="leaderboard-control-item"]', ["ArrowDown", "ArrowUp"]);
+}
+
+function handleArchiveFormChipKeyDown(event) {
+  handleFocusableSiblingKeyDown(event, '[data-testid="leaderboard-archive-entry-form-chip"]', ["ArrowRight", "ArrowLeft"]);
+}
+
 function getArchiveSummaryAriaLabel(label, detail) {
   return `${label}. ${detail}`;
 }
@@ -3554,6 +3597,7 @@ export default function App() {
                     tabIndex={0}
                     aria-label={getLeaderboardControlAriaLabel(control)}
                     title={getLeaderboardControlAriaLabel(control)}
+                    onKeyDown={handleLeaderboardControlKeyDown}
                   >
                     <div className="leaderboard-control-topline">
                       <span className="leaderboard-control-hero">{control.hero}</span>
@@ -3677,6 +3721,7 @@ export default function App() {
                               title={formEntry.detail}
                               tabIndex={0}
                               aria-label={getArchiveFormChipAriaLabel(entry.hero, formEntry)}
+                              onKeyDown={handleArchiveFormChipKeyDown}
                             >
                               {formEntry.label}
                             </span>
