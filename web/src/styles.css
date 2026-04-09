@@ -765,6 +765,71 @@ main {
 }
 
 /* Leaderboard */
+.leaderboard-recap {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.leaderboard-recap-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.leaderboard-recap-detail {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #c9d1d9;
+}
+
+.leaderboard-recap-idle {
+  border-color: rgba(139, 148, 158, 0.24);
+}
+
+.leaderboard-recap-open,
+.leaderboard-recap-top {
+  border-color: rgba(255, 176, 31, 0.4);
+  background: rgba(255, 176, 31, 0.08);
+}
+
+.leaderboard-recap-qualified {
+  border-color: rgba(88, 166, 255, 0.35);
+  background: rgba(88, 166, 255, 0.08);
+}
+
+.leaderboard-recap-archived {
+  border-color: rgba(248, 81, 73, 0.28);
+  background: rgba(248, 81, 73, 0.08);
+}
+
+.leaderboard-recap-top .leaderboard-recap-chip,
+.leaderboard-recap-open .leaderboard-recap-chip {
+  border-color: rgba(255, 176, 31, 0.4);
+  color: var(--combo);
+}
+
+.leaderboard-recap-qualified .leaderboard-recap-chip {
+  border-color: rgba(88, 166, 255, 0.4);
+  color: var(--orb);
+}
+
+.leaderboard-recap-archived .leaderboard-recap-chip {
+  border-color: rgba(248, 81, 73, 0.4);
+  color: #ffb4ae;
+}
+
 .leaderboard {
   list-style: none;
   font-size: 11px;

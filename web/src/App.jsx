@@ -549,6 +549,96 @@ function describeLeaderboardPlacement(result) {
   };
 }
 
+function previewHighScorePlacement(scores, entry) {
+  const normalizedEntry = normalizeHighScoreEntry(entry);
+  if (!normalizedEntry) {
+    return {
+      scores,
+      placement: null,
+      qualified: false,
+      entry: null
+    };
+  }
+
+  const sortedScores = [...scores, normalizedEntry]
+    .filter(Boolean)
+    .sort(compareHighScores);
+  const placementIndex = sortedScores.findIndex((scoreEntry) => isSameHighScoreEntry(scoreEntry, normalizedEntry));
+
+  return {
+    scores: sortedScores.slice(0, HIGH_SCORE_LIMIT),
+    placement: placementIndex === -1 ? null : placementIndex + 1,
+    qualified: placementIndex !== -1 && placementIndex < HIGH_SCORE_LIMIT,
+    entry: normalizedEntry
+  };
+}
+
+function getLeaderboardRecap(scores, entry) {
+  const leader = scores[0] || null;
+  const cutoff = scores[Math.min(scores.length, HIGH_SCORE_LIMIT) - 1] || null;
+
+  if (!leader) {
+    if ((entry?.score || 0) > 0) {
+      return {
+        tone: "open",
+        chip: "OPENING MARK",
+        detail: `${entry.hero} would set the first leaderboard mark at ${entry.score} pts.`
+      };
+    }
+
+    return {
+      tone: "idle",
+      chip: "OPEN BOARD",
+      detail: "No scores posted yet. The next clean run sets the opening mark."
+    };
+  }
+
+  if ((entry?.score || 0) <= 0) {
+    if (scores.length < HIGH_SCORE_LIMIT) {
+      return {
+        tone: "idle",
+        chip: "TOP TARGET",
+        detail: `Beat ${leader.score} pts from ${leader.hero}. ${HIGH_SCORE_LIMIT - scores.length} leaderboard slot${HIGH_SCORE_LIMIT - scores.length === 1 ? "" : "s"} still open.`
+      };
+    }
+
+    return {
+      tone: "idle",
+      chip: "TOP TARGET",
+      detail: `Beat ${leader.score} pts from ${leader.hero}. ${cutoff.score} pts currently enters the top ${HIGH_SCORE_LIMIT}.`
+    };
+  }
+
+  const preview = previewHighScorePlacement(scores, {
+    ...entry,
+    createdAt: entry.createdAt || "9999-12-31T23:59:59.999Z"
+  });
+
+  if (preview.placement === 1) {
+    return {
+      tone: "top",
+      chip: "LIVE #1 PACE",
+      detail: `${entry.hero} would move ahead of ${leader.hero} with ${entry.score} pts / ${entry.combo}x combo.`
+    };
+  }
+
+  if (preview.placement && preview.qualified) {
+    const nextTarget = scores[preview.placement - 2] || leader;
+    return {
+      tone: "qualified",
+      chip: `LIVE #${preview.placement}`,
+      detail: `Current run would slot in at #${preview.placement}. ${Math.max(nextTarget.score - entry.score, 0)} more pts catches ${nextTarget.hero} above.`
+    };
+  }
+
+  const pointsNeeded = cutoff ? Math.max(cutoff.score - entry.score + 1, 1) : 1;
+  return {
+    tone: "archived",
+    chip: `OUTSIDE TOP ${HIGH_SCORE_LIMIT}`,
+    detail: `Current run sits outside the board. About ${pointsNeeded} more pts likely needed to qualify.`
+  };
+}
+
 function loadProgress() {
   try { return JSON.parse(localStorage.getItem("saga_progress") || "{}"); }
   catch { return {}; }
@@ -1015,6 +1105,7 @@ export default function App() {
   const betActionRef = useRef(0);
   const shareActionRef = useRef(0);
   const gameOverHandledRef = useRef(false);
+  const leaderboardBaselineRef = useRef(highScores);
 
   const {
     hero,
@@ -1056,10 +1147,23 @@ export default function App() {
     latestStateRef.current = state;
   }, [state]);
 
+  useEffect(() => {
+    if (!gameOver) {
+      leaderboardBaselineRef.current = highScores;
+    }
+  }, [gameOver, highScores]);
+
   const activeAbility = HERO_ABILITIES[hero.id];
   const directorPhase = getDirectorPhase(timer);
   const elapsedSeconds = GAME_TIME - timer;
   const bettingStatus = getBettingStatusSnapshot(matchStatus, timer, elapsedSeconds, currentMatchId);
+  const leaderboardRecap = getLeaderboardRecap(gameOver ? leaderboardBaselineRef.current : highScores, {
+    hero: hero.name,
+    score,
+    combo: maxCombo,
+    date: "live-run",
+    createdAt: "9999-12-31T23:59:59.999Z"
+  });
 
   async function trackEvent(message, meta = {}) {
     try {
@@ -1090,6 +1194,7 @@ export default function App() {
     if (gameOverHandledRef.current || score <= 0) return;
 
     gameOverHandledRef.current = true;
+    leaderboardBaselineRef.current = highScores;
     const completedAt = new Date().toISOString();
     const highScoreResult = saveHighScore({
       hero: hero.name,
@@ -2133,6 +2238,10 @@ export default function App() {
         {/* Leaderboard */}
         <div className="panel">
           <div className="panel-title">High Scores</div>
+          <div className={`leaderboard-recap leaderboard-recap-${leaderboardRecap.tone}`} data-testid="leaderboard-recap">
+            <span className="leaderboard-recap-chip" data-testid="leaderboard-recap-chip">{leaderboardRecap.chip}</span>
+            <span className="leaderboard-recap-detail" data-testid="leaderboard-recap-detail">{leaderboardRecap.detail}</span>
+          </div>
           <ul className="leaderboard" data-testid="high-scores-list">
             {highScores.length === 0 && <li style={{ color: "#8b949e", fontSize: "11px" }}>No scores yet</li>}
             {highScores.map((hs, i) => (

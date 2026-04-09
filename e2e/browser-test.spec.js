@@ -917,6 +917,69 @@ test.describe("Web UI", () => {
     await expect(page.locator(".stat-val.score")).toHaveText("0");
   });
 
+  test("leaderboard recap strip compares the current run against live board targets", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        { hero: "SyncFace Weaver", score: 145, combo: 6, date: "2026-04-03", createdAt: "2026-04-03T10:00:00.000Z" },
+        { hero: "Sound Crafter", score: 132, combo: 5, date: "2026-04-02", createdAt: "2026-04-02T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 128, combo: 4, date: "2026-04-01", createdAt: "2026-04-01T10:00:00.000Z" },
+        { hero: "Sound Crafter", score: 124, combo: 4, date: "2026-03-31", createdAt: "2026-03-31T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 120, combo: 3, date: "2026-03-30", createdAt: "2026-03-30T10:00:00.000Z" }
+      ]));
+    });
+    await page.reload();
+
+    await expect(page.getByTestId("leaderboard-recap-chip")).toHaveText("TOP TARGET");
+    await expect(page.getByTestId("leaderboard-recap-detail")).toContainText("Beat 145 pts from SyncFace Weaver");
+    await expect(page.getByTestId("leaderboard-recap-detail")).toContainText("120 pts currently enters the top 5");
+
+    await page.evaluate(() => {
+      window.__SAGA_DEBUG__.dispatch({
+        type: "DEBUG_PATCH_STATE",
+        patch: {
+          running: true,
+          score: 133,
+          combo: 4,
+          maxCombo: 4,
+          hero: { id: "modeler", name: "3D Modeler", hp: 6, speed: 1, desc: "HP 6 / SPD 1" }
+        }
+      });
+    });
+
+    await expect(page.getByTestId("leaderboard-recap-chip")).toHaveText("LIVE #2");
+    await expect(page.getByTestId("leaderboard-recap-detail")).toContainText("Current run would slot in at #2");
+    await expect(page.getByTestId("leaderboard-recap-detail")).toContainText("12 more pts catches SyncFace Weaver above");
+  });
+
+  test("leaderboard recap strip shows likely cutline guidance when the run is outside top 5", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        { hero: "SyncFace Weaver", score: 145, combo: 6, date: "2026-04-03", createdAt: "2026-04-03T10:00:00.000Z" },
+        { hero: "Sound Crafter", score: 132, combo: 5, date: "2026-04-02", createdAt: "2026-04-02T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 128, combo: 4, date: "2026-04-01", createdAt: "2026-04-01T10:00:00.000Z" },
+        { hero: "Sound Crafter", score: 124, combo: 4, date: "2026-03-31", createdAt: "2026-03-31T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 120, combo: 3, date: "2026-03-30", createdAt: "2026-03-30T10:00:00.000Z" }
+      ]));
+    });
+    await page.reload();
+
+    await page.evaluate(() => {
+      window.__SAGA_DEBUG__.dispatch({
+        type: "DEBUG_PATCH_STATE",
+        patch: {
+          running: true,
+          score: 90,
+          combo: 2,
+          maxCombo: 2
+        }
+      });
+    });
+
+    await expect(page.getByTestId("leaderboard-recap-chip")).toHaveText("OUTSIDE TOP 5");
+    await expect(page.getByTestId("leaderboard-recap-detail")).toContainText("Current run sits outside the board");
+    await expect(page.getByTestId("leaderboard-recap-detail")).toContainText("About 31 more pts likely needed to qualify");
+  });
+
   test("game over overlay highlights a new #1 leaderboard finish", async ({ page }) => {
     await page.evaluate(() => {
       localStorage.setItem("saga_highscores", JSON.stringify([
@@ -955,6 +1018,8 @@ test.describe("Web UI", () => {
 
     await expect(page.getByTestId("game-over-placement")).toContainText("New #1 high score");
     await expect(page.getByTestId("game-over-placement")).toContainText("SyncFace Weaver takes the lead");
+    await expect(page.getByTestId("leaderboard-recap-chip")).toHaveText("LIVE #1 PACE");
+    await expect(page.getByTestId("leaderboard-recap-detail")).toContainText("move ahead of 3D Modeler");
 
     const rows = page.getByTestId("high-score-item");
     await expect(rows.nth(0)).toContainText("#1");
