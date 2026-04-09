@@ -732,6 +732,11 @@ main {
   color: var(--teal);
 }
 
+.log-list li.log-empty::before {
+  content: "";
+  margin-right: 0;
+}
+
 /* ==================== GAME CONTROLS ==================== */
 .game-controls {
   display: flex;
@@ -1051,7 +1056,8 @@ main {
 .leaderboard-archive-trend:focus-visible,
 .leaderboard-archive-card:focus-visible,
 .leaderboard-archive-entry-form:focus-visible,
-.leaderboard li:focus-visible {
+.leaderboard li:focus-visible,
+.server-log li:focus-visible {
   outline: 2px solid rgba(88, 166, 255, 0.55);
   outline-offset: 2px;
   border-color: rgba(88, 166, 255, 0.45);

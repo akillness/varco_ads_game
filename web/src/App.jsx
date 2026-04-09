@@ -1364,6 +1364,12 @@ function getArchiveSummaryAriaLabel(label, detail) {
   return `${label}. ${detail}`;
 }
 
+function getAgentLogEntryAriaLabel(entry, index) {
+  const levelLabel = String(entry?.level || "info").toUpperCase();
+  const message = entry?.message || "Log entry unavailable.";
+  return `Agent log ${index + 1}. ${levelLabel}. ${message}`;
+}
+
 function getGameOverCalloutAriaLabel(label, message) {
   return `${label}. ${message}`;
 }
@@ -3556,10 +3562,23 @@ export default function App() {
         </div>
         <div className="panel">
           <div className="panel-title">Agent Log Feed</div>
-          <ul className="log-list server-log">
-            {serverLogs.map((entry) => (
-              <li key={entry.id}>[{entry.level}] {entry.message}</li>
-            ))}
+          <ul className="log-list server-log" aria-label="Agent log feed" data-testid="agent-log-list">
+            {serverLogs.length > 0 ? serverLogs.map((entry, index) => {
+              const entryAriaLabel = getAgentLogEntryAriaLabel(entry, index);
+              return (
+                <li
+                  key={entry.id}
+                  data-testid="agent-log-item"
+                  tabIndex={0}
+                  aria-label={entryAriaLabel}
+                  title={entryAriaLabel}
+                >
+                  [{entry.level}] {entry.message}
+                </li>
+              );
+            }) : (
+              <li className="log-empty" data-testid="agent-log-empty">No agent logs yet.</li>
+            )}
           </ul>
         </div>
       </div>

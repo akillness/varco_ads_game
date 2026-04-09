@@ -144,6 +144,37 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("arena-status-strip")).toContainText("Mission:");
   });
 
+  test("agent log feed shows an empty state and focusable server log rows", async ({ page }) => {
+    let logsPayload = [];
+    await page.route("**/api/agent/logs", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, logs: logsPayload })
+      });
+    });
+
+    await page.reload();
+    await expect(page.getByTestId("agent-log-empty")).toContainText("No agent logs yet.");
+
+    logsPayload = [
+      { id: "log-warn", level: "warn", message: "sponsor swing queued" },
+      { id: "log-info", level: "info", message: "orb collected" }
+    ];
+
+    await page.reload();
+
+    const agentLogList = page.getByTestId("agent-log-list");
+    const agentLogRows = page.getByTestId("agent-log-item");
+    await expect(agentLogList).toHaveAttribute("aria-label", "Agent log feed");
+    await expect(agentLogRows).toHaveCount(2);
+    await expect(agentLogRows.nth(0)).toHaveAttribute("tabindex", "0");
+    await expect(agentLogRows.nth(0)).toHaveAttribute("aria-label", "Agent log 1. WARN. sponsor swing queued");
+    await expect(agentLogRows.nth(1)).toHaveAttribute("title", "Agent log 2. INFO. orb collected");
+    await agentLogRows.nth(0).focus();
+    await expect(agentLogRows.nth(0)).toBeFocused();
+  });
+
   test("generates a studio pack and routes prompt chips into the matching editor slot", async ({ page }) => {
     const studioPanel = page.getByTestId("studio-pack-panel");
     await studioPanel.locator("textarea").fill("Retro arcade launch for creator heroes");
