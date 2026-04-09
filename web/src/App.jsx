@@ -1285,6 +1285,10 @@ function getArchiveSummaryAriaLabel(label, detail) {
   return `${label}. ${detail}`;
 }
 
+function getLeaderboardControlAriaLabel(control) {
+  return `${control.hero}. ${control.badge}. ${control.detail}`;
+}
+
 function getArchiveEntryTrendAriaLabel(hero, trendLabel, trendDetail) {
   return `${hero}. ${trendLabel}. ${trendDetail}`;
 }
@@ -3197,18 +3201,36 @@ export default function App() {
             <span className="leaderboard-recap-detail" data-testid="leaderboard-recap-detail">{leaderboardRecap.detail}</span>
           </div>
           <div className="leaderboard-summary-grid" data-testid="leaderboard-summary-grid">
-            <div className="leaderboard-summary-card" data-testid="leaderboard-season-summary">
+            <div
+              className="leaderboard-summary-card"
+              data-testid="leaderboard-season-summary"
+              tabIndex={0}
+              aria-label={getArchiveSummaryAriaLabel("SEASON LEAD", leaderboardSeasonSummary.seasonDetail)}
+              title={getArchiveSummaryAriaLabel("SEASON LEAD", leaderboardSeasonSummary.seasonDetail)}
+            >
               <span className="leaderboard-summary-label">SEASON LEAD</span>
               <span className="leaderboard-summary-detail" data-testid="leaderboard-season-detail">{leaderboardSeasonSummary.seasonDetail}</span>
             </div>
-            <div className="leaderboard-summary-card" data-testid="leaderboard-rival-summary">
+            <div
+              className="leaderboard-summary-card"
+              data-testid="leaderboard-rival-summary"
+              tabIndex={0}
+              aria-label={getArchiveSummaryAriaLabel("RIVAL TARGET", leaderboardSeasonSummary.rivalDetail)}
+              title={getArchiveSummaryAriaLabel("RIVAL TARGET", leaderboardSeasonSummary.rivalDetail)}
+            >
               <span className="leaderboard-summary-label">RIVAL TARGET</span>
               <span className="leaderboard-summary-detail" data-testid="leaderboard-rival-detail">{leaderboardSeasonSummary.rivalDetail}</span>
             </div>
           </div>
           <div className="leaderboard-control-panel" data-testid="leaderboard-control-panel">
             <div className="leaderboard-control-label">BOARD CONTROL</div>
-            <div className="leaderboard-control-momentum" data-testid="leaderboard-control-momentum">
+            <div
+              className="leaderboard-control-momentum"
+              data-testid="leaderboard-control-momentum"
+              tabIndex={0}
+              aria-label={getArchiveSummaryAriaLabel(leaderboardMomentum.label, leaderboardMomentum.detail)}
+              title={getArchiveSummaryAriaLabel(leaderboardMomentum.label, leaderboardMomentum.detail)}
+            >
               <span className="leaderboard-control-momentum-label">{leaderboardMomentum.label}</span>
               <span className="leaderboard-control-momentum-detail">{leaderboardMomentum.detail}</span>
             </div>
@@ -3219,6 +3241,9 @@ export default function App() {
                     key={control.hero}
                     className="leaderboard-control-card"
                     data-testid="leaderboard-control-item"
+                    tabIndex={0}
+                    aria-label={getLeaderboardControlAriaLabel(control)}
+                    title={getLeaderboardControlAriaLabel(control)}
                   >
                     <div className="leaderboard-control-topline">
                       <span className="leaderboard-control-hero">{control.hero}</span>

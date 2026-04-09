@@ -1003,17 +1003,34 @@ test.describe("Web UI", () => {
     });
     await page.reload();
 
+    const seasonSummary = page.getByTestId("leaderboard-season-summary");
+    const rivalSummary = page.getByTestId("leaderboard-rival-summary");
+    await expect(seasonSummary).toHaveAttribute("tabindex", "0");
+    await expect(seasonSummary).toHaveAttribute("aria-label", "SEASON LEAD. SyncFace Weaver leads the season with 145 pts and a 6x benchmark combo.");
+    await expect(rivalSummary).toHaveAttribute("tabindex", "0");
+    await expect(rivalSummary).toHaveAttribute("aria-label", "RIVAL TARGET. 3D Modeler currently defends the final slot at 120 pts / 3x combo.");
+
+    const momentumCard = page.getByTestId("leaderboard-control-momentum");
+    await expect(momentumCard).toHaveAttribute("tabindex", "0");
+    await expect(momentumCard).toHaveAttribute("aria-label", "MOMENTUM. Sound Crafter is riding a 3-run top-5 streak and has peaked at #2.");
+    await momentumCard.focus();
+    await expect(momentumCard).toBeFocused();
+
     const controlRows = page.getByTestId("leaderboard-control-item");
     await expect(controlRows).toHaveCount(3);
     await expect(controlRows.nth(0)).toContainText("Sound Crafter");
     await expect(controlRows.nth(0)).toContainText("DOUBLE HOLD");
     await expect(controlRows.nth(0)).toContainText("#2 best · 2 slots · 132 pts · 5x combo");
+    await expect(controlRows.nth(0)).toHaveAttribute("tabindex", "0");
+    await expect(controlRows.nth(0)).toHaveAttribute("aria-label", "Sound Crafter. DOUBLE HOLD. #2 best · 2 slots · 132 pts · 5x combo");
     await expect(controlRows.nth(1)).toContainText("3D Modeler");
     await expect(controlRows.nth(1)).toContainText("DOUBLE HOLD");
     await expect(controlRows.nth(2)).toContainText("SyncFace Weaver");
     await expect(controlRows.nth(2)).toContainText("PACE SETTER");
     await expect(controlRows.nth(2)).toContainText("#1 best · 1 slot · 145 pts · 6x combo");
-    await expect(page.getByTestId("leaderboard-control-momentum")).toContainText("Sound Crafter is riding a 3-run top-5 streak and has peaked at #2.");
+    await expect(controlRows.nth(2)).toHaveAttribute("aria-label", "SyncFace Weaver. PACE SETTER. #1 best · 1 slot · 145 pts · 6x combo");
+    await controlRows.nth(2).focus();
+    await expect(controlRows.nth(2)).toBeFocused();
   });
 
   test("leaderboard momentum summary preserves streak context even if the hero falls off the current board", async ({ page }) => {
