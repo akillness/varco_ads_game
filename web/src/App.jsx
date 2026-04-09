@@ -1364,6 +1364,20 @@ function getArchiveSummaryAriaLabel(label, detail) {
   return `${label}. ${detail}`;
 }
 
+function getShareFeedbackAriaLabel(feedback) {
+  if (!feedback?.message) {
+    return "Share status unavailable.";
+  }
+
+  const toneLabel = {
+    pending: "Pending",
+    ready: "Ready",
+    error: "Error"
+  }[feedback.tone] || "Update";
+  const channelLabel = feedback.channel ? SHARE_CHANNEL_LABELS[feedback.channel] || feedback.channel : null;
+  return `Share status. ${toneLabel}${channelLabel ? ` ${channelLabel}` : ""}. ${feedback.message}`;
+}
+
 function getAgentLogEntryAriaLabel(entry, index) {
   const levelLabel = String(entry?.level || "info").toUpperCase();
   const message = entry?.message || "Log entry unavailable.";
@@ -3319,7 +3333,15 @@ export default function App() {
             <button type="button" className="share-btn" data-testid="share-button-telegram" onClick={() => shareResult("telegram")}>{shareButtonLabel("telegram")}</button>
           </div>
           {shareFeedback && (
-            <div className={`share-feedback share-feedback-${shareFeedback.tone}`} data-testid="share-feedback">
+            <div
+              className={`share-feedback share-feedback-${shareFeedback.tone}`}
+              data-testid="share-feedback"
+              role="status"
+              aria-live="polite"
+              tabIndex={0}
+              aria-label={getShareFeedbackAriaLabel(shareFeedback)}
+              title={getShareFeedbackAriaLabel(shareFeedback)}
+            >
               {shareFeedback.message}
             </div>
           )}

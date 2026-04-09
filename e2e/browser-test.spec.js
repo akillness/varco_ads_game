@@ -1116,11 +1116,17 @@ test.describe("Web UI", () => {
 
     await shareButtonX.click();
     await expect(shareButtonX).toHaveText("Sharing X...");
-    await expect(page.getByTestId("share-feedback")).toContainText("Preparing X share link...");
+    const shareFeedback = page.getByTestId("share-feedback");
+    await expect(shareFeedback).toContainText("Preparing X share link...");
+    await expect(shareFeedback).toHaveAttribute("role", "status");
+    await expect(shareFeedback).toHaveAttribute("aria-label", "Share status. Pending X. Preparing X share link...");
+    await shareFeedback.focus();
+    await expect(shareFeedback).toBeFocused();
 
     await shareButtonTelegram.click();
     await expect(shareButtonTelegram).toHaveText("Shared Telegram");
-    await expect(page.getByTestId("share-feedback")).toContainText("Opened Telegram share link.");
+    await expect(shareFeedback).toContainText("Opened Telegram share link.");
+    await expect(shareFeedback).toHaveAttribute("aria-label", "Share status. Ready Telegram. Opened Telegram share link.");
     await expect(page.getByTestId("share-button-x")).toHaveText("Share X");
 
     let openedUrls = await page.evaluate(() => window.__openedUrls.slice());
@@ -1154,7 +1160,12 @@ test.describe("Web UI", () => {
     const shareButtonFacebook = page.getByTestId("share-button-facebook");
     await shareButtonFacebook.click();
 
-    await expect(page.getByTestId("share-feedback")).toContainText("share backend unavailable");
+    const shareFeedback = page.getByTestId("share-feedback");
+    await expect(shareFeedback).toContainText("share backend unavailable");
+    await expect(shareFeedback).toHaveAttribute("aria-label", "Share status. Error Facebook. share backend unavailable");
+    await shareButtonFacebook.focus();
+    await shareFeedback.focus();
+    await expect(shareFeedback).toBeFocused();
     await expect(shareButtonFacebook).toHaveText("Share Facebook");
     const openedUrls = await page.evaluate(() => window.__openedUrls.slice());
     expect(openedUrls).toEqual([]);
