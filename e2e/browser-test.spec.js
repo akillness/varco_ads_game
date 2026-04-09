@@ -1192,6 +1192,42 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("game-over-momentum")).toContainText("Sound Crafter opens a new top-5 streak with this #4 finish.");
   });
 
+  test("game over overlay keeps the comeback message on a new streak when the hero does not beat their prior peak", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        { hero: "3D Modeler", score: 175, combo: 6, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z" },
+        { hero: "SyncFace Weaver", score: 164, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 152, combo: 5, date: "2026-04-03", createdAt: "2026-04-03T10:00:00.000Z" },
+        { hero: "SyncFace Weaver", score: 148, combo: 5, date: "2026-04-02", createdAt: "2026-04-02T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 139, combo: 4, date: "2026-04-01", createdAt: "2026-04-01T10:00:00.000Z" }
+      ]));
+      localStorage.setItem("saga_highscore_history", JSON.stringify([
+        { hero: "Sound Crafter", score: 130, combo: 4, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z", placement: 6, qualified: false },
+        { hero: "Sound Crafter", score: 164, combo: 5, date: "2026-04-02", createdAt: "2026-04-02T10:00:00.000Z", placement: 2, qualified: true },
+        { hero: "3D Modeler", score: 175, combo: 6, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z", placement: 1, qualified: true }
+      ]));
+    });
+    await page.reload();
+
+    await page.evaluate(() => {
+      window.__SAGA_DEBUG__.dispatch({
+        type: "DEBUG_PATCH_STATE",
+        patch: {
+          running: true,
+          timer: 1,
+          score: 150,
+          combo: 5,
+          maxCombo: 5,
+          hero: { id: "sounder", name: "Sound Crafter", hp: 5, speed: 1, desc: "HP 5 / SPD 1" }
+        }
+      });
+      window.__SAGA_DEBUG__.dispatch({ type: "TIMER_TICK" });
+    });
+
+    await expect(page.getByTestId("game-over-placement")).toContainText("High score secured at #4.");
+    await expect(page.getByTestId("game-over-momentum")).toContainText("Sound Crafter opens a new top-5 streak with this #4 finish.");
+  });
+
   test("game over overlay prioritizes a new season-best placement when a comeback run beats the hero's previous peak", async ({ page }) => {
     await page.evaluate(() => {
       localStorage.setItem("saga_highscores", JSON.stringify([
