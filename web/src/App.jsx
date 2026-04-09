@@ -919,6 +919,7 @@ function describeLeaderboardMomentumShift(previousHistory, history, result) {
   const before = getHeroMomentumStats(previousHistory || [], result.entry.hero);
   const after = getHeroMomentumStats(history || [], result.entry.hero);
   const tone = result.placement === 1 ? "top" : result.qualified ? "qualified" : "archived";
+  const improvedBestPlacement = after.bestPlacement < before.bestPlacement && Number.isFinite(after.bestPlacement);
 
   if (!result.qualified) {
     if (before.currentStreak > 0 && after.currentStreak === 0) {
@@ -932,6 +933,13 @@ function describeLeaderboardMomentumShift(previousHistory, history, result) {
 
   if (after.currentStreak > before.currentStreak) {
     if (before.currentStreak === 0) {
+      if (improvedBestPlacement && before.bestPlacement < Number.MAX_SAFE_INTEGER) {
+        return {
+          tone,
+          message: `${result.entry.hero} locks in a new season-best placement at #${after.bestPlacement}.`
+        };
+      }
+
       return {
         tone,
         message: `${result.entry.hero} opens a new top-${HIGH_SCORE_LIMIT} streak with this #${result.placement} finish.`
@@ -944,7 +952,7 @@ function describeLeaderboardMomentumShift(previousHistory, history, result) {
     };
   }
 
-  if (after.bestPlacement < before.bestPlacement && Number.isFinite(after.bestPlacement)) {
+  if (improvedBestPlacement) {
     return {
       tone,
       message: `${result.entry.hero} locks in a new season-best placement at #${after.bestPlacement}.`
