@@ -1470,12 +1470,31 @@ function handleFocusableSiblingKeyDown(event, selector, keyMap) {
   siblings[nextIndex]?.focus();
 }
 
+function handleLeaderboardSummaryKeyDown(event) {
+  handleFocusableSiblingKeyDown(event, '[data-testid="leaderboard-season-summary"], [data-testid="leaderboard-rival-summary"]', ["ArrowRight", "ArrowLeft"]);
+}
+
 function handleLeaderboardControlKeyDown(event) {
   handleFocusableSiblingKeyDown(event, '[data-testid="leaderboard-control-item"]', ["ArrowDown", "ArrowUp"]);
 }
 
+function handleArchiveSummaryKeyDown(event) {
+  handleFocusableSiblingKeyDown(event, '[data-testid="leaderboard-archive-story"], [data-testid="leaderboard-archive-delta"], [data-testid="leaderboard-archive-trend"]', ["ArrowRight", "ArrowLeft"]);
+}
+
+function handleArchiveItemKeyDown(event) {
+  if (event.target !== event.currentTarget) {
+    return;
+  }
+  handleFocusableSiblingKeyDown(event, '[data-testid="leaderboard-archive-item"]', ["ArrowDown", "ArrowUp"]);
+}
+
 function handleArchiveFormChipKeyDown(event) {
   handleFocusableSiblingKeyDown(event, '[data-testid="leaderboard-archive-entry-form-chip"]', ["ArrowRight", "ArrowLeft"]);
+}
+
+function handleHighScoreItemKeyDown(event) {
+  handleFocusableSiblingKeyDown(event, '[data-testid="high-score-item"]', ["ArrowDown", "ArrowUp"]);
 }
 
 function getArchiveSummaryAriaLabel(label, detail) {
@@ -3628,6 +3647,7 @@ export default function App() {
               tabIndex={0}
               aria-label={getArchiveSummaryAriaLabel("SEASON LEAD", leaderboardSeasonSummary.seasonDetail)}
               title={getArchiveSummaryAriaLabel("SEASON LEAD", leaderboardSeasonSummary.seasonDetail)}
+              onKeyDown={handleLeaderboardSummaryKeyDown}
             >
               <span className="leaderboard-summary-label">SEASON LEAD</span>
               <span className="leaderboard-summary-detail" data-testid="leaderboard-season-detail">{leaderboardSeasonSummary.seasonDetail}</span>
@@ -3638,6 +3658,7 @@ export default function App() {
               tabIndex={0}
               aria-label={getArchiveSummaryAriaLabel("RIVAL TARGET", leaderboardSeasonSummary.rivalDetail)}
               title={getArchiveSummaryAriaLabel("RIVAL TARGET", leaderboardSeasonSummary.rivalDetail)}
+              onKeyDown={handleLeaderboardSummaryKeyDown}
             >
               <span className="leaderboard-summary-label">RIVAL TARGET</span>
               <span className="leaderboard-summary-detail" data-testid="leaderboard-rival-detail">{leaderboardSeasonSummary.rivalDetail}</span>
@@ -3717,6 +3738,7 @@ export default function App() {
               tabIndex={0}
               aria-label={getArchiveSummaryAriaLabel(leaderboardSeasonArchive.storyLabel, leaderboardSeasonArchive.storyDetail)}
               title={getArchiveSummaryAriaLabel(leaderboardSeasonArchive.storyLabel, leaderboardSeasonArchive.storyDetail)}
+              onKeyDown={handleArchiveSummaryKeyDown}
             >
               <span className="leaderboard-archive-story-label">{leaderboardSeasonArchive.storyLabel}</span>
               <span className="leaderboard-archive-story-detail">{leaderboardSeasonArchive.storyDetail}</span>
@@ -3727,6 +3749,7 @@ export default function App() {
               tabIndex={0}
               aria-label={getArchiveSummaryAriaLabel(leaderboardSeasonArchive.deltaLabel, leaderboardSeasonArchive.deltaDetail)}
               title={getArchiveSummaryAriaLabel(leaderboardSeasonArchive.deltaLabel, leaderboardSeasonArchive.deltaDetail)}
+              onKeyDown={handleArchiveSummaryKeyDown}
             >
               <span className="leaderboard-archive-delta-label">{leaderboardSeasonArchive.deltaLabel}</span>
               <span className="leaderboard-archive-delta-detail">{leaderboardSeasonArchive.deltaDetail}</span>
@@ -3737,6 +3760,7 @@ export default function App() {
               tabIndex={0}
               aria-label={getArchiveSummaryAriaLabel(leaderboardSeasonArchive.trendLabel, leaderboardSeasonArchive.trendDetail)}
               title={getArchiveSummaryAriaLabel(leaderboardSeasonArchive.trendLabel, leaderboardSeasonArchive.trendDetail)}
+              onKeyDown={handleArchiveSummaryKeyDown}
             >
               <span className="leaderboard-archive-trend-label">{leaderboardSeasonArchive.trendLabel}</span>
               <span className="leaderboard-archive-trend-detail">{leaderboardSeasonArchive.trendDetail}</span>
@@ -3751,6 +3775,7 @@ export default function App() {
                     tabIndex={0}
                     aria-label={getArchiveEntryAriaLabel(entry)}
                     title={getArchiveEntryAriaLabel(entry)}
+                    onKeyDown={handleArchiveItemKeyDown}
                   >
                     <div className="leaderboard-archive-topline">
                       <span className="leaderboard-archive-hero">{entry.hero}</span>
@@ -3817,6 +3842,7 @@ export default function App() {
                   tabIndex={0}
                   aria-label={itemAriaLabel}
                   title={itemAriaLabel}
+                  onKeyDown={handleHighScoreItemKeyDown}
                 >
                   <span className="rank">#{i + 1}</span>
                   <span>{hs.hero}</span>

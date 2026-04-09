@@ -1828,6 +1828,91 @@ test.describe("Web UI", () => {
     await expect(firstFormChips.nth(2)).toBeFocused();
   });
 
+  test("leaderboard summary cards, archive cards, and live rows support keyboard cycling", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        { hero: "Sound Crafter", score: 132, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z" },
+        { hero: "SyncFace Weaver", score: 145, combo: 6, date: "2026-04-03", createdAt: "2026-04-03T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 128, combo: 4, date: "2026-04-02", createdAt: "2026-04-02T10:00:00.000Z" },
+        { hero: "Sound Crafter", score: 124, combo: 4, date: "2026-04-01", createdAt: "2026-04-01T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 120, combo: 3, date: "2026-03-30", createdAt: "2026-03-30T10:00:00.000Z" }
+      ]));
+      localStorage.setItem("saga_highscore_history", JSON.stringify([
+        { hero: "Sound Crafter", score: 132, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z", placement: 2, qualified: true },
+        { hero: "Sound Crafter", score: 129, combo: 5, date: "2026-04-03", createdAt: "2026-04-03T08:00:00.000Z", placement: 3, qualified: true },
+        { hero: "Sound Crafter", score: 121, combo: 4, date: "2026-04-02", createdAt: "2026-04-02T08:00:00.000Z", placement: 5, qualified: true },
+        { hero: "3D Modeler", score: 128, combo: 4, date: "2026-04-02", createdAt: "2026-04-02T10:00:00.000Z", placement: 3, qualified: true }
+      ]));
+    });
+    await page.reload();
+
+    const seasonSummary = page.getByTestId("leaderboard-season-summary");
+    const rivalSummary = page.getByTestId("leaderboard-rival-summary");
+    await seasonSummary.focus();
+    await expect(seasonSummary).toBeFocused();
+
+    await page.keyboard.press("ArrowRight");
+    await expect(rivalSummary).toBeFocused();
+
+    await page.keyboard.press("Home");
+    await expect(seasonSummary).toBeFocused();
+
+    await page.keyboard.press("ArrowLeft");
+    await expect(rivalSummary).toBeFocused();
+
+    const archiveStory = page.getByTestId("leaderboard-archive-story");
+    const archiveDelta = page.getByTestId("leaderboard-archive-delta");
+    const archiveTrend = page.getByTestId("leaderboard-archive-trend");
+    await archiveStory.focus();
+    await expect(archiveStory).toBeFocused();
+
+    await page.keyboard.press("ArrowRight");
+    await expect(archiveDelta).toBeFocused();
+
+    await page.keyboard.press("End");
+    await expect(archiveTrend).toBeFocused();
+
+    await page.keyboard.press("Home");
+    await expect(archiveStory).toBeFocused();
+
+    await page.keyboard.press("ArrowLeft");
+    await expect(archiveTrend).toBeFocused();
+
+    const archiveRows = page.getByTestId("leaderboard-archive-item");
+    await expect(archiveRows).toHaveCount(4);
+    await archiveRows.nth(0).focus();
+    await expect(archiveRows.nth(0)).toBeFocused();
+
+    await page.keyboard.press("ArrowDown");
+    await expect(archiveRows.nth(1)).toBeFocused();
+
+    await page.keyboard.press("End");
+    await expect(archiveRows.nth(3)).toBeFocused();
+
+    await page.keyboard.press("Home");
+    await expect(archiveRows.nth(0)).toBeFocused();
+
+    await page.keyboard.press("ArrowUp");
+    await expect(archiveRows.nth(3)).toBeFocused();
+
+    const highScoreRows = page.getByTestId("high-score-item");
+    await expect(highScoreRows).toHaveCount(5);
+    await highScoreRows.nth(0).focus();
+    await expect(highScoreRows.nth(0)).toBeFocused();
+
+    await page.keyboard.press("ArrowDown");
+    await expect(highScoreRows.nth(1)).toBeFocused();
+
+    await page.keyboard.press("End");
+    await expect(highScoreRows.nth(4)).toBeFocused();
+
+    await page.keyboard.press("Home");
+    await expect(highScoreRows.nth(0)).toBeFocused();
+
+    await page.keyboard.press("ArrowUp");
+    await expect(highScoreRows.nth(4)).toBeFocused();
+  });
+
   test("leaderboard archive hero filter survives reloads and clears stale saved heroes", async ({ page }) => {
     await page.evaluate(() => {
       localStorage.setItem("saga_highscores", JSON.stringify([
