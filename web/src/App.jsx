@@ -1299,6 +1299,17 @@ function getEditorTabAriaLabel(tabLabel, isActive) {
   return `Show the ${tabLabel}${isActive ? "; currently selected" : ""}.`;
 }
 
+function getStudioQueueItemAriaLabel(item, isActive) {
+  if (!item) {
+    return "Load production queue item.";
+  }
+
+  const laneLabel = item.lane === "social"
+    ? `marketing copy for ${item.key}`
+    : `${item.lane} prompt for ${item.key}`;
+  return `Load ${item.label} into ${laneLabel}${isActive ? "; currently selected" : ""}.`;
+}
+
 function handleSegmentedArrowKeyDown(event, currentId, items, onSelect, buttonTestId) {
   const navigationKeys = ["ArrowLeft", "ArrowRight", "Home", "End"];
   if (!navigationKeys.includes(event.key) || !Array.isArray(items) || items.length < 2) {
@@ -1366,6 +1377,21 @@ function handleMarketingAngleKeyDown(event, currentAngleId, marketingAngles, onS
 
 function handleEditorTabKeyDown(event, currentTabId, onSelect) {
   handleSegmentedArrowKeyDown(event, currentTabId, EDITOR_TABS, onSelect, "studio-editor-tab");
+}
+
+function handleStudioQueueKeyDown(event, currentQueueItemId, queueItems, onSelect) {
+  handleSegmentedArrowKeyDown(
+    event,
+    currentQueueItemId,
+    queueItems,
+    (queueItemId) => {
+      const nextQueueItem = queueItems.find((item) => item.id === queueItemId);
+      if (nextQueueItem) {
+        onSelect(nextQueueItem);
+      }
+    },
+    "studio-queue-item"
+  );
 }
 
 function getArchiveSummaryAriaLabel(label, detail) {
@@ -2204,6 +2230,7 @@ export default function App() {
   const [studioStatusMessage, setStudioStatusMessage] = useState("");
   const [studioCache, setStudioCache] = useState(null);
   const [selectedMarketingAngle, setSelectedMarketingAngle] = useState(null);
+  const [selectedQueueItemId, setSelectedQueueItemId] = useState(null);
   const [marketingCopyFeedback, setMarketingCopyFeedback] = useState(null);
   const [betFeedback, setBetFeedback] = useState(null);
   const [betPending, setBetPending] = useState(false);
@@ -2589,6 +2616,7 @@ export default function App() {
     } else {
       setSelectedMarketingAngle(null);
     }
+    setSelectedQueueItemId(null);
     clearMarketingCopyFeedback();
   }, [studioPack?.packId]);
 
@@ -2678,6 +2706,7 @@ export default function App() {
     setStudioStatusMessage("");
     setEditorDrafts({ sound: {}, asset: {} });
     setSelectedMarketingAngle(null);
+    setSelectedQueueItemId(null);
     clearMarketingCopyFeedback();
   }
 
@@ -2701,6 +2730,7 @@ export default function App() {
   }
 
   function loadQueueItem(item) {
+    setSelectedQueueItemId(item.id);
     if (item.lane === "social") {
       const angle = studioPack?.marketingAngles?.find((entry) => entry.channel === item.key) || null;
       selectMarketingAngle(angle);
@@ -3299,19 +3329,27 @@ export default function App() {
                 <span>{studioPack.savings.estimatedCallsSaved} calls saved</span>
                 <span>{studioPack.savings.estimatedCallsWithPack}/{studioPack.savings.estimatedCallsWithoutPack} planned</span>
               </div>
-              <div className="studio-queue">
+              <div className="studio-queue" data-testid="studio-queue-group">
                 <div className="studio-suggestion-title">Production Queue</div>
-                {studioPack.productionQueue.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="studio-queue-item"
-                    onClick={() => loadQueueItem(item)}
-                  >
-                    <strong>{item.label}</strong>
-                    <span>{item.lane} / {item.key}</span>
-                  </button>
-                ))}
+                {studioPack.productionQueue.map((item) => {
+                  const isActive = selectedQueueItemId === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`studio-queue-item${isActive ? " active" : ""}`}
+                      data-testid="studio-queue-item"
+                      aria-pressed={isActive}
+                      aria-description={getStudioQueueItemAriaLabel(item, isActive)}
+                      title={getStudioQueueItemAriaLabel(item, isActive)}
+                      onClick={() => loadQueueItem(item)}
+                      onKeyDown={(event) => handleStudioQueueKeyDown(event, item.id, studioPack.productionQueue, loadQueueItem)}
+                    >
+                      <strong>{item.label}</strong>
+                      <span>{item.lane} / {item.key}</span>
+                    </button>
+                  );
+                })}
               </div>
               <div className="studio-suggestion-group">
                 <div className="studio-suggestion-title">Sound Prompts</div>

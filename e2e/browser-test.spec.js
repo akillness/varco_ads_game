@@ -405,6 +405,52 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("studio-copy-button")).toHaveText("Copy Discord copy");
   });
 
+  test("production queue supports keyboard cycling and pressed-state accessibility", async ({ page }) => {
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(createStudioPackFixture("Retro arcade launch for creator heroes", { suffix: "retro" }))
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    await studioPanel.locator("textarea").fill("Retro arcade launch for creator heroes");
+    await studioPanel.getByRole("button", { name: "Generate Studio Pack" }).click();
+
+    const queueGroup = page.getByTestId("studio-queue-group");
+    const queueItems = queueGroup.locator('button[data-testid="studio-queue-item"]');
+    const queueSound = queueGroup.getByRole("button", { name: /Queue sound/i });
+    const queueCopy = queueGroup.getByRole("button", { name: /Queue copy/i });
+
+    await expect(queueItems).toHaveCount(2);
+    await expect(queueSound).toHaveAttribute("aria-pressed", "false");
+    await expect(queueSound).toHaveAttribute("aria-description", "Load Queue sound into sound prompt for bgm.");
+    await expect(queueCopy).toHaveAttribute("aria-pressed", "false");
+    await expect(queueCopy).toHaveAttribute("aria-description", "Load Queue copy into marketing copy for launch.");
+
+    await queueSound.focus();
+    await expect(queueSound).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(queueCopy).toBeFocused();
+    await expect(queueCopy).toHaveAttribute("aria-pressed", "true");
+    await expect(queueSound).toHaveAttribute("aria-pressed", "false");
+    await expect(page.getByTestId("studio-copy-card")).toContainText("Launch retro");
+    await expect(page.getByTestId("studio-copy-button")).toHaveText("Copy Launch retro copy");
+
+    await page.keyboard.press("Home");
+    await expect(queueSound).toBeFocused();
+    await expect(queueSound).toHaveAttribute("aria-pressed", "true");
+    await expect(queueCopy).toHaveAttribute("aria-pressed", "false");
+    await expect(page.getByTestId("sound-tab-bgm")).toHaveClass(/active/);
+    await expect(page.locator(".sound-editor .prompt-input")).toHaveValue(/Retro arcade launch/);
+
+    await page.keyboard.press("ArrowLeft");
+    await expect(queueCopy).toBeFocused();
+    await expect(queueCopy).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("studio-copy-card")).toContainText("Launch retro");
+  });
+
   test("hero selector supports keyboard cycling and pressed-state accessibility", async ({ page }) => {
     const heroGroup = page.getByTestId("hero-select-group");
     const modelerButton = heroGroup.getByRole("button", { name: "3D Modeler", exact: true });
