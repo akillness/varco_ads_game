@@ -1142,10 +1142,12 @@ function getLeaderboardArchiveDelta(scores, history, activeFilter = "all") {
     };
   }
 
+  const rivalPlacement = scores.findIndex((scoreEntry) => isSameHighScoreEntry(scoreEntry, rival)) + 1 || 1;
+
   return {
     label: "LEADER GAP",
     detail: getLeaderboardArchiveGapCopy(latestEntry, rival, {
-      score: (amount, target) => `${latestEntry.hero}'s latest archive is ${amount} pt${amount === 1 ? "" : "s"} shy of ${target.hero}'s higher live slot (#${target.placement || 1} at ${target.score} pts).`,
+      score: (amount, target) => `${latestEntry.hero}'s latest archive is ${amount} pt${amount === 1 ? "" : "s"} shy of ${target.hero}'s higher live slot (#${rivalPlacement} at ${target.score} pts).`,
       combo: (amount, target) => `${latestEntry.hero}'s latest archive matches ${target.score} pts, but still needs ${amount} more combo to steal ${target.hero}'s higher live slot.`,
       tiebreak: (target) => `${latestEntry.hero}'s latest archive already matches ${target.hero}'s ${target.score}-pt / ${target.combo}x line and would flip that higher slot on recency.`,
       ahead: (target) => `${latestEntry.hero}'s latest archive has already climbed above ${target.hero}'s higher live slot.`

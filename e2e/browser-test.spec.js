@@ -1177,7 +1177,7 @@ test.describe("Web UI", () => {
     await page.reload();
 
     await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("LEADER GAP");
-    await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("Sound Crafter's latest archive is 4 pts shy of 3D Modeler's higher live slot (#1 at 144 pts).");
+    await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("Sound Crafter's latest archive is 4 pts shy of 3D Modeler's higher live slot (#2 at 144 pts).");
     await expect(page.getByTestId("leaderboard-archive-delta")).not.toContainText("CUTLINE DELTA");
     await expect(page.getByTestId("leaderboard-archive-item").first()).toContainText("#3 FINISH");
   });
