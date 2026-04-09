@@ -985,6 +985,40 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("leaderboard-rival-detail")).toContainText("3D Modeler defends #5 at 120 pts. 31 more pts bumps them off the board.");
   });
 
+  test("leaderboard board-control panel ranks heroes by slot control before score", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        { hero: "Sound Crafter", score: 132, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z" },
+        { hero: "SyncFace Weaver", score: 145, combo: 6, date: "2026-04-03", createdAt: "2026-04-03T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 128, combo: 4, date: "2026-04-02", createdAt: "2026-04-02T10:00:00.000Z" },
+        { hero: "Sound Crafter", score: 124, combo: 4, date: "2026-04-01", createdAt: "2026-04-01T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 120, combo: 3, date: "2026-03-30", createdAt: "2026-03-30T10:00:00.000Z" }
+      ]));
+    });
+    await page.reload();
+
+    const controlRows = page.getByTestId("leaderboard-control-item");
+    await expect(controlRows).toHaveCount(3);
+    await expect(controlRows.nth(0)).toContainText("Sound Crafter");
+    await expect(controlRows.nth(0)).toContainText("DOUBLE HOLD");
+    await expect(controlRows.nth(0)).toContainText("#2 best · 2 slots · 132 pts · 5x combo");
+    await expect(controlRows.nth(1)).toContainText("3D Modeler");
+    await expect(controlRows.nth(1)).toContainText("DOUBLE HOLD");
+    await expect(controlRows.nth(2)).toContainText("SyncFace Weaver");
+    await expect(controlRows.nth(2)).toContainText("PACE SETTER");
+    await expect(controlRows.nth(2)).toContainText("#1 best · 1 slot · 145 pts · 6x combo");
+  });
+
+  test("leaderboard board-control panel shows an empty-state prompt with no posted runs", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.removeItem("saga_highscores");
+    });
+    await page.reload();
+
+    await expect(page.getByTestId("leaderboard-control-empty")).toContainText("Post the first clean run to reveal hero control badges.");
+    await expect(page.getByTestId("leaderboard-control-item")).toHaveCount(0);
+  });
+
   test("game over overlay highlights a new #1 leaderboard finish", async ({ page }) => {
     await page.evaluate(() => {
       localStorage.setItem("saga_highscores", JSON.stringify([

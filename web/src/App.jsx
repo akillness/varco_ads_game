@@ -700,6 +700,57 @@ function getLeaderboardSeasonSummary(scores, entry) {
   };
 }
 
+function getLeaderboardBoardControl(scores) {
+  if (!scores.length) {
+    return [];
+  }
+
+  const heroStats = new Map();
+  scores.forEach((scoreEntry, index) => {
+    const rank = index + 1;
+    const existing = heroStats.get(scoreEntry.hero);
+    if (!existing) {
+      heroStats.set(scoreEntry.hero, {
+        hero: scoreEntry.hero,
+        slots: 1,
+        bestRank: rank,
+        bestScore: scoreEntry.score,
+        bestCombo: scoreEntry.combo
+      });
+      return;
+    }
+
+    existing.slots += 1;
+  });
+
+  return Array.from(heroStats.values())
+    .sort((a, b) => (
+      b.slots - a.slots
+      || a.bestRank - b.bestRank
+      || b.bestScore - a.bestScore
+      || b.bestCombo - a.bestCombo
+      || a.hero.localeCompare(b.hero)
+    ))
+    .map((stat) => {
+      let badge = "CHASER";
+      if (stat.slots >= 3) {
+        badge = "BOARD CONTROL";
+      } else if (stat.slots === 2) {
+        badge = "DOUBLE HOLD";
+      } else if (stat.bestRank === 1) {
+        badge = "PACE SETTER";
+      } else if (stat.bestRank === HIGH_SCORE_LIMIT) {
+        badge = "CUTLINE DEFENDER";
+      }
+
+      return {
+        ...stat,
+        badge,
+        detail: `#${stat.bestRank} best · ${stat.slots} slot${stat.slots === 1 ? "" : "s"} · ${stat.bestScore} pts · ${stat.bestCombo}x combo`
+      };
+    });
+}
+
 function loadProgress() {
   try { return JSON.parse(localStorage.getItem("saga_progress") || "{}"); }
   catch { return {}; }
@@ -1228,6 +1279,7 @@ export default function App() {
   };
   const leaderboardRecap = getLeaderboardRecap(leaderboardReference, leaderboardEntryPreview);
   const leaderboardSeasonSummary = getLeaderboardSeasonSummary(leaderboardReference, leaderboardEntryPreview);
+  const leaderboardBoardControl = getLeaderboardBoardControl(leaderboardReference);
 
   async function trackEvent(message, meta = {}) {
     try {
@@ -2315,6 +2367,30 @@ export default function App() {
               <span className="leaderboard-summary-label">RIVAL TARGET</span>
               <span className="leaderboard-summary-detail" data-testid="leaderboard-rival-detail">{leaderboardSeasonSummary.rivalDetail}</span>
             </div>
+          </div>
+          <div className="leaderboard-control-panel" data-testid="leaderboard-control-panel">
+            <div className="leaderboard-control-label">BOARD CONTROL</div>
+            {leaderboardBoardControl.length > 0 ? (
+              <div className="leaderboard-control-list" data-testid="leaderboard-control-list">
+                {leaderboardBoardControl.map((control) => (
+                  <div
+                    key={control.hero}
+                    className="leaderboard-control-card"
+                    data-testid="leaderboard-control-item"
+                  >
+                    <div className="leaderboard-control-topline">
+                      <span className="leaderboard-control-hero">{control.hero}</span>
+                      <span className="leaderboard-control-badge">{control.badge}</span>
+                    </div>
+                    <div className="leaderboard-control-detail">{control.detail}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="leaderboard-control-empty" data-testid="leaderboard-control-empty">
+                Post the first clean run to reveal hero control badges.
+              </div>
+            )}
           </div>
           <ul className="leaderboard" data-testid="high-scores-list">
             {highScores.length === 0 && <li style={{ color: "#8b949e", fontSize: "11px" }}>No scores yet</li>}

@@ -859,6 +859,71 @@ main {
   color: #ffb4ae;
 }
 
+.leaderboard-control-panel {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(139, 148, 158, 0.16);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.leaderboard-control-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #8b949e;
+}
+
+.leaderboard-control-list {
+  display: grid;
+  gap: 8px;
+}
+
+.leaderboard-control-card {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(240, 136, 62, 0.16);
+  background: linear-gradient(135deg, rgba(240, 136, 62, 0.08), rgba(88, 166, 255, 0.05));
+}
+
+.leaderboard-control-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.leaderboard-control-hero {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.leaderboard-control-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 176, 31, 0.25);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--combo);
+  white-space: nowrap;
+}
+
+.leaderboard-control-detail,
+.leaderboard-control-empty {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #c9d1d9;
+}
+
 .leaderboard {
   list-style: none;
   font-size: 11px;
