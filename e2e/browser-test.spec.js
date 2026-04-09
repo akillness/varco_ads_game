@@ -193,7 +193,7 @@ test.describe("Web UI", () => {
     await expect(page.locator(".asset-editor .prompt-input")).toHaveValue(/rogue ad-bot/i);
   });
 
-  test("studio pack ignores stale success after the brief changes and a newer pack is generated", async ({ page }) => {
+  test("studio pack status is keyboard-readable and ignores stale success after the brief changes", async ({ page }) => {
     let releaseFirstPack;
     const firstPackPending = new Promise((resolve) => {
       releaseFirstPack = resolve;
@@ -222,25 +222,59 @@ test.describe("Web UI", () => {
     const studioPanel = page.getByTestId("studio-pack-panel");
     const briefInput = studioPanel.locator("textarea");
     const generateButton = studioPanel.locator("button.bet-btn").first();
+    const studioStatus = page.getByTestId("studio-pack-status");
 
     await briefInput.fill("Retro arcade launch for creator heroes");
     await generateButton.click();
     await expect(generateButton).toHaveText("Building Pack...");
+    await expect(studioStatus).toContainText("BUILDING PACK");
+    await expect(studioStatus).toContainText("Generating a reusable promo pack for 3D Modeler.");
+    await expect(studioStatus).toHaveAttribute("aria-label", /Studio pack status\. Pending\. BUILDING PACK\./);
+    await studioStatus.focus();
+    await expect(studioStatus).toBeFocused();
 
     await briefInput.fill("Midnight remix pack for creator duels");
     await expect(generateButton).toHaveText("Generate Studio Pack");
     await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(studioStatus).toHaveCount(0);
 
     await generateButton.click();
+    await expect(studioStatus).toContainText("PACK READY");
+    await expect(studioStatus).toContainText("Fresh studio pack ready for 3D Modeler.");
+    await expect(studioStatus).toContainText("Midnight remix pack for creator duels headline");
     await expect(page.locator(".studio-pack-card")).toContainText("Midnight remix pack for creator duels headline");
     await expect(page.getByTestId("studio-copy-card")).toContainText("Midnight remix pack for creator duels launch copy");
 
     releaseFirstPack();
     await page.waitForTimeout(50);
 
+    await expect(studioStatus).toContainText("PACK READY");
+    await expect(studioStatus).toContainText("Midnight remix pack for creator duels headline");
     await expect(page.locator(".studio-pack-card")).toContainText("Midnight remix pack for creator duels headline");
     await expect(page.locator(".studio-pack-card")).not.toContainText("Retro arcade launch for creator heroes headline");
     await expect(page.getByTestId("studio-copy-card")).toContainText("Midnight remix pack for creator duels launch copy");
+  });
+
+  test("studio pack status surfaces backend failures without leaving stale content behind", async ({ page }) => {
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: false, message: "studio pack timeout" })
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    await studioPanel.locator("textarea").fill("Retro arcade launch for creator heroes");
+    await studioPanel.getByRole("button", { name: "Generate Studio Pack" }).click();
+
+    const studioStatus = page.getByTestId("studio-pack-status");
+    await expect(studioStatus).toContainText("PACK ERROR");
+    await expect(studioStatus).toContainText("Studio pack request failed. studio pack timeout");
+    await expect(studioStatus).toHaveAttribute("aria-label", /Studio pack status\. Error\. PACK ERROR\. Studio pack request failed\. studio pack timeout/);
+    await studioStatus.focus();
+    await expect(studioStatus).toBeFocused();
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
   });
 
   test("marketing copy card confirms clipboard copies and clears feedback when switching channels", async ({ page }) => {

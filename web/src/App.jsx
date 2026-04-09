@@ -1378,6 +1378,55 @@ function getShareFeedbackAriaLabel(feedback) {
   return `Share status. ${toneLabel}${channelLabel ? ` ${channelLabel}` : ""}. ${feedback.message}`;
 }
 
+function getStudioPackStatusSnapshot(status, studioPack, heroName, errorMessage = "") {
+  if (status === "loading") {
+    return {
+      tone: "pending",
+      chip: "BUILDING PACK",
+      detail: `Generating a reusable promo pack for ${heroName}.`
+    };
+  }
+
+  if (status === "cached") {
+    return {
+      tone: "ready",
+      chip: "CACHE HIT",
+      detail: `Reused the latest studio pack for ${heroName}. ${studioPack?.campaign?.headline || "Cached prompts are ready to review."}`
+    };
+  }
+
+  if (status === "ready") {
+    return {
+      tone: "ready",
+      chip: "PACK READY",
+      detail: `Fresh studio pack ready for ${heroName}. ${studioPack?.campaign?.headline || "Prompts are ready to review."}`
+    };
+  }
+
+  if (status === "error") {
+    return {
+      tone: "error",
+      chip: "PACK ERROR",
+      detail: `Studio pack request failed. ${errorMessage || "Try refining the brief and retrying."}`
+    };
+  }
+
+  return null;
+}
+
+function getStudioPackStatusAriaLabel(snapshot) {
+  if (!snapshot) {
+    return "Studio pack status unavailable.";
+  }
+
+  const toneLabel = {
+    pending: "Pending",
+    ready: "Ready",
+    error: "Error"
+  }[snapshot.tone] || "Update";
+  return `Studio pack status. ${toneLabel}. ${snapshot.chip}. ${snapshot.detail}`;
+}
+
 function getAgentLogEntryAriaLabel(entry, index) {
   const levelLabel = String(entry?.level || "info").toUpperCase();
   const message = entry?.message || "Log entry unavailable.";
@@ -2144,6 +2193,7 @@ export default function App() {
   const [studioBrief, setStudioBrief] = useState("Neon sponsor arena for creator-made hero collectibles");
   const [studioPack, setStudioPack] = useState(null);
   const [studioStatus, setStudioStatus] = useState("idle");
+  const [studioStatusMessage, setStudioStatusMessage] = useState("");
   const [studioCache, setStudioCache] = useState(null);
   const [selectedMarketingAngle, setSelectedMarketingAngle] = useState(null);
   const [marketingCopyFeedback, setMarketingCopyFeedback] = useState(null);
@@ -2224,6 +2274,7 @@ export default function App() {
   const leaderboardBoardControl = getLeaderboardBoardControl(leaderboardReference);
   const leaderboardMomentum = getLeaderboardMomentum(leaderboardReference);
   const leaderboardSeasonArchive = getLeaderboardSeasonArchive(leaderboardReference, selectedArchiveHero);
+  const studioPackStatus = getStudioPackStatusSnapshot(studioStatus, studioPack, hero.name, studioStatusMessage);
 
   useEffect(() => {
     if (selectedArchiveHero !== "all" && !leaderboardSeasonArchive.filters.some((filter) => filter.id === selectedArchiveHero)) {
@@ -2616,6 +2667,7 @@ export default function App() {
     }
     setStudioPack(null);
     setStudioStatus(nextStatus);
+    setStudioStatusMessage("");
     setEditorDrafts({ sound: {}, asset: {} });
     setSelectedMarketingAngle(null);
     clearMarketingCopyFeedback();
@@ -2719,6 +2771,7 @@ export default function App() {
       applyIfActive(() => {
         setStudioPack(json.studioPack);
         setStudioStatus(json.studioPack.cache_hit ? "cached" : "ready");
+        setStudioStatusMessage("");
         setEditorDrafts({
           sound: json.studioPack.sounds,
           asset: json.studioPack.assets
@@ -2731,6 +2784,7 @@ export default function App() {
     } catch (error) {
       applyIfActive(() => {
         setStudioStatus("error");
+        setStudioStatusMessage(error.message || "request failed");
         setLog((prev) => [`Studio pack failed: ${error.message}`, ...prev].slice(0, 8));
       });
     }
@@ -3187,6 +3241,22 @@ export default function App() {
           <button type="button" className="bet-btn" onClick={generateStudioPack} disabled={studioStatus === "loading"}>
             {studioStatus === "loading" ? "Building Pack..." : "Generate Studio Pack"}
           </button>
+          {studioPackStatus && (
+            <div
+              className={`studio-pack-status share-feedback share-feedback-${studioPackStatus.tone}`}
+              data-testid="studio-pack-status"
+              role="status"
+              aria-live="polite"
+              tabIndex={0}
+              aria-label={getStudioPackStatusAriaLabel(studioPackStatus)}
+              title={getStudioPackStatusAriaLabel(studioPackStatus)}
+            >
+              <span className={`studio-pack-status-chip studio-pack-status-chip-${studioPackStatus.tone}`} data-testid="studio-pack-status-chip">
+                {studioPackStatus.chip}
+              </span>
+              <span className="studio-pack-status-detail" data-testid="studio-pack-status-detail">{studioPackStatus.detail}</span>
+            </div>
+          )}
           <div className="studio-kpi-strip" data-testid="studio-kpi-strip">
             <span>cache hits {studioCache?.hits ?? 0}</span>
             <span>saved calls {studioCache?.savedCalls ?? 0}</span>

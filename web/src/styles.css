@@ -670,6 +670,50 @@ main {
   margin-top: 8px;
 }
 
+.studio-pack-status {
+  display: grid;
+  gap: 6px;
+}
+
+.studio-pack-status-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(139, 148, 158, 0.14);
+  color: #c9d1d9;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.studio-pack-status-chip-pending {
+  border-color: rgba(88, 166, 255, 0.45);
+  background: rgba(88, 166, 255, 0.16);
+  color: var(--orb);
+}
+
+.studio-pack-status-chip-ready {
+  border-color: rgba(63, 185, 160, 0.45);
+  background: rgba(63, 185, 160, 0.16);
+  color: var(--teal);
+}
+
+.studio-pack-status-chip-error {
+  border-color: rgba(240, 136, 62, 0.45);
+  background: rgba(240, 136, 62, 0.16);
+  color: #ffb86b;
+}
+
+.studio-pack-status-detail {
+  font-size: 10px;
+  line-height: 1.4;
+  color: #c9d1d9;
+}
+
 /* Achievements */
 .achievement-list {
   display: flex;
@@ -1048,6 +1092,7 @@ main {
 .game-over-placement:focus-visible,
 .bet-status-strip:focus-visible,
 .share-feedback:focus-visible,
+.studio-pack-status:focus-visible,
 .leaderboard-archive-filter:focus-visible,
 .leaderboard-recap:focus-visible,
 .leaderboard-summary-card:focus-visible,
