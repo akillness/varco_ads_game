@@ -990,6 +990,32 @@ function getLeaderboardArchiveGapCopy(entry, target, messages) {
   return messages.ahead(target);
 }
 
+function isSameArchivedHighScoreEntry(a, b) {
+  return isSameHighScoreEntry(a, b)
+    || (
+      Boolean(a) && Boolean(b)
+      && a.hero === b.hero
+      && a.score === b.score
+      && a.combo === b.combo
+      && a.date === b.date
+    );
+}
+
+function getCurrentHighScorePlacement(scores, entry) {
+  if (!entry) {
+    return {
+      placement: null,
+      qualified: false
+    };
+  }
+
+  const placementIndex = scores.findIndex((scoreEntry) => isSameArchivedHighScoreEntry(scoreEntry, entry));
+  return {
+    placement: placementIndex === -1 ? null : placementIndex + 1,
+    qualified: placementIndex !== -1
+  };
+}
+
 function getLeaderboardArchiveDelta(scores, history, activeFilter = "all") {
   if (!history.length) {
     return {
@@ -999,8 +1025,8 @@ function getLeaderboardArchiveDelta(scores, history, activeFilter = "all") {
   }
 
   const latestEntry = history[0] || null;
-  const cutoff = scores[Math.min(scores.length, HIGH_SCORE_LIMIT) - 1] || null;
   const leader = scores[0] || null;
+  const cutoff = scores[Math.min(scores.length, HIGH_SCORE_LIMIT) - 1] || null;
 
   if (activeFilter !== "all") {
     const heroHistory = history.filter((entry) => entry.hero === activeFilter);
@@ -1079,7 +1105,9 @@ function getLeaderboardArchiveDelta(scores, history, activeFilter = "all") {
     };
   }
 
-  if (!latestEntry.qualified) {
+  const livePlacement = getCurrentHighScorePlacement(scores, latestEntry);
+
+  if (!latestEntry.qualified || !livePlacement.qualified) {
     if (cutoff) {
       const pointsNeeded = Math.max(cutoff.score - latestEntry.score + 1, 1);
       return {
@@ -1099,14 +1127,14 @@ function getLeaderboardArchiveDelta(scores, history, activeFilter = "all") {
     };
   }
 
-  if (latestEntry.placement === 1) {
+  if (livePlacement.placement === 1) {
     return {
       label: "BENCHMARK HOLD",
       detail: `${latestEntry.hero}'s latest archive already owns the season benchmark at ${latestEntry.score} pts / ${latestEntry.combo}x.`
     };
   }
 
-  const rival = scores[Math.max((latestEntry.placement || 2) - 2, 0)] || leader;
+  const rival = scores[Math.max((livePlacement.placement || 2) - 2, 0)] || leader;
   if (!rival) {
     return {
       label: "ARCHIVE DELTA",

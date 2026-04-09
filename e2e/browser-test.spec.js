@@ -1136,6 +1136,52 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("leaderboard-control-list")).not.toContainText("Sound Crafter");
   });
 
+  test("leaderboard archive delta falls back to today's cutline when a historical top-5 finish slips off the live board", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        { hero: "SyncFace Weaver", score: 150, combo: 6, date: "2026-04-06", createdAt: "2026-04-06T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 144, combo: 5, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z" },
+        { hero: "Sound Crafter", score: 140, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z" },
+        { hero: "SyncFace Weaver", score: 137, combo: 5, date: "2026-04-03", createdAt: "2026-04-03T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 133, combo: 4, date: "2026-04-02", createdAt: "2026-04-02T10:00:00.000Z" }
+      ]));
+      localStorage.setItem("saga_highscore_history", JSON.stringify([
+        { hero: "Sound Crafter", score: 129, combo: 4, date: "2026-04-07", createdAt: "2026-04-07T08:00:00.000Z", placement: 5, qualified: true },
+        { hero: "SyncFace Weaver", score: 150, combo: 6, date: "2026-04-06", createdAt: "2026-04-06T10:00:00.000Z", placement: 1, qualified: true },
+        { hero: "3D Modeler", score: 144, combo: 5, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z", placement: 2, qualified: true }
+      ]));
+    });
+    await page.reload();
+
+    await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("CUTLINE DELTA");
+    await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("Sound Crafter's latest archive needs about 5 more pts to re-enter today's live top 5.");
+    await expect(page.getByTestId("leaderboard-archive-delta")).not.toContainText("LEADER GAP");
+    await expect(page.getByTestId("leaderboard-archive-item").first()).toContainText("#5 FINISH");
+    await expect(page.getByTestId("leaderboard-archive-item").first()).toContainText("129 pts · 4x combo · 2026-04-07");
+  });
+
+  test("leaderboard archive delta still recognizes date-only archived rows that remain on the live board", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        { hero: "SyncFace Weaver", score: 150, combo: 6, date: "2026-04-06", createdAt: "2026-04-06T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 144, combo: 5, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z" },
+        { hero: "Sound Crafter", score: 140, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z" },
+        { hero: "SyncFace Weaver", score: 137, combo: 5, date: "2026-04-03", createdAt: "2026-04-03T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 133, combo: 4, date: "2026-04-02", createdAt: "2026-04-02T10:00:00.000Z" }
+      ]));
+      localStorage.setItem("saga_highscore_history", JSON.stringify([
+        { hero: "Sound Crafter", score: 140, combo: 5, date: "2026-04-04", placement: 3, qualified: true },
+        { hero: "SyncFace Weaver", score: 150, combo: 6, date: "2026-04-01", createdAt: "2026-04-01T10:00:00.000Z", placement: 1, qualified: true }
+      ]));
+    });
+    await page.reload();
+
+    await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("LEADER GAP");
+    await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("Sound Crafter's latest archive is 4 pts shy of 3D Modeler's higher live slot (#1 at 144 pts).");
+    await expect(page.getByTestId("leaderboard-archive-delta")).not.toContainText("CUTLINE DELTA");
+    await expect(page.getByTestId("leaderboard-archive-item").first()).toContainText("#3 FINISH");
+  });
+
   test("leaderboard archive controls expose keyboard-friendly labels for filters, summary cards, and recent-form chips", async ({ page }) => {
     await page.evaluate(() => {
       localStorage.setItem("saga_highscores", JSON.stringify([
