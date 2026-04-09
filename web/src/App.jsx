@@ -557,13 +557,16 @@ function loadHighScoreHistory(scores = []) {
 
 function saveHighScore(entry) {
   const previousScores = loadHighScores();
+  const previousHistory = loadHighScoreHistory(previousScores);
   const normalizedEntry = normalizeHighScoreEntry(entry);
   if (!normalizedEntry) {
     return {
       scores: previousScores,
       placement: null,
       qualified: false,
-      entry: null
+      entry: null,
+      history: previousHistory,
+      previousHistory
     };
   }
 
@@ -582,16 +585,18 @@ function saveHighScore(entry) {
     qualified
   });
   const history = historyEntry
-    ? [historyEntry, ...loadHighScoreHistory(previousScores).filter((item) => !isSameHighScoreEntry(item, historyEntry))]
+    ? [historyEntry, ...previousHistory.filter((item) => !isSameHighScoreEntry(item, historyEntry))]
       .slice(0, HIGH_SCORE_HISTORY_LIMIT)
-    : loadHighScoreHistory(previousScores);
+    : previousHistory;
   localStorage.setItem("saga_highscore_history", JSON.stringify(history));
 
   return {
     scores,
     placement: qualified ? overallPlacement : null,
     qualified,
-    entry: normalizedEntry
+    entry: normalizedEntry,
+    history,
+    previousHistory
   };
 }
 
@@ -817,6 +822,49 @@ function getLeaderboardBoardControl(scores) {
     });
 }
 
+function getHeroMomentumStats(history, hero) {
+  const entries = history.filter((entry) => entry.hero === hero);
+  if (!entries.length) {
+    return {
+      hero,
+      currentStreak: 0,
+      longestStreak: 0,
+      latestQualifiedAt: "1970-01-01T00:00:00.000Z",
+      bestPlacement: Number.MAX_SAFE_INTEGER
+    };
+  }
+
+  let currentStreak = 0;
+  while (currentStreak < entries.length && entries[currentStreak].qualified) {
+    currentStreak += 1;
+  }
+
+  let longestStreak = 0;
+  let streakCursor = 0;
+  entries.forEach((entry) => {
+    if (entry.qualified) {
+      streakCursor += 1;
+      longestStreak = Math.max(longestStreak, streakCursor);
+    } else {
+      streakCursor = 0;
+    }
+  });
+
+  const latestQualified = entries.find((entry) => entry.qualified) || null;
+  const bestPlacement = entries.reduce((best, entry) => {
+    if (entry.placement === null) return best;
+    return Math.min(best, entry.placement);
+  }, Number.MAX_SAFE_INTEGER);
+
+  return {
+    hero,
+    currentStreak,
+    longestStreak,
+    latestQualifiedAt: latestQualified?.createdAt || "1970-01-01T00:00:00.000Z",
+    bestPlacement
+  };
+}
+
 function getLeaderboardMomentum(scores) {
   const history = loadHighScoreHistory(scores);
   if (!history.length) {
@@ -826,46 +874,8 @@ function getLeaderboardMomentum(scores) {
     };
   }
 
-  const heroHistory = new Map();
-  history.forEach((entry) => {
-    if (!heroHistory.has(entry.hero)) {
-      heroHistory.set(entry.hero, []);
-    }
-    heroHistory.get(entry.hero).push(entry);
-  });
-
-  const momentumTable = Array.from(heroHistory.entries())
-    .map(([hero, entries]) => {
-      let currentStreak = 0;
-      while (currentStreak < entries.length && entries[currentStreak].qualified) {
-        currentStreak += 1;
-      }
-
-      let longestStreak = 0;
-      let streakCursor = 0;
-      entries.forEach((entry) => {
-        if (entry.qualified) {
-          streakCursor += 1;
-          longestStreak = Math.max(longestStreak, streakCursor);
-        } else {
-          streakCursor = 0;
-        }
-      });
-
-      const latestQualified = entries.find((entry) => entry.qualified) || null;
-      const bestPlacement = entries.reduce((best, entry) => {
-        if (entry.placement === null) return best;
-        return Math.min(best, entry.placement);
-      }, Number.MAX_SAFE_INTEGER);
-
-      return {
-        hero,
-        currentStreak,
-        longestStreak,
-        latestQualifiedAt: latestQualified?.createdAt || "1970-01-01T00:00:00.000Z",
-        bestPlacement
-      };
-    })
+  const momentumTable = Array.from(new Set(history.map((entry) => entry.hero)))
+    .map((hero) => getHeroMomentumStats(history, hero))
     .filter((entry) => entry.longestStreak > 0)
     .sort((a, b) => (
       b.longestStreak - a.longestStreak
@@ -901,6 +911,47 @@ function getLeaderboardMomentum(scores) {
     label: "MOMENTUM",
     detail: `${momentumLeader.hero} posted the latest archived top-${HIGH_SCORE_LIMIT} finish and peaked at #${momentumLeader.bestPlacement}.`
   };
+}
+
+function describeLeaderboardMomentumShift(previousHistory, history, result) {
+  if (!result?.entry) return null;
+
+  const before = getHeroMomentumStats(previousHistory || [], result.entry.hero);
+  const after = getHeroMomentumStats(history || [], result.entry.hero);
+  const tone = result.placement === 1 ? "top" : result.qualified ? "qualified" : "archived";
+
+  if (!result.qualified) {
+    if (before.currentStreak > 0 && after.currentStreak === 0) {
+      return {
+        tone,
+        message: `${result.entry.hero}'s ${before.currentStreak}-run top-${HIGH_SCORE_LIMIT} streak snaps with this archived finish.`
+      };
+    }
+    return null;
+  }
+
+  if (after.currentStreak > before.currentStreak) {
+    if (before.currentStreak === 0) {
+      return {
+        tone,
+        message: `${result.entry.hero} opens a new top-${HIGH_SCORE_LIMIT} streak with this #${result.placement} finish.`
+      };
+    }
+
+    return {
+      tone,
+      message: `${result.entry.hero} extends their top-${HIGH_SCORE_LIMIT} streak to ${after.currentStreak} straight runs.`
+    };
+  }
+
+  if (after.bestPlacement < before.bestPlacement && Number.isFinite(after.bestPlacement)) {
+    return {
+      tone,
+      message: `${result.entry.hero} locks in a new season-best placement at #${after.bestPlacement}.`
+    };
+  }
+
+  return null;
 }
 
 function loadProgress() {
@@ -1351,6 +1402,7 @@ export default function App() {
   const [serverLogs, setServerLogs] = useState([]);
   const [highScores, setHighScores] = useState(loadHighScores());
   const [leaderboardUpdate, setLeaderboardUpdate] = useState(null);
+  const [leaderboardMomentumUpdate, setLeaderboardMomentumUpdate] = useState(null);
   const [studioBrief, setStudioBrief] = useState("Neon sponsor arena for creator-made hero collectibles");
   const [studioPack, setStudioPack] = useState(null);
   const [studioStatus, setStudioStatus] = useState("idle");
@@ -1458,6 +1510,7 @@ export default function App() {
   useEffect(() => {
     if (!gameOver) {
       gameOverHandledRef.current = false;
+      setLeaderboardMomentumUpdate(null);
       return;
     }
     if (gameOverHandledRef.current || score <= 0) return;
@@ -1474,6 +1527,13 @@ export default function App() {
     });
     setHighScores(highScoreResult.scores);
     setLeaderboardUpdate(describeLeaderboardPlacement(highScoreResult));
+    setLeaderboardMomentumUpdate(
+      describeLeaderboardMomentumShift(
+        highScoreResult.previousHistory,
+        highScoreResult.history,
+        highScoreResult
+      )
+    );
 
     jsonRequest("/api/match/finish", {
       method: "POST",
@@ -2017,6 +2077,7 @@ export default function App() {
     }
     gameOverHandledRef.current = false;
     setLeaderboardUpdate(null);
+    setLeaderboardMomentumUpdate(null);
     dispatch({ type: "RESET" });
     setLog([]);
     setMatchStatus("idle");
@@ -2274,6 +2335,14 @@ export default function App() {
                 data-testid="game-over-placement"
               >
                 {leaderboardUpdate.message}
+              </div>
+            )}
+            {leaderboardMomentumUpdate && (
+              <div
+                className={`game-over-placement game-over-placement-${leaderboardMomentumUpdate.tone} game-over-momentum`}
+                data-testid="game-over-momentum"
+              >
+                {leaderboardMomentumUpdate.message}
               </div>
             )}
             <button type="button" onClick={handleReset}>Play Again</button>

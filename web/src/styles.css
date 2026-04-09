@@ -495,6 +495,12 @@ main {
   color: #ffb4a0;
 }
 
+.game-over-momentum {
+  max-width: 340px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .game-over-overlay button {
   padding: 10px 24px;
   font-size: 14px;
