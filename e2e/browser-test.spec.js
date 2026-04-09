@@ -1182,6 +1182,28 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("leaderboard-archive-item").first()).toContainText("#3 FINISH");
   });
 
+  test("leaderboard archive delta treats tied higher slots as recency losses when the live rival is newer", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        { hero: "3D Modeler", score: 140, combo: 5, date: "2026-04-08", createdAt: "2026-04-08T10:00:00.000Z" },
+        { hero: "Sound Crafter", score: 140, combo: 5, date: "2026-04-07", createdAt: "2026-04-07T10:00:00.000Z" },
+        { hero: "SyncFace Weaver", score: 134, combo: 4, date: "2026-04-06", createdAt: "2026-04-06T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 129, combo: 4, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z" },
+        { hero: "Sound Crafter", score: 123, combo: 3, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z" }
+      ]));
+      localStorage.setItem("saga_highscore_history", JSON.stringify([
+        { hero: "Sound Crafter", score: 140, combo: 5, date: "2026-04-07", createdAt: "2026-04-07T10:00:00.000Z", placement: 1, qualified: true },
+        { hero: "3D Modeler", score: 129, combo: 4, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z", placement: 4, qualified: true }
+      ]));
+    });
+    await page.reload();
+
+    await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("LEADER GAP");
+    await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("Sound Crafter's latest archive matches 3D Modeler's 140-pt / 5x line, but still trails that higher live slot on recency.");
+    await expect(page.getByTestId("leaderboard-archive-delta")).not.toContainText("would flip that higher slot on recency");
+    await expect(page.getByTestId("leaderboard-archive-item").first()).toContainText("#1 FINISH");
+  });
+
   test("leaderboard archive controls expose keyboard-friendly labels for filters, summary cards, and recent-form chips", async ({ page }) => {
     await page.evaluate(() => {
       localStorage.setItem("saga_highscores", JSON.stringify([

@@ -986,7 +986,13 @@ function getLeaderboardArchiveGapCopy(entry, target, messages) {
   const gap = getLeaderboardTargetGap(entry, target);
   if (gap?.kind === "score") return messages.score(gap.amount, target);
   if (gap?.kind === "combo") return messages.combo(gap.amount, target);
-  if (gap?.kind === "tiebreak") return messages.tiebreak(target);
+  if (gap?.kind === "tiebreak") {
+    const entryWinsTiebreak = compareHighScores(entry, target) < 0;
+    if (!entryWinsTiebreak && typeof messages.tiebreakBehind === "function") {
+      return messages.tiebreakBehind(target);
+    }
+    return messages.tiebreak(target);
+  }
   return messages.ahead(target);
 }
 
@@ -1054,6 +1060,7 @@ function getLeaderboardArchiveDelta(scores, history, activeFilter = "all") {
             score: (amount, target) => `${activeFilter}'s latest archive is ${amount} pt${amount === 1 ? "" : "s"} below their last top-${HIGH_SCORE_LIMIT} finish (#${target.placement} at ${target.score} pts).`,
             combo: (amount, target) => `${activeFilter}'s latest archive matches ${target.score} pts, but still needs ${amount} more combo to revisit their last top-${HIGH_SCORE_LIMIT} finish (#${target.placement}).`,
             tiebreak: (target) => `${activeFilter}'s latest archive already matches their last top-${HIGH_SCORE_LIMIT} line at ${target.score} pts / ${target.combo}x and would reclaim that finish on recency.`,
+            tiebreakBehind: (target) => `${activeFilter}'s latest archive matches their last top-${HIGH_SCORE_LIMIT} line at ${target.score} pts / ${target.combo}x, but still trails that finish on recency.`,
             ahead: (target) => `${activeFilter}'s latest archive has already cleared their last top-${HIGH_SCORE_LIMIT} line (#${target.placement}).`
           })
         };
@@ -1067,6 +1074,7 @@ function getLeaderboardArchiveDelta(scores, history, activeFilter = "all") {
             score: () => `${activeFilter} needs about ${pointsNeeded} more pt${pointsNeeded === 1 ? "" : "s"} on the next archive to crack today's live top ${HIGH_SCORE_LIMIT}.`,
             combo: (amount, target) => `${activeFilter} can match today's ${target.score}-pt cutline, but still needs ${amount} more combo to break into the live top ${HIGH_SCORE_LIMIT}.`,
             tiebreak: (target) => `${activeFilter} already matches today's ${target.score}-pt / ${target.combo}x cutline and would flip into the live top ${HIGH_SCORE_LIMIT} on recency.`,
+            tiebreakBehind: (target) => `${activeFilter} already matches today's ${target.score}-pt / ${target.combo}x cutline, but still trails the live top ${HIGH_SCORE_LIMIT} on recency.`,
             ahead: () => `${activeFilter} is already pacing above today's live cutline.`
           })
         };
@@ -1081,6 +1089,7 @@ function getLeaderboardArchiveDelta(scores, history, activeFilter = "all") {
             score: (amount, target) => `${activeFilter}'s latest archive is ${amount} pt${amount === 1 ? "" : "s"} shy of their season-best finish (#${target.placement} at ${target.score} pts).`,
             combo: (amount, target) => `${activeFilter}'s latest archive matches ${target.score} pts, but still needs ${amount} more combo to tie their season-best finish (#${target.placement}).`,
             tiebreak: (target) => `${activeFilter}'s latest archive already matches their season-best ${target.score}-pt / ${target.combo}x line and now owns it on recency.`,
+            tiebreakBehind: (target) => `${activeFilter}'s latest archive matches their season-best ${target.score}-pt / ${target.combo}x line, but still trails that finish on recency.`,
             ahead: (target) => `${activeFilter}'s latest archive has already pushed past their old season-best finish (#${target.placement}).`
           })
         };
@@ -1116,6 +1125,7 @@ function getLeaderboardArchiveDelta(scores, history, activeFilter = "all") {
           score: () => `${latestEntry.hero}'s latest archive needs about ${pointsNeeded} more pt${pointsNeeded === 1 ? "" : "s"} to re-enter today's live top ${HIGH_SCORE_LIMIT}.`,
           combo: (amount, target) => `${latestEntry.hero}'s latest archive can match the ${target.score}-pt cutline, but still needs ${amount} more combo to re-enter today's live top ${HIGH_SCORE_LIMIT}.`,
           tiebreak: (target) => `${latestEntry.hero}'s latest archive already matches the ${target.score}-pt / ${target.combo}x cutline and would flip back into the live top ${HIGH_SCORE_LIMIT} on recency.`,
+          tiebreakBehind: (target) => `${latestEntry.hero}'s latest archive matches the ${target.score}-pt / ${target.combo}x cutline, but still trails today's live top ${HIGH_SCORE_LIMIT} on recency.`,
           ahead: () => `${latestEntry.hero}'s latest archive is already back above today's live cutline.`
         })
       };
@@ -1150,6 +1160,7 @@ function getLeaderboardArchiveDelta(scores, history, activeFilter = "all") {
       score: (amount, target) => `${latestEntry.hero}'s latest archive is ${amount} pt${amount === 1 ? "" : "s"} shy of ${target.hero}'s higher live slot (#${rivalPlacement} at ${target.score} pts).`,
       combo: (amount, target) => `${latestEntry.hero}'s latest archive matches ${target.score} pts, but still needs ${amount} more combo to steal ${target.hero}'s higher live slot.`,
       tiebreak: (target) => `${latestEntry.hero}'s latest archive already matches ${target.hero}'s ${target.score}-pt / ${target.combo}x line and would flip that higher slot on recency.`,
+      tiebreakBehind: (target) => `${latestEntry.hero}'s latest archive matches ${target.hero}'s ${target.score}-pt / ${target.combo}x line, but still trails that higher live slot on recency.`,
       ahead: (target) => `${latestEntry.hero}'s latest archive has already climbed above ${target.hero}'s higher live slot.`
     })
   };
