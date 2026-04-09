@@ -377,6 +377,43 @@ test.describe("Web UI", () => {
     await expect(page.locator(".edit-history")).toBeVisible();
   });
 
+  test("sound cue tabs support keyboard cycling and pressed-state accessibility", async ({ page }) => {
+    const soundTabGroup = page.getByTestId("sound-tab-group");
+    const bgmTab = soundTabGroup.getByRole("button", { name: "BGM", exact: true });
+    const orbTab = soundTabGroup.getByRole("button", { name: "Orb 수집음", exact: true });
+    const loseTab = soundTabGroup.getByRole("button", { name: "패배음", exact: true });
+
+    await expect(bgmTab).toHaveAttribute("aria-pressed", "true");
+    await expect(bgmTab).toHaveAttribute("aria-description", "Show the BGM sound cue editor; currently selected.");
+    await expect(orbTab).toHaveAttribute("aria-pressed", "false");
+    await expect(orbTab).toHaveAttribute("aria-description", "Show the Orb 수집음 sound cue editor.");
+    await expect(page.locator(".sound-editor .prompt-input")).toHaveValue(/ambient game background music/i);
+
+    await bgmTab.focus();
+    await expect(bgmTab).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(orbTab).toBeFocused();
+    await expect(orbTab).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".sound-editor .prompt-input")).toHaveValue(/collect orb pickup sound/i);
+
+    await page.keyboard.press("End");
+    await expect(loseTab).toBeFocused();
+    await expect(loseTab).toHaveAttribute("aria-pressed", "true");
+    await expect(loseTab).toHaveAttribute("aria-description", "Show the 패배음 sound cue editor; currently selected.");
+    await expect(page.locator(".sound-editor .prompt-input")).toHaveValue(/game over defeat sound/i);
+
+    await page.keyboard.press("Home");
+    await expect(bgmTab).toBeFocused();
+    await expect(bgmTab).toHaveAttribute("aria-pressed", "true");
+    await expect(loseTab).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator(".sound-editor .prompt-input")).toHaveValue(/ambient game background music/i);
+
+    await page.keyboard.press("ArrowLeft");
+    await expect(loseTab).toBeFocused();
+    await expect(loseTab).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".sound-editor .prompt-input")).toHaveValue(/game over defeat sound/i);
+  });
+
   test("real input can collect a core after director setup", async ({ page }) => {
     await page.getByRole("button", { name: "Start" }).click();
     await page.evaluate(() => {

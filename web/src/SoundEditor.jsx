@@ -14,6 +14,46 @@ const SOUND_TYPES = [
   { id: 'lose', label: '패배음', prompt: 'game over defeat sound' },
 ];
 
+function getSoundTabAriaLabel(label, isActive) {
+  return isActive
+    ? `Show the ${label} sound cue editor; currently selected.`
+    : `Show the ${label} sound cue editor.`;
+}
+
+function focusSoundTabButton(tabId) {
+  if (typeof document === 'undefined') return;
+  window.requestAnimationFrame(() => {
+    document.querySelector(`[data-testid="sound-tab-${tabId}"]`)?.focus();
+  });
+}
+
+function handleSoundTabArrowKeyDown(event, currentId, onSelect) {
+  const navigationKeys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+  if (!navigationKeys.includes(event.key) || SOUND_TYPES.length < 2) {
+    return;
+  }
+
+  const currentIndex = SOUND_TYPES.findIndex((type) => type.id === currentId);
+  if (currentIndex < 0) return;
+
+  event.preventDefault();
+
+  let nextIndex = currentIndex;
+  if (event.key === 'ArrowRight') {
+    nextIndex = (currentIndex + 1) % SOUND_TYPES.length;
+  } else if (event.key === 'ArrowLeft') {
+    nextIndex = (currentIndex - 1 + SOUND_TYPES.length) % SOUND_TYPES.length;
+  } else if (event.key === 'Home') {
+    nextIndex = 0;
+  } else if (event.key === 'End') {
+    nextIndex = SOUND_TYPES.length - 1;
+  }
+
+  const nextType = SOUND_TYPES[nextIndex];
+  onSelect(nextType.id);
+  focusSoundTabButton(nextType.id);
+}
+
 export default function SoundEditor({
   editHistory = [],
   dispatch,
@@ -139,25 +179,36 @@ export default function SoundEditor({
     dispatch({ type: 'EDIT_APPLY', historyId });
   }
 
+  function selectSoundTab(tabId) {
+    setActiveTab(tabId);
+    setPrompt(draftPrompts?.[tabId] || '');
+    resetTransientState({ cancelInFlight: true });
+    onSelectKey(tabId);
+  }
+
   return (
     <div className="sound-editor">
-      <div className="sound-type-tabs">
-        {SOUND_TYPES.map(t => (
+      <div className="sound-type-tabs" data-testid="sound-tab-group">
+        {SOUND_TYPES.map(t => {
+          const isActive = activeTab === t.id;
+          return (
           <button
             key={t.id}
             type="button"
-            className={`sound-tab-btn ${activeTab === t.id ? 'active' : ''}`}
+            className={`sound-tab-btn ${isActive ? 'active' : ''}`}
             data-testid={`sound-tab-${t.id}`}
+            aria-pressed={isActive}
+            aria-description={getSoundTabAriaLabel(t.label, isActive)}
+            title={getSoundTabAriaLabel(t.label, isActive)}
             onClick={() => {
-              setActiveTab(t.id);
-              setPrompt(draftPrompts?.[t.id] || '');
-              resetTransientState({ cancelInFlight: true });
-              onSelectKey(t.id);
+              selectSoundTab(t.id);
             }}
+            onKeyDown={(event) => handleSoundTabArrowKeyDown(event, t.id, selectSoundTab)}
           >
             {t.label}
           </button>
-        ))}
+          );
+        })}
       </div>
 
       {studioPack && (
