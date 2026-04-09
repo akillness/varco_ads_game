@@ -1293,6 +1293,11 @@ function getLeaderboardControlAriaLabel(control) {
   return `${control.hero}. ${control.badge}. ${control.detail}`;
 }
 
+function getHighScoreItemAriaLabel(entry, rank) {
+  if (!entry) return `Leaderboard rank ${rank} unavailable.`;
+  return `Leaderboard rank ${rank}. ${entry.hero}. ${entry.score} pts. ${entry.combo}x combo on ${entry.date}.`;
+}
+
 function getArchiveEntryTrendAriaLabel(hero, trendLabel, trendDetail) {
   return `${hero}. ${trendLabel}. ${trendDetail}`;
 }
@@ -3416,14 +3421,23 @@ export default function App() {
           </div>
           <ul className="leaderboard" data-testid="high-scores-list">
             {highScores.length === 0 && <li style={{ color: "#8b949e", fontSize: "11px" }}>No scores yet</li>}
-            {highScores.map((hs, i) => (
-              <li key={`${hs.hero}-${hs.score}-${hs.combo}-${hs.createdAt}-${i}`} data-testid="high-score-item">
-                <span className="rank">#{i + 1}</span>
-                <span>{hs.hero}</span>
-                <span style={{ color: "#8b949e", fontSize: "11px" }}>Combo {hs.combo} · {hs.date}</span>
-                <span className="lb-score">{hs.score}</span>
-              </li>
-            ))}
+            {highScores.map((hs, i) => {
+              const itemAriaLabel = getHighScoreItemAriaLabel(hs, i + 1);
+              return (
+                <li
+                  key={`${hs.hero}-${hs.score}-${hs.combo}-${hs.createdAt}-${i}`}
+                  data-testid="high-score-item"
+                  tabIndex={0}
+                  aria-label={itemAriaLabel}
+                  title={itemAriaLabel}
+                >
+                  <span className="rank">#{i + 1}</span>
+                  <span>{hs.hero}</span>
+                  <span style={{ color: "#8b949e", fontSize: "11px" }}>Combo {hs.combo} · {hs.date}</span>
+                  <span className="lb-score">{hs.score}</span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       </div>

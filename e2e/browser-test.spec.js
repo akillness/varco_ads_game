@@ -1036,6 +1036,14 @@ test.describe("Web UI", () => {
     await expect(controlRows.nth(2)).toHaveAttribute("aria-label", "SyncFace Weaver. PACE SETTER. #1 best · 1 slot · 145 pts · 6x combo");
     await controlRows.nth(2).focus();
     await expect(controlRows.nth(2)).toBeFocused();
+
+    const highScoreRows = page.getByTestId("high-score-item");
+    await expect(highScoreRows).toHaveCount(5);
+    await expect(highScoreRows.nth(0)).toHaveAttribute("tabindex", "0");
+    await expect(highScoreRows.nth(0)).toHaveAttribute("aria-label", "Leaderboard rank 1. SyncFace Weaver. 145 pts. 6x combo on 2026-04-03.");
+    await expect(highScoreRows.nth(1)).toHaveAttribute("aria-label", "Leaderboard rank 2. Sound Crafter. 132 pts. 5x combo on 2026-04-04.");
+    await highScoreRows.nth(0).focus();
+    await expect(highScoreRows.nth(0)).toBeFocused();
   });
 
   test("leaderboard momentum summary preserves streak context even if the hero falls off the current board", async ({ page }) => {

@@ -1050,7 +1050,8 @@ main {
 .leaderboard-archive-delta:focus-visible,
 .leaderboard-archive-trend:focus-visible,
 .leaderboard-archive-card:focus-visible,
-.leaderboard-archive-entry-form:focus-visible {
+.leaderboard-archive-entry-form:focus-visible,
+.leaderboard li:focus-visible {
   outline: 2px solid rgba(88, 166, 255, 0.55);
   outline-offset: 2px;
   border-color: rgba(88, 166, 255, 0.45);
