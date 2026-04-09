@@ -297,6 +297,49 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("studio-copy-button")).toHaveText("Copy X copy");
   });
 
+  test("marketing copy channels support keyboard cycling and pressed-state accessibility", async ({ page }) => {
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    await studioPanel.locator("textarea").fill("Retro arcade launch for creator heroes");
+    await studioPanel.getByRole("button", { name: "Generate Studio Pack" }).click();
+
+    const channelGroup = page.getByTestId("studio-marketing-angle-group");
+    const xChannel = channelGroup.getByRole("button", { name: "X", exact: true });
+    const instagramChannel = channelGroup.getByRole("button", { name: "Instagram Reel", exact: true });
+    const discordChannel = channelGroup.getByRole("button", { name: "Discord", exact: true });
+
+    await expect(xChannel).toHaveAttribute("aria-pressed", "true");
+    await expect(xChannel).toHaveAttribute("aria-description", "Show X marketing copy; currently selected.");
+    await expect(instagramChannel).toHaveAttribute("aria-pressed", "false");
+    await expect(instagramChannel).toHaveAttribute("aria-description", "Show Instagram Reel marketing copy.");
+
+    await xChannel.focus();
+    await expect(xChannel).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(instagramChannel).toBeFocused();
+    await expect(instagramChannel).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("studio-copy-card")).toContainText("Instagram Reel");
+    await expect(page.getByTestId("studio-copy-button")).toHaveText("Copy Instagram Reel copy");
+
+    await page.keyboard.press("End");
+    await expect(discordChannel).toBeFocused();
+    await expect(discordChannel).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("studio-copy-card")).toContainText("Discord");
+    await expect(page.getByTestId("studio-copy-button")).toHaveText("Copy Discord copy");
+
+    await page.keyboard.press("Home");
+    await expect(xChannel).toBeFocused();
+    await expect(xChannel).toHaveAttribute("aria-pressed", "true");
+    await expect(discordChannel).toHaveAttribute("aria-pressed", "false");
+    await expect(page.getByTestId("studio-copy-card")).toContainText("X");
+    await expect(page.getByTestId("studio-copy-button")).toHaveText("Copy X copy");
+
+    await page.keyboard.press("ArrowLeft");
+    await expect(discordChannel).toBeFocused();
+    await expect(discordChannel).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("studio-copy-card")).toContainText("Discord");
+    await expect(page.getByTestId("studio-copy-button")).toHaveText("Copy Discord copy");
+  });
+
   test("real input can collect a core after director setup", async ({ page }) => {
     await page.getByRole("button", { name: "Start" }).click();
     await page.evaluate(() => {

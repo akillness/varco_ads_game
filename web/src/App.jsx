@@ -1281,26 +1281,30 @@ function getArchiveFilterAriaLabel(filterLabel, isActive) {
   return scope;
 }
 
-function handleArchiveFilterKeyDown(event, currentFilterId, filters, onSelect) {
+function getMarketingAngleAriaLabel(angleLabel, isActive) {
+  return `Show ${angleLabel} marketing copy${isActive ? "; currently selected" : ""}.`;
+}
+
+function handleSegmentedArrowKeyDown(event, currentId, items, onSelect, buttonTestId) {
   const navigationKeys = ["ArrowLeft", "ArrowRight", "Home", "End"];
-  if (!navigationKeys.includes(event.key) || !Array.isArray(filters) || filters.length < 2) {
+  if (!navigationKeys.includes(event.key) || !Array.isArray(items) || items.length < 2) {
     return;
   }
 
-  const currentIndex = filters.findIndex((filter) => filter.id === currentFilterId);
+  const currentIndex = items.findIndex((item) => item.id === currentId);
   if (currentIndex === -1) {
     return;
   }
 
   let nextIndex = currentIndex;
   if (event.key === "ArrowRight") {
-    nextIndex = (currentIndex + 1) % filters.length;
+    nextIndex = (currentIndex + 1) % items.length;
   } else if (event.key === "ArrowLeft") {
-    nextIndex = (currentIndex - 1 + filters.length) % filters.length;
+    nextIndex = (currentIndex - 1 + items.length) % items.length;
   } else if (event.key === "Home") {
     nextIndex = 0;
   } else if (event.key === "End") {
-    nextIndex = filters.length - 1;
+    nextIndex = items.length - 1;
   }
 
   if (nextIndex === currentIndex) {
@@ -1308,15 +1312,38 @@ function handleArchiveFilterKeyDown(event, currentFilterId, filters, onSelect) {
   }
 
   event.preventDefault();
-  onSelect(filters[nextIndex].id);
+  onSelect(items[nextIndex].id);
 
   const buttonGroup = event.currentTarget?.parentElement;
   if (!buttonGroup) {
     return;
   }
 
-  const buttons = Array.from(buttonGroup.querySelectorAll('button[data-testid="leaderboard-archive-filter"]'));
+  const buttons = Array.from(buttonGroup.querySelectorAll(`button[data-testid="${buttonTestId}"]`));
   buttons[nextIndex]?.focus();
+}
+
+function handleArchiveFilterKeyDown(event, currentFilterId, filters, onSelect) {
+  handleSegmentedArrowKeyDown(
+    event,
+    currentFilterId,
+    filters,
+    onSelect,
+    "leaderboard-archive-filter"
+  );
+}
+
+function handleMarketingAngleKeyDown(event, currentAngleId, marketingAngles, onSelect) {
+  handleSegmentedArrowKeyDown(
+    event,
+    currentAngleId,
+    marketingAngles,
+    (angleId) => {
+      const nextAngle = marketingAngles.find((angle) => angle.id === angleId) || null;
+      onSelect(nextAngle);
+    },
+    "studio-marketing-angle"
+  );
 }
 
 function getArchiveSummaryAriaLabel(label, detail) {
@@ -3166,18 +3193,25 @@ export default function App() {
                   </button>
                 ))}
               </div>
-              <div className="studio-suggestion-group">
+              <div className="studio-suggestion-group" data-testid="studio-marketing-angle-group">
                 <div className="studio-suggestion-title">Marketing Copy</div>
-                {studioPack.marketingAngles.map((angle) => (
-                  <button
-                    key={angle.id}
-                    type="button"
-                    className={`studio-chip${selectedMarketingAngle?.id === angle.id ? " active" : ""}`}
-                    onClick={() => selectMarketingAngle(angle)}
-                  >
-                    {angle.label}
-                  </button>
-                ))}
+                {studioPack.marketingAngles.map((angle) => {
+                  const isActive = selectedMarketingAngle?.id === angle.id;
+                  return (
+                    <button
+                      key={angle.id}
+                      type="button"
+                      data-testid="studio-marketing-angle"
+                      className={`studio-chip${isActive ? " active" : ""}`}
+                      aria-pressed={isActive}
+                      aria-description={getMarketingAngleAriaLabel(angle.label, isActive)}
+                      onClick={() => selectMarketingAngle(angle)}
+                      onKeyDown={(event) => handleMarketingAngleKeyDown(event, angle.id, studioPack.marketingAngles, selectMarketingAngle)}
+                    >
+                      {angle.label}
+                    </button>
+                  );
+                })}
               </div>
               {selectedMarketingAngle && (
                 <div className="studio-copy-card" data-testid="studio-copy-card">
