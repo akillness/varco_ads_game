@@ -610,9 +610,16 @@ test.describe("Web UI", () => {
   });
 
   test("betting panel shows a live countdown badge for the current wager window", async ({ page }) => {
+    const betStatusStrip = page.getByTestId("bet-status-strip");
+
     await expect(page.getByTestId("bet-status-chip")).toHaveText("LIVE WINDOW");
     await expect(page.getByTestId("bet-status-note")).toContainText("Betting open");
     await expect(page.getByTestId("bet-status-note")).toContainText("60s left in match");
+    await expect(betStatusStrip).toHaveAttribute("tabindex", "0");
+    await expect(betStatusStrip).toHaveAttribute("aria-label", /LIVE WINDOW\. Betting open • 60s left in match/);
+
+    await betStatusStrip.focus();
+    await expect(betStatusStrip).toBeFocused();
 
     await page.evaluate(() => {
       window.__SAGA_DEBUG__.dispatch({
@@ -622,6 +629,7 @@ test.describe("Web UI", () => {
     });
 
     await expect(page.getByTestId("bet-status-note")).toContainText("12s left in match");
+    await expect(betStatusStrip).toHaveAttribute("aria-label", /LIVE WINDOW\. Betting open • 12s left in match/);
   });
 
   test("betting panel blocks empty bettor names before sending the request", async ({ page }) => {
@@ -640,6 +648,8 @@ test.describe("Web UI", () => {
   });
 
   test("betting panel shows closed-match guidance after the run ends", async ({ page }) => {
+    const betStatusStrip = page.getByTestId("bet-status-strip");
+
     await page.getByRole("button", { name: "Start" }).click();
     await page.evaluate(() => {
       window.__SAGA_DEBUG__.dispatch({
@@ -653,6 +663,10 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("bet-status-chip")).toHaveText("CLOSED");
     await expect(page.getByTestId("bet-status-note")).toContainText("Betting closed");
     await expect(page.getByTestId("bet-status-note")).toContainText("ended after 60s");
+    await expect(betStatusStrip).toHaveAttribute("aria-label", /CLOSED\. Betting closed • match .* ended after 60s\./);
+
+    await betStatusStrip.focus();
+    await expect(betStatusStrip).toBeFocused();
 
     await page.getByTestId("bet-submit-button").click();
     await expect(page.getByTestId("bet-feedback")).toContainText("Betting is closed until the next match starts.");

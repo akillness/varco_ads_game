@@ -3138,7 +3138,13 @@ export default function App() {
           >
             {betPending ? "Placing Bet..." : "Place Bet"}
           </button>
-          <div className="bet-status-strip" data-testid="bet-status-strip">
+          <div
+            className="bet-status-strip"
+            data-testid="bet-status-strip"
+            tabIndex={0}
+            aria-label={getArchiveSummaryAriaLabel(bettingStatus.chip, bettingStatus.detail)}
+            title={getArchiveSummaryAriaLabel(bettingStatus.chip, bettingStatus.detail)}
+          >
             <span className={`bet-status-chip bet-status-chip-${bettingStatus.tone}`} data-testid="bet-status-chip">
               {bettingStatus.chip}
             </span>

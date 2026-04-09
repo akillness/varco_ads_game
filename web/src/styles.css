@@ -1046,6 +1046,7 @@ main {
 }
 
 .game-over-placement:focus-visible,
+.bet-status-strip:focus-visible,
 .leaderboard-archive-filter:focus-visible,
 .leaderboard-recap:focus-visible,
 .leaderboard-summary-card:focus-visible,
