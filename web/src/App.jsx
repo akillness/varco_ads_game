@@ -60,6 +60,12 @@ const SHARE_CHANNEL_LABELS = {
   telegram: "Telegram"
 };
 
+const EDITOR_TABS = [
+  { id: "sound", label: "🎵 사운드", ariaLabel: "sound editor" },
+  { id: "asset", label: "🧊 에셋", ariaLabel: "asset editor" },
+  { id: "history", label: "📋 이력", ariaLabel: "history editor" }
+];
+
 const MISSION_TEMPLATES = [
   {
     kind: "collect",
@@ -1285,6 +1291,10 @@ function getMarketingAngleAriaLabel(angleLabel, isActive) {
   return `Show ${angleLabel} marketing copy${isActive ? "; currently selected" : ""}.`;
 }
 
+function getEditorTabAriaLabel(tabLabel, isActive) {
+  return `Show the ${tabLabel}${isActive ? "; currently selected" : ""}.`;
+}
+
 function handleSegmentedArrowKeyDown(event, currentId, items, onSelect, buttonTestId) {
   const navigationKeys = ["ArrowLeft", "ArrowRight", "Home", "End"];
   if (!navigationKeys.includes(event.key) || !Array.isArray(items) || items.length < 2) {
@@ -1344,6 +1354,10 @@ function handleMarketingAngleKeyDown(event, currentAngleId, marketingAngles, onS
     },
     "studio-marketing-angle"
   );
+}
+
+function handleEditorTabKeyDown(event, currentTabId, onSelect) {
+  handleSegmentedArrowKeyDown(event, currentTabId, EDITOR_TABS, onSelect, "studio-editor-tab");
 }
 
 function getArchiveSummaryAriaLabel(label, detail) {
@@ -3238,10 +3252,24 @@ export default function App() {
         {/* VARCO STUDIO EDITOR */}
         <div className="panel" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div className="panel-title">VARCO Studio Editor</div>
-          <div className="editor-tabs">
-            <button className={`editor-tab-btn ${editorTab === "sound" ? "active" : ""}`} onClick={() => setEditorTab("sound")}>🎵 사운드</button>
-            <button className={`editor-tab-btn ${editorTab === "asset" ? "active" : ""}`} onClick={() => setEditorTab("asset")}>🧊 에셋</button>
-            <button className={`editor-tab-btn ${editorTab === "history" ? "active" : ""}`} onClick={() => setEditorTab("history")}>📋 이력</button>
+          <div className="editor-tabs" data-testid="studio-editor-tab-group">
+            {EDITOR_TABS.map((tab) => {
+              const isActive = editorTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`editor-tab-btn ${isActive ? "active" : ""}`}
+                  data-testid="studio-editor-tab"
+                  aria-pressed={isActive}
+                  aria-description={getEditorTabAriaLabel(tab.ariaLabel, isActive)}
+                  onClick={() => setEditorTab(tab.id)}
+                  onKeyDown={(event) => handleEditorTabKeyDown(event, tab.id, setEditorTab)}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
           </div>
           <div className="editor-panel">
             {editorTab === "sound" && (

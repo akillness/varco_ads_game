@@ -340,6 +340,43 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("studio-copy-button")).toHaveText("Copy Discord copy");
   });
 
+  test("studio editor tabs support keyboard cycling and pressed-state accessibility", async ({ page }) => {
+    const tabGroup = page.getByTestId("studio-editor-tab-group");
+    const soundTab = tabGroup.getByRole("button", { name: "🎵 사운드", exact: true });
+    const assetTab = tabGroup.getByRole("button", { name: "🧊 에셋", exact: true });
+    const historyTab = tabGroup.getByRole("button", { name: "📋 이력", exact: true });
+
+    await expect(soundTab).toHaveAttribute("aria-pressed", "true");
+    await expect(soundTab).toHaveAttribute("aria-description", "Show the sound editor; currently selected.");
+    await expect(assetTab).toHaveAttribute("aria-pressed", "false");
+    await expect(assetTab).toHaveAttribute("aria-description", "Show the asset editor.");
+    await expect(page.locator(".sound-editor")).toBeVisible();
+
+    await soundTab.focus();
+    await expect(soundTab).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(assetTab).toBeFocused();
+    await expect(assetTab).toHaveAttribute("aria-pressed", "true");
+    await expect(soundTab).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator(".asset-editor")).toBeVisible();
+
+    await page.keyboard.press("End");
+    await expect(historyTab).toBeFocused();
+    await expect(historyTab).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".edit-history")).toBeVisible();
+
+    await page.keyboard.press("Home");
+    await expect(soundTab).toBeFocused();
+    await expect(soundTab).toHaveAttribute("aria-pressed", "true");
+    await expect(historyTab).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator(".sound-editor")).toBeVisible();
+
+    await page.keyboard.press("ArrowLeft");
+    await expect(historyTab).toBeFocused();
+    await expect(historyTab).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".edit-history")).toBeVisible();
+  });
+
   test("real input can collect a core after director setup", async ({ page }) => {
     await page.getByRole("button", { name: "Start" }).click();
     await page.evaluate(() => {
