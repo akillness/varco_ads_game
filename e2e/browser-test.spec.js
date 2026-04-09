@@ -1053,6 +1053,38 @@ test.describe("Web UI", () => {
 
     await expect(page.getByTestId("leaderboard-control-item")).toHaveCount(3);
     await expect(page.getByTestId("leaderboard-control-momentum")).toContainText("Season streaks unlock after the first archived run.");
+    await expect(page.getByTestId("leaderboard-archive-empty")).toContainText("Archived season history appears after the first completed run.");
+  });
+
+  test("leaderboard archive panel shows recent archived runs even when one falls outside the live board", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        { hero: "SyncFace Weaver", score: 145, combo: 6, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 141, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z" },
+        { hero: "SyncFace Weaver", score: 136, combo: 5, date: "2026-04-03", createdAt: "2026-04-03T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 133, combo: 4, date: "2026-04-02", createdAt: "2026-04-02T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 129, combo: 4, date: "2026-04-01", createdAt: "2026-04-01T10:00:00.000Z" }
+      ]));
+      localStorage.setItem("saga_highscore_history", JSON.stringify([
+        { hero: "Sound Crafter", score: 118, combo: 4, date: "2026-04-06", createdAt: "2026-04-06T08:00:00.000Z", placement: 6, qualified: false },
+        { hero: "SyncFace Weaver", score: 145, combo: 6, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z", placement: 1, qualified: true },
+        { hero: "Sound Crafter", score: 138, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T08:00:00.000Z", placement: 2, qualified: true },
+        { hero: "Sound Crafter", score: 131, combo: 5, date: "2026-04-03", createdAt: "2026-04-03T08:00:00.000Z", placement: 3, qualified: true },
+        { hero: "3D Modeler", score: 127, combo: 4, date: "2026-04-02", createdAt: "2026-04-02T08:00:00.000Z", placement: 5, qualified: true }
+      ]));
+    });
+    await page.reload();
+
+    const archiveRows = page.getByTestId("leaderboard-archive-item");
+    await expect(page.getByTestId("leaderboard-archive-detail")).toContainText("Latest 4 archived runs across the season table.");
+    await expect(archiveRows).toHaveCount(4);
+    await expect(archiveRows.nth(0)).toContainText("Sound Crafter");
+    await expect(archiveRows.nth(0)).toContainText("OUTSIDE TOP 5");
+    await expect(archiveRows.nth(0)).toContainText("118 pts · 4x combo · 2026-04-06");
+    await expect(archiveRows.nth(1)).toContainText("SyncFace Weaver");
+    await expect(archiveRows.nth(1)).toContainText("#1 FINISH");
+    await expect(archiveRows.nth(3)).toContainText("Sound Crafter");
+    await expect(page.getByTestId("leaderboard-control-list")).not.toContainText("Sound Crafter");
   });
 
   test("leaderboard board-control panel shows an empty-state prompt with no posted runs", async ({ page }) => {

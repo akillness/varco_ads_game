@@ -982,6 +982,29 @@ function getLeaderboardMomentum(scores) {
   };
 }
 
+function getLeaderboardSeasonArchive(scores) {
+  const history = loadHighScoreHistory(scores, { allowFallback: false }).slice(0, 4);
+  if (!history.length) {
+    return {
+      label: "SEASON ARCHIVE",
+      detail: "Archived season history appears after the first completed run.",
+      entries: []
+    };
+  }
+
+  return {
+    label: "SEASON ARCHIVE",
+    detail: `Latest ${history.length} archived run${history.length === 1 ? "" : "s"} across the season table.`,
+    entries: history.map((entry) => ({
+      ...entry,
+      chip: entry.qualified && entry.placement
+        ? `#${entry.placement} FINISH`
+        : `OUTSIDE TOP ${HIGH_SCORE_LIMIT}`,
+      detail: `${entry.score} pts · ${entry.combo}x combo · ${entry.date}`
+    }))
+  };
+}
+
 function describeLeaderboardMomentumShift(previousHistory, history, result) {
   if (!result?.entry) return null;
 
@@ -1562,6 +1585,7 @@ export default function App() {
   const leaderboardSeasonSummary = getLeaderboardSeasonSummary(leaderboardReference, leaderboardEntryPreview);
   const leaderboardBoardControl = getLeaderboardBoardControl(leaderboardReference);
   const leaderboardMomentum = getLeaderboardMomentum(leaderboardReference);
+  const leaderboardSeasonArchive = getLeaderboardSeasonArchive(leaderboardReference);
 
   async function trackEvent(message, meta = {}) {
     try {
@@ -2692,6 +2716,31 @@ export default function App() {
             ) : (
               <div className="leaderboard-control-empty" data-testid="leaderboard-control-empty">
                 Post the first clean run to reveal hero control badges.
+              </div>
+            )}
+          </div>
+          <div className="leaderboard-archive-panel" data-testid="leaderboard-archive-panel">
+            <div className="leaderboard-archive-label">{leaderboardSeasonArchive.label}</div>
+            <div className="leaderboard-archive-detail" data-testid="leaderboard-archive-detail">{leaderboardSeasonArchive.detail}</div>
+            {leaderboardSeasonArchive.entries.length > 0 ? (
+              <div className="leaderboard-archive-list" data-testid="leaderboard-archive-list">
+                {leaderboardSeasonArchive.entries.map((entry) => (
+                  <div
+                    key={`${entry.hero}-${entry.score}-${entry.combo}-${entry.createdAt}`}
+                    className="leaderboard-archive-card"
+                    data-testid="leaderboard-archive-item"
+                  >
+                    <div className="leaderboard-archive-topline">
+                      <span className="leaderboard-archive-hero">{entry.hero}</span>
+                      <span className={`leaderboard-archive-chip${entry.qualified ? "" : " leaderboard-archive-chip-archived"}`}>{entry.chip}</span>
+                    </div>
+                    <div className="leaderboard-archive-meta">{entry.detail}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="leaderboard-archive-empty" data-testid="leaderboard-archive-empty">
+                Archived season history appears after the first completed run.
               </div>
             )}
           </div>
