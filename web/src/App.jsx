@@ -1079,6 +1079,29 @@ function saveProgress(data) {
   localStorage.setItem("saga_progress", JSON.stringify(data));
 }
 
+function loadArchiveHeroFilter() {
+  try {
+    const value = localStorage.getItem("saga_archive_hero_filter");
+    return typeof value === "string" && value.trim() ? value : "all";
+  }
+  catch {
+    return "all";
+  }
+}
+
+function saveArchiveHeroFilter(heroFilter) {
+  try {
+    if (!heroFilter || heroFilter === "all") {
+      localStorage.removeItem("saga_archive_hero_filter");
+      return;
+    }
+    localStorage.setItem("saga_archive_hero_filter", heroFilter);
+  }
+  catch {
+    // Ignore storage persistence failures for non-critical UI state.
+  }
+}
+
 const initState = (hero) => {
   const mission = createMission(1);
   return {
@@ -1520,7 +1543,7 @@ export default function App() {
   const [highScores, setHighScores] = useState(loadHighScores());
   const [leaderboardUpdate, setLeaderboardUpdate] = useState(null);
   const [leaderboardMomentumUpdate, setLeaderboardMomentumUpdate] = useState(null);
-  const [selectedArchiveHero, setSelectedArchiveHero] = useState("all");
+  const [selectedArchiveHero, setSelectedArchiveHero] = useState(() => loadArchiveHeroFilter());
   const [studioBrief, setStudioBrief] = useState("Neon sponsor arena for creator-made hero collectibles");
   const [studioPack, setStudioPack] = useState(null);
   const [studioStatus, setStudioStatus] = useState("idle");
@@ -1610,6 +1633,10 @@ export default function App() {
       setSelectedArchiveHero("all");
     }
   }, [leaderboardSeasonArchive.filters, selectedArchiveHero]);
+
+  useEffect(() => {
+    saveArchiveHeroFilter(leaderboardSeasonArchive.activeFilter);
+  }, [leaderboardSeasonArchive.activeFilter]);
 
   async function trackEvent(message, meta = {}) {
     try {

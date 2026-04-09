@@ -1104,6 +1104,48 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("leaderboard-control-list")).not.toContainText("Sound Crafter");
   });
 
+  test("leaderboard archive hero filter survives reloads and clears stale saved heroes", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        { hero: "SyncFace Weaver", score: 145, combo: 6, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 141, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z" },
+        { hero: "Sound Crafter", score: 138, combo: 5, date: "2026-04-03", createdAt: "2026-04-03T10:00:00.000Z" }
+      ]));
+      localStorage.setItem("saga_highscore_history", JSON.stringify([
+        { hero: "Sound Crafter", score: 118, combo: 4, date: "2026-04-06", createdAt: "2026-04-06T08:00:00.000Z", placement: 3, qualified: true },
+        { hero: "SyncFace Weaver", score: 145, combo: 6, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z", placement: 1, qualified: true },
+        { hero: "Sound Crafter", score: 138, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T08:00:00.000Z", placement: 2, qualified: true }
+      ]));
+      localStorage.removeItem("saga_archive_hero_filter");
+    });
+    await page.reload();
+
+    const archiveFilters = page.getByTestId("leaderboard-archive-filters");
+    await archiveFilters.getByRole("button", { name: "Sound Crafter", exact: true }).click();
+    await expect(page.getByTestId("leaderboard-archive-detail")).toContainText("Latest 2 archived runs for Sound Crafter.");
+    expect(await page.evaluate(() => localStorage.getItem("saga_archive_hero_filter"))).toBe("Sound Crafter");
+
+    await page.reload();
+    await expect(page.getByTestId("leaderboard-archive-detail")).toContainText("Latest 2 archived runs for Sound Crafter.");
+    await expect(page.getByTestId("leaderboard-archive-filters").getByRole("button", { name: "Sound Crafter", exact: true })).toHaveClass(/active/);
+
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        { hero: "SyncFace Weaver", score: 145, combo: 6, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 141, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z" }
+      ]));
+      localStorage.setItem("saga_highscore_history", JSON.stringify([
+        { hero: "SyncFace Weaver", score: 145, combo: 6, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z", placement: 1, qualified: true },
+        { hero: "3D Modeler", score: 141, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z", placement: 2, qualified: true }
+      ]));
+    });
+    await page.reload();
+
+    await expect(page.getByTestId("leaderboard-archive-detail")).toContainText("Latest 2 archived runs across the season table.");
+    await expect(page.getByTestId("leaderboard-archive-filters").getByRole("button", { name: "All heroes", exact: true })).toHaveClass(/active/);
+    expect(await page.evaluate(() => localStorage.getItem("saga_archive_hero_filter"))).toBeNull();
+  });
+
   test("leaderboard board-control panel shows an empty-state prompt with no posted runs", async ({ page }) => {
     await page.evaluate(() => {
       localStorage.removeItem("saga_highscores");
