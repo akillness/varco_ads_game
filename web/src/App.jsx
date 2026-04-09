@@ -1194,6 +1194,39 @@ function formatArchivePlacement(entry) {
   return `outside top ${HIGH_SCORE_LIMIT}`;
 }
 
+function formatArchivePlacementChip(entry) {
+  if (entry?.qualified && entry?.placement) {
+    return `#${entry.placement}`;
+  }
+  return "OUT";
+}
+
+function getArchiveEntryForm(history, entry, limit = 3) {
+  if (!entry) {
+    return [];
+  }
+
+  const heroHistory = history.filter((candidate) => candidate.hero === entry.hero);
+  const startIndex = heroHistory.findIndex((candidate) => (
+    candidate.createdAt === entry.createdAt
+    && candidate.score === entry.score
+    && candidate.combo === entry.combo
+    && candidate.hero === entry.hero
+  ));
+
+  if (startIndex === -1) {
+    return [];
+  }
+
+  return heroHistory.slice(startIndex, startIndex + limit).map((candidate, index) => ({
+    id: `${candidate.hero}-${candidate.createdAt}-${candidate.score}-${candidate.combo}-${index}`,
+    label: formatArchivePlacementChip(candidate),
+    detail: `${candidate.score} pts · ${candidate.combo}x combo · ${candidate.date}`,
+    current: index === 0,
+    qualified: candidate.qualified
+  }));
+}
+
 function getArchiveEntryTrend(entry, previousEntry) {
   if (!entry) {
     return {
@@ -1384,7 +1417,8 @@ function getLeaderboardSeasonArchive(scores, heroFilter = "all") {
         detail: `${entry.score} pts · ${entry.combo}x combo · ${entry.date}`,
         trendLabel: entryTrend.label,
         trendDetail: entryTrend.detail,
-        trendTone: entryTrend.tone
+        trendTone: entryTrend.tone,
+        form: getArchiveEntryForm(archiveSource, entry)
       };
     })
   };
@@ -3188,6 +3222,27 @@ export default function App() {
                       <span className="leaderboard-archive-entry-trend-label">{entry.trendLabel}</span>
                       <span className="leaderboard-archive-entry-trend-detail">{entry.trendDetail}</span>
                     </div>
+                    {entry.form.length > 0 && (
+                      <div className="leaderboard-archive-entry-form" data-testid="leaderboard-archive-entry-form">
+                        <span className="leaderboard-archive-entry-form-label">RECENT FORM</span>
+                        <div className="leaderboard-archive-entry-form-chips">
+                          {entry.form.map((formEntry) => (
+                            <span
+                              key={formEntry.id}
+                              className={[
+                                "leaderboard-archive-entry-form-chip",
+                                formEntry.current ? "current" : "",
+                                formEntry.qualified ? "qualified" : "archived"
+                              ].filter(Boolean).join(" ")}
+                              data-testid="leaderboard-archive-entry-form-chip"
+                              title={formEntry.detail}
+                            >
+                              {formEntry.label}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

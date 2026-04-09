@@ -1101,6 +1101,58 @@ main {
   background: rgba(255, 255, 255, 0.02);
 }
 
+.leaderboard-archive-entry-form {
+  display: grid;
+  gap: 5px;
+}
+
+.leaderboard-archive-entry-form-label,
+.leaderboard-archive-entry-trend-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.leaderboard-archive-entry-form-label {
+  color: #8b949e;
+}
+
+.leaderboard-archive-entry-form-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.leaderboard-archive-entry-form-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(139, 148, 158, 0.2);
+  background: rgba(255, 255, 255, 0.03);
+  color: #dce6f4;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.leaderboard-archive-entry-form-chip.current {
+  border-color: rgba(255, 176, 31, 0.35);
+  background: rgba(255, 176, 31, 0.12);
+  color: #ffd58b;
+}
+
+.leaderboard-archive-entry-form-chip.qualified {
+  border-color: rgba(63, 185, 160, 0.3);
+}
+
+.leaderboard-archive-entry-form-chip.archived {
+  border-color: rgba(248, 81, 73, 0.24);
+  color: #ffb4ae;
+}
+
 .leaderboard-archive-entry-trend-up {
   border-color: rgba(63, 185, 160, 0.28);
   background: rgba(63, 185, 160, 0.08);
@@ -1117,9 +1169,6 @@ main {
 }
 
 .leaderboard-archive-entry-trend-label {
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
   color: #d2a8ff;
 }
 

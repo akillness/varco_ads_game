@@ -1078,6 +1078,7 @@ test.describe("Web UI", () => {
 
     const archiveRows = page.getByTestId("leaderboard-archive-item");
     const archiveEntryTrends = page.getByTestId("leaderboard-archive-entry-trend");
+    const archiveEntryForms = page.getByTestId("leaderboard-archive-entry-form");
     await expect(page.getByTestId("leaderboard-archive-detail")).toContainText("Latest 4 archived runs across the season table.");
     await expect(page.getByTestId("leaderboard-archive-story")).toContainText("3 heroes logged 5 archived runs. 4/5 stayed inside the top 5. Latest archive: Sound Crafter at 118 pts (outside the top 5).");
     await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("CUTLINE DELTA");
@@ -1087,13 +1088,17 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("leaderboard-archive-filters")).toBeVisible();
     await expect(archiveRows).toHaveCount(4);
     await expect(archiveEntryTrends).toHaveCount(4);
+    await expect(archiveEntryForms).toHaveCount(4);
     await expect(archiveRows.nth(0)).toContainText("Sound Crafter");
     await expect(archiveRows.nth(0)).toContainText("OUTSIDE TOP 5");
     await expect(archiveRows.nth(0)).toContainText("118 pts · 4x combo · 2026-04-06");
     await expect(archiveEntryTrends.nth(0)).toContainText("SLIPPED");
     await expect(archiveEntryTrends.nth(0)).toContainText("Sound Crafter fell from #2 to outside the top 5.");
+    await expect(archiveEntryForms.nth(0)).toContainText("RECENT FORM");
+    await expect(archiveRows.nth(0).getByTestId("leaderboard-archive-entry-form-chip")).toHaveText(["OUT", "#2", "#3"]);
     await expect(archiveRows.nth(1)).toContainText("SyncFace Weaver");
     await expect(archiveRows.nth(1)).toContainText("#1 FINISH");
+    await expect(archiveRows.nth(1).getByTestId("leaderboard-archive-entry-form-chip")).toHaveText(["#1"]);
     await expect(archiveRows.nth(2)).toContainText("Sound Crafter");
     await expect(archiveEntryTrends.nth(2)).toContainText("CLIMBING");
     await expect(archiveEntryTrends.nth(2)).toContainText("Sound Crafter improved from #3 to #2.");
@@ -1107,8 +1112,10 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("Sound Crafter's latest archive is 20 pts below their last top-5 finish (#2 at 138 pts).");
     await expect(archiveRows).toHaveCount(3);
     await expect(archiveEntryTrends).toHaveCount(3);
+    await expect(archiveEntryForms).toHaveCount(3);
     await expect(archiveRows.nth(0)).toContainText("118 pts · 4x combo · 2026-04-06");
     await expect(archiveEntryTrends.nth(0)).toContainText("SLIPPED");
+    await expect(archiveRows.nth(0).getByTestId("leaderboard-archive-entry-form-chip")).toHaveText(["OUT", "#2", "#3"]);
     await expect(archiveRows.nth(2)).toContainText("131 pts · 5x combo · 2026-04-03");
     await expect(archiveEntryTrends.nth(2)).toContainText("SEASON OPENER");
 
@@ -1118,7 +1125,9 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("leaderboard-archive-trend")).toContainText("SyncFace Weaver owns the latest #1 archive.");
     await expect(archiveRows).toHaveCount(1);
     await expect(archiveEntryTrends).toHaveCount(1);
+    await expect(archiveEntryForms).toHaveCount(1);
     await expect(archiveRows.nth(0)).toContainText("#1 FINISH");
+    await expect(archiveRows.nth(0).getByTestId("leaderboard-archive-entry-form-chip")).toHaveText(["#1"]);
     await expect(archiveEntryTrends.nth(0)).toContainText("SEASON OPENER");
 
     await archiveFilters.getByRole("button", { name: "All heroes", exact: true }).click();
