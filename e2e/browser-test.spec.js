@@ -1405,8 +1405,13 @@ test.describe("Web UI", () => {
       window.__SAGA_DEBUG__.dispatch({ type: "TIMER_TICK" });
     });
 
-    await expect(page.getByTestId("game-over-placement")).toContainText("New #1 high score");
-    await expect(page.getByTestId("game-over-placement")).toContainText("SyncFace Weaver takes the lead");
+    const placementCallout = page.getByTestId("game-over-placement");
+    await expect(placementCallout).toContainText("New #1 high score");
+    await expect(placementCallout).toContainText("SyncFace Weaver takes the lead");
+    await expect(placementCallout).toHaveAttribute("tabindex", "0");
+    await expect(placementCallout).toHaveAttribute("aria-label", "LEADERBOARD UPDATE. New #1 high score — SyncFace Weaver takes the lead.");
+    await placementCallout.focus();
+    await expect(placementCallout).toBeFocused();
     await expect(page.getByTestId("leaderboard-recap-chip")).toHaveText("LIVE #1 PACE");
     await expect(page.getByTestId("leaderboard-recap-detail")).toContainText("move ahead of 3D Modeler");
 
@@ -1475,8 +1480,17 @@ test.describe("Web UI", () => {
       window.__SAGA_DEBUG__.dispatch({ type: "TIMER_TICK" });
     });
 
-    await expect(page.getByTestId("game-over-placement")).toContainText("High score secured at #3.");
-    await expect(page.getByTestId("game-over-momentum")).toContainText("Sound Crafter extends their top-5 streak to 3 straight runs.");
+    const placementCallout = page.getByTestId("game-over-placement");
+    await expect(placementCallout).toContainText("High score secured at #3.");
+    await expect(placementCallout).toHaveAttribute("tabindex", "0");
+    await expect(placementCallout).toHaveAttribute("aria-label", "LEADERBOARD UPDATE. High score secured at #3.");
+
+    const momentumCallout = page.getByTestId("game-over-momentum");
+    await expect(momentumCallout).toContainText("Sound Crafter extends their top-5 streak to 3 straight runs.");
+    await expect(momentumCallout).toHaveAttribute("tabindex", "0");
+    await expect(momentumCallout).toHaveAttribute("aria-label", "MOMENTUM UPDATE. Sound Crafter extends their top-5 streak to 3 straight runs.");
+    await momentumCallout.focus();
+    await expect(momentumCallout).toBeFocused();
   });
 
   test("game over overlay opens a first top-5 streak when a hero archives their first qualifying finish", async ({ page }) => {
@@ -1615,8 +1629,13 @@ test.describe("Web UI", () => {
       window.__SAGA_DEBUG__.dispatch({ type: "TIMER_TICK" });
     });
 
-    await expect(page.getByTestId("game-over-placement")).toContainText("Run archived outside the top 5.");
-    await expect(page.getByTestId("game-over-momentum")).toContainText("Sound Crafter's 2-run top-5 streak snaps with this archived finish.");
+    const placementCallout = page.getByTestId("game-over-placement");
+    await expect(placementCallout).toContainText("Run archived outside the top 5.");
+    await expect(placementCallout).toHaveAttribute("aria-label", "LEADERBOARD UPDATE. Run archived outside the top 5.");
+
+    const momentumCallout = page.getByTestId("game-over-momentum");
+    await expect(momentumCallout).toContainText("Sound Crafter's 2-run top-5 streak snaps with this archived finish.");
+    await expect(momentumCallout).toHaveAttribute("aria-label", "MOMENTUM UPDATE. Sound Crafter's 2-run top-5 streak snaps with this archived finish.");
   });
 
   test("leaderboard recap and rival summary use combo gaps when a tied score still trails on tiebreakers", async ({ page }) => {

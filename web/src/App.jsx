@@ -1285,6 +1285,10 @@ function getArchiveSummaryAriaLabel(label, detail) {
   return `${label}. ${detail}`;
 }
 
+function getGameOverCalloutAriaLabel(label, message) {
+  return `${label}. ${message}`;
+}
+
 function getLeaderboardControlAriaLabel(control) {
   return `${control.hero}. ${control.badge}. ${control.detail}`;
 }
@@ -2953,6 +2957,9 @@ export default function App() {
               <div
                 className={`game-over-placement game-over-placement-${leaderboardUpdate.tone}`}
                 data-testid="game-over-placement"
+                tabIndex={0}
+                aria-label={getGameOverCalloutAriaLabel("LEADERBOARD UPDATE", leaderboardUpdate.message)}
+                title={getGameOverCalloutAriaLabel("LEADERBOARD UPDATE", leaderboardUpdate.message)}
               >
                 {leaderboardUpdate.message}
               </div>
@@ -2961,6 +2968,9 @@ export default function App() {
               <div
                 className={`game-over-placement game-over-placement-${leaderboardMomentumUpdate.tone} game-over-momentum`}
                 data-testid="game-over-momentum"
+                tabIndex={0}
+                aria-label={getGameOverCalloutAriaLabel("MOMENTUM UPDATE", leaderboardMomentumUpdate.message)}
+                title={getGameOverCalloutAriaLabel("MOMENTUM UPDATE", leaderboardMomentumUpdate.message)}
               >
                 {leaderboardMomentumUpdate.message}
               </div>

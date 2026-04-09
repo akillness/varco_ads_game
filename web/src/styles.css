@@ -1040,6 +1040,7 @@ main {
   border-color: rgba(88, 166, 255, 0.35);
 }
 
+.game-over-placement:focus-visible,
 .leaderboard-archive-filter:focus-visible,
 .leaderboard-recap:focus-visible,
 .leaderboard-summary-card:focus-visible,
