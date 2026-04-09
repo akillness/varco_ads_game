@@ -1364,6 +1364,35 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("leaderboard-rival-detail")).toContainText("Matching 132 pts still needs 1 more combo to bump Sound Crafter off the board");
   });
 
+  test("leaderboard recap explains a tied top score as a recency tiebreak instead of a phantom point lead", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        { hero: "3D Modeler", score: 180, combo: 6, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z" },
+        { hero: "Sound Crafter", score: 166, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z" },
+        { hero: "SyncFace Weaver", score: 151, combo: 4, date: "2026-04-03", createdAt: "2026-04-03T10:00:00.000Z" }
+      ]));
+    });
+    await page.reload();
+
+    await page.evaluate(() => {
+      window.__SAGA_DEBUG__.dispatch({
+        type: "DEBUG_PATCH_STATE",
+        patch: {
+          running: true,
+          timer: 18,
+          score: 180,
+          combo: 6,
+          maxCombo: 6,
+          hero: { id: "faceweaver", name: "SyncFace Weaver", hp: 4, speed: 2, desc: "HP 4 / SPD 2" }
+        }
+      });
+    });
+
+    await expect(page.getByTestId("leaderboard-recap-chip")).toHaveText("LIVE #1 PACE");
+    await expect(page.getByTestId("leaderboard-recap-detail")).toContainText("match 3D Modeler at 180 pts / 6x and take #1 on recency");
+    await expect(page.getByTestId("leaderboard-rival-detail")).toContainText("3D Modeler owns the current benchmark at 180 pts / 6x, but matching that line already flips #1 on recency");
+  });
+
   test("leaderboard sorts tied scores by combo and recency", async ({ page }) => {
     await page.evaluate(() => {
       localStorage.setItem("saga_highscores", JSON.stringify([

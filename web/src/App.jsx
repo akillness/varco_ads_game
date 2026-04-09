@@ -706,10 +706,16 @@ function getLeaderboardRecap(scores, entry) {
   });
 
   if (preview.placement === 1) {
+    const leaderGap = getLeaderboardTargetGap(entry, leader);
+    let detail = `${entry.hero} would move ahead of ${leader.hero} with ${entry.score} pts / ${entry.combo}x combo.`;
+    if (leaderGap?.kind === "tiebreak") {
+      detail = `${entry.hero} would match ${leader.hero} at ${entry.score} pts / ${entry.combo}x and take #1 on recency.`;
+    }
+
     return {
       tone: "top",
       chip: "LIVE #1 PACE",
-      detail: `${entry.hero} would move ahead of ${leader.hero} with ${entry.score} pts / ${entry.combo}x combo.`
+      detail
     };
   }
 
@@ -783,10 +789,15 @@ function getLeaderboardSeasonSummary(scores, entry) {
   });
 
   if (preview.placement === 1) {
-    const leadMargin = Math.max(entry.score - leader.score, 1);
+    const leaderGap = getLeaderboardTargetGap(entry, leader);
+    let rivalDetail = `${leader.hero} owns the current benchmark at ${leader.score} pts. ${entry.hero} is ${Math.max(entry.score - leader.score, 1)} pt${Math.max(entry.score - leader.score, 1) === 1 ? "" : "s"} ahead on live pace.`;
+    if (leaderGap?.kind === "tiebreak") {
+      rivalDetail = `${leader.hero} owns the current benchmark at ${leader.score} pts / ${leader.combo}x, but matching that line already flips #1 on recency.`;
+    }
+
     return {
       seasonDetail,
-      rivalDetail: `${leader.hero} owns the current benchmark at ${leader.score} pts. ${entry.hero} is ${leadMargin} pt${leadMargin === 1 ? "" : "s"} ahead on live pace.`
+      rivalDetail
     };
   }
 
