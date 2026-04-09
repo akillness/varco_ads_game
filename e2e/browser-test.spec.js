@@ -1054,6 +1054,7 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("leaderboard-control-item")).toHaveCount(3);
     await expect(page.getByTestId("leaderboard-control-momentum")).toContainText("Season streaks unlock after the first archived run.");
     await expect(page.getByTestId("leaderboard-archive-empty")).toContainText("Archived season history appears after the first completed run.");
+    await expect(page.getByTestId("leaderboard-archive-trend")).toContainText("Trend chips unlock after the first completed run.");
   });
 
   test("leaderboard archive panel shows recent archived runs even when one falls outside the live board", async ({ page }) => {
@@ -1080,6 +1081,8 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("leaderboard-archive-story")).toContainText("3 heroes logged 5 archived runs. 4/5 stayed inside the top 5. Latest archive: Sound Crafter at 118 pts (outside the top 5).");
     await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("CUTLINE DELTA");
     await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("Sound Crafter's latest archive needs about 12 more pts to re-enter today's live top 5.");
+    await expect(page.getByTestId("leaderboard-archive-trend")).toContainText("STREAK SNAPPED");
+    await expect(page.getByTestId("leaderboard-archive-trend")).toContainText("Sound Crafter's best run was 2 straight top-5 archives.");
     await expect(page.getByTestId("leaderboard-archive-filters")).toBeVisible();
     await expect(archiveRows).toHaveCount(4);
     await expect(archiveRows.nth(0)).toContainText("Sound Crafter");
@@ -1101,6 +1104,8 @@ test.describe("Web UI", () => {
 
     await archiveFilters.getByRole("button", { name: "SyncFace Weaver", exact: true }).click();
     await expect(page.getByTestId("leaderboard-archive-detail")).toContainText("Latest 1 archived run for SyncFace Weaver.");
+    await expect(page.getByTestId("leaderboard-archive-trend")).toContainText("PACE SETTER");
+    await expect(page.getByTestId("leaderboard-archive-trend")).toContainText("SyncFace Weaver owns the latest #1 archive.");
     await expect(archiveRows).toHaveCount(1);
     await expect(archiveRows.nth(0)).toContainText("#1 FINISH");
 
@@ -1132,6 +1137,8 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("leaderboard-archive-story")).toContainText("Sound Crafter has 2 archived runs, peaked at #2, and is riding a 2-run top-5 streak.");
     await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("SOUND CRAFTER SEASON-BEST CHASE");
     await expect(page.getByTestId("leaderboard-archive-delta")).toContainText("Sound Crafter's latest archive is 20 pts shy of their season-best finish (#2 at 138 pts).");
+    await expect(page.getByTestId("leaderboard-archive-trend")).toContainText("HOT STREAK");
+    await expect(page.getByTestId("leaderboard-archive-trend")).toContainText("Sound Crafter has 2 straight top-5 archives.");
     expect(await page.evaluate(() => localStorage.getItem("saga_archive_hero_filter"))).toBe("Sound Crafter");
 
     await page.reload();

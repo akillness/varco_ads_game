@@ -1125,6 +1125,68 @@ function getLeaderboardArchiveDelta(scores, history, activeFilter = "all") {
   };
 }
 
+function getLeaderboardArchiveTrend(history, activeFilter = "all") {
+  if (!history.length) {
+    return {
+      label: "ARCHIVE TREND",
+      detail: "Trend chips unlock after the first completed run."
+    };
+  }
+
+  const focusHero = activeFilter === "all" ? history[0]?.hero : activeFilter;
+  const heroHistory = history.filter((entry) => entry.hero === focusHero);
+  const latestEntry = heroHistory[0] || null;
+  const latestQualifiedEntry = heroHistory.find((entry) => entry.qualified) || null;
+  const heroStats = getHeroMomentumStats(history, focusHero);
+
+  if (!latestEntry) {
+    return {
+      label: "ARCHIVE TREND",
+      detail: "Trend chips unlock after the first completed run."
+    };
+  }
+
+  if (latestEntry.qualified && latestEntry.placement === 1) {
+    return {
+      label: "PACE SETTER",
+      detail: `${focusHero} owns the latest #1 archive.`
+    };
+  }
+
+  if (heroStats.currentStreak > 1) {
+    return {
+      label: "HOT STREAK",
+      detail: `${focusHero} has ${heroStats.currentStreak} straight top-${HIGH_SCORE_LIMIT} archives.`
+    };
+  }
+
+  if (latestEntry.qualified) {
+    return {
+      label: "BACK ON BOARD",
+      detail: `${focusHero} just banked a #${latestEntry.placement} archive.`
+    };
+  }
+
+  if (latestQualifiedEntry && heroStats.longestStreak > 1) {
+    return {
+      label: "STREAK SNAPPED",
+      detail: `${focusHero}'s best run was ${heroStats.longestStreak} straight top-${HIGH_SCORE_LIMIT} archives.`
+    };
+  }
+
+  if (latestQualifiedEntry) {
+    return {
+      label: "CHASE MODE",
+      detail: `${focusHero}'s last top-${HIGH_SCORE_LIMIT} archive was #${latestQualifiedEntry.placement}.`
+    };
+  }
+
+  return {
+    label: "FIRST BREAKTHROUGH",
+    detail: `${focusHero} is still chasing the first top-${HIGH_SCORE_LIMIT} archive.`
+  };
+}
+
 function getLeaderboardSeasonArchive(scores, heroFilter = "all") {
   const history = loadHighScoreHistory(scores, { allowFallback: false });
 
@@ -1134,6 +1196,7 @@ function getLeaderboardSeasonArchive(scores, heroFilter = "all") {
   const requestedFilter = supportsFiltering ? heroFilter : "all";
   const activeFilter = requestedFilter === "all" || heroFilters.includes(requestedFilter) ? requestedFilter : "all";
   const archiveDelta = getLeaderboardArchiveDelta(scores, history, activeFilter);
+  const archiveTrend = getLeaderboardArchiveTrend(history, activeFilter);
   const filteredHistory = (activeFilter === "all"
     ? history
     : history.filter((entry) => entry.hero === activeFilter)
@@ -1147,6 +1210,8 @@ function getLeaderboardSeasonArchive(scores, heroFilter = "all") {
       storyDetail: "Archive summaries unlock after the first completed run.",
       deltaLabel: archiveDelta.label,
       deltaDetail: archiveDelta.detail,
+      trendLabel: archiveTrend.label,
+      trendDetail: archiveTrend.detail,
       filters: [],
       activeFilter,
       entries: []
@@ -1193,6 +1258,8 @@ function getLeaderboardSeasonArchive(scores, heroFilter = "all") {
     storyDetail,
     deltaLabel: archiveDelta.label,
     deltaDetail: archiveDelta.detail,
+    trendLabel: archiveTrend.label,
+    trendDetail: archiveTrend.detail,
     filters: supportsFiltering
       ? [
         { id: "all", label: "All heroes" },
@@ -2983,6 +3050,10 @@ export default function App() {
             <div className="leaderboard-archive-delta" data-testid="leaderboard-archive-delta">
               <span className="leaderboard-archive-delta-label">{leaderboardSeasonArchive.deltaLabel}</span>
               <span className="leaderboard-archive-delta-detail">{leaderboardSeasonArchive.deltaDetail}</span>
+            </div>
+            <div className="leaderboard-archive-trend" data-testid="leaderboard-archive-trend">
+              <span className="leaderboard-archive-trend-label">{leaderboardSeasonArchive.trendLabel}</span>
+              <span className="leaderboard-archive-trend-detail">{leaderboardSeasonArchive.trendDetail}</span>
             </div>
             {leaderboardSeasonArchive.entries.length > 0 ? (
               <div className="leaderboard-archive-list" data-testid="leaderboard-archive-list">

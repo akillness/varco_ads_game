@@ -973,14 +973,16 @@ main {
 .leaderboard-archive-empty,
 .leaderboard-archive-meta,
 .leaderboard-archive-story-detail,
-.leaderboard-archive-delta-detail {
+.leaderboard-archive-delta-detail,
+.leaderboard-archive-trend-detail {
   font-size: 11px;
   line-height: 1.45;
   color: #dce6f4;
 }
 
 .leaderboard-archive-story,
-.leaderboard-archive-delta {
+.leaderboard-archive-delta,
+.leaderboard-archive-trend {
   display: grid;
   gap: 4px;
   padding: 8px 10px;
@@ -997,12 +999,22 @@ main {
   background: linear-gradient(135deg, rgba(240, 136, 62, 0.12), rgba(88, 166, 255, 0.05));
 }
 
+.leaderboard-archive-trend {
+  border: 1px solid rgba(63, 185, 160, 0.24);
+  background: linear-gradient(135deg, rgba(63, 185, 160, 0.12), rgba(88, 166, 255, 0.04));
+}
+
 .leaderboard-archive-story-label,
-.leaderboard-archive-delta-label {
+.leaderboard-archive-delta-label,
+.leaderboard-archive-trend-label {
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.08em;
   color: #8b949e;
+}
+
+.leaderboard-archive-trend-label {
+  color: #7ee7d4;
 }
 
 .leaderboard-archive-filters {
