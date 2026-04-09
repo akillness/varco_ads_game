@@ -644,6 +644,26 @@ function previewHighScorePlacement(scores, entry) {
   };
 }
 
+function getLeaderboardTargetGap(entry, target) {
+  if (!entry || !target) return null;
+
+  const scoreGap = target.score - entry.score;
+  if (scoreGap > 0) {
+    return { kind: "score", amount: scoreGap };
+  }
+
+  const comboGap = target.combo - entry.combo;
+  if (comboGap > 0) {
+    return { kind: "combo", amount: comboGap };
+  }
+
+  if (scoreGap === 0 && comboGap === 0) {
+    return { kind: "tiebreak", amount: 0 };
+  }
+
+  return { kind: "ahead", amount: 0 };
+}
+
 function getLeaderboardRecap(scores, entry) {
   const leader = scores[0] || null;
   const cutoff = scores[Math.min(scores.length, HIGH_SCORE_LIMIT) - 1] || null;
@@ -695,18 +715,33 @@ function getLeaderboardRecap(scores, entry) {
 
   if (preview.placement && preview.qualified) {
     const nextTarget = scores[preview.placement - 2] || leader;
+    const gap = getLeaderboardTargetGap(entry, nextTarget);
+
+    let detail = `Current run would slot in at #${preview.placement}. ${Math.max(nextTarget.score - entry.score, 0)} more pts catches ${nextTarget.hero} above.`;
+    if (gap?.kind === "combo") {
+      detail = `Current run would slot in at #${preview.placement}. Matching ${nextTarget.score} pts is not enough — ${gap.amount} more combo catches ${nextTarget.hero} above.`;
+    } else if (gap?.kind === "tiebreak") {
+      detail = `Current run would slot in at #${preview.placement}. Matching ${nextTarget.score} pts / ${nextTarget.combo}x already edges ${nextTarget.hero} on recency.`;
+    }
+
     return {
       tone: "qualified",
       chip: `LIVE #${preview.placement}`,
-      detail: `Current run would slot in at #${preview.placement}. ${Math.max(nextTarget.score - entry.score, 0)} more pts catches ${nextTarget.hero} above.`
+      detail
     };
   }
 
+  const gap = getLeaderboardTargetGap(entry, cutoff);
   const pointsNeeded = cutoff ? Math.max(cutoff.score - entry.score + 1, 1) : 1;
+  let detail = `Current run sits outside the board. About ${pointsNeeded} more pts likely needed to qualify.`;
+  if (gap?.kind === "combo") {
+    detail = `Current run sits outside the board. Matching ${cutoff.score} pts still needs ${gap.amount} more combo to bump ${cutoff.hero} off the cutline.`;
+  }
+
   return {
     tone: "archived",
     chip: `OUTSIDE TOP ${HIGH_SCORE_LIMIT}`,
-    detail: `Current run sits outside the board. About ${pointsNeeded} more pts likely needed to qualify.`
+    detail
   };
 }
 
@@ -757,17 +792,32 @@ function getLeaderboardSeasonSummary(scores, entry) {
 
   if (preview.placement && preview.qualified) {
     const rival = scores[preview.placement - 2] || leader;
+    const gap = getLeaderboardTargetGap(entry, rival);
     const chasePoints = Math.max(rival.score - entry.score, 0);
+
+    let rivalDetail = `${rival.hero} holds #${preview.placement - 1} at ${rival.score} pts. ${chasePoints} more pt${chasePoints === 1 ? "" : "s"} steals that rival spot.`;
+    if (gap?.kind === "combo") {
+      rivalDetail = `${rival.hero} holds #${preview.placement - 1} at ${rival.score} pts. Matching ${rival.score} pts still needs ${gap.amount} more combo to steal that rival spot.`;
+    } else if (gap?.kind === "tiebreak") {
+      rivalDetail = `${rival.hero} holds #${preview.placement - 1} at ${rival.score} pts, but matching ${rival.score} pts / ${rival.combo}x already flips the tiebreak.`;
+    }
+
     return {
       seasonDetail,
-      rivalDetail: `${rival.hero} holds #${preview.placement - 1} at ${rival.score} pts. ${chasePoints} more pt${chasePoints === 1 ? "" : "s"} steals that rival spot.`
+      rivalDetail
     };
   }
 
+  const gap = getLeaderboardTargetGap(entry, cutoff);
   const pointsNeeded = cutoff ? Math.max(cutoff.score - entry.score + 1, 1) : 1;
+  let rivalDetail = `${cutoff.hero} defends #${HIGH_SCORE_LIMIT} at ${cutoff.score} pts. ${pointsNeeded} more pt${pointsNeeded === 1 ? "" : "s"} bumps them off the board.`;
+  if (gap?.kind === "combo") {
+    rivalDetail = `${cutoff.hero} defends #${HIGH_SCORE_LIMIT} at ${cutoff.score} pts. Matching ${cutoff.score} pts still needs ${gap.amount} more combo to bump ${cutoff.hero} off the board.`;
+  }
+
   return {
     seasonDetail,
-    rivalDetail: `${cutoff.hero} defends #${HIGH_SCORE_LIMIT} at ${cutoff.score} pts. ${pointsNeeded} more pt${pointsNeeded === 1 ? "" : "s"} bumps them off the board.`
+    rivalDetail
   };
 }
 

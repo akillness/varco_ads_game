@@ -1300,6 +1300,70 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("game-over-momentum")).toContainText("Sound Crafter's 2-run top-5 streak snaps with this archived finish.");
   });
 
+  test("leaderboard recap and rival summary use combo gaps when a tied score still trails on tiebreakers", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        { hero: "3D Modeler", score: 170, combo: 6, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z" },
+        { hero: "Sound Crafter", score: 150, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z" },
+        { hero: "SyncFace Weaver", score: 141, combo: 4, date: "2026-04-03", createdAt: "2026-04-03T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 132, combo: 4, date: "2026-04-02", createdAt: "2026-04-02T10:00:00.000Z" },
+        { hero: "Sound Crafter", score: 124, combo: 3, date: "2026-04-01", createdAt: "2026-04-01T10:00:00.000Z" }
+      ]));
+    });
+    await page.reload();
+
+    await page.evaluate(() => {
+      window.__SAGA_DEBUG__.dispatch({
+        type: "DEBUG_PATCH_STATE",
+        patch: {
+          running: true,
+          timer: 20,
+          score: 150,
+          combo: 4,
+          maxCombo: 4,
+          hero: { id: "faceweaver", name: "SyncFace Weaver", hp: 4, speed: 2, desc: "HP 4 / SPD 2" }
+        }
+      });
+    });
+
+    await expect(page.getByTestId("leaderboard-recap-chip")).toHaveText("LIVE #3");
+    await expect(page.getByTestId("leaderboard-recap-detail")).toContainText("Matching 150 pts is not enough");
+    await expect(page.getByTestId("leaderboard-recap-detail")).toContainText("1 more combo catches Sound Crafter above");
+    await expect(page.getByTestId("leaderboard-rival-detail")).toContainText("Matching 150 pts still needs 1 more combo to steal that rival spot");
+  });
+
+  test("leaderboard recap uses combo gaps instead of phantom point gaps at the cutline", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        { hero: "3D Modeler", score: 180, combo: 6, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z" },
+        { hero: "Sound Crafter", score: 166, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z" },
+        { hero: "SyncFace Weaver", score: 151, combo: 5, date: "2026-04-03", createdAt: "2026-04-03T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 143, combo: 4, date: "2026-04-02", createdAt: "2026-04-02T10:00:00.000Z" },
+        { hero: "Sound Crafter", score: 132, combo: 4, date: "2026-04-01", createdAt: "2026-04-01T10:00:00.000Z" }
+      ]));
+    });
+    await page.reload();
+
+    await page.evaluate(() => {
+      window.__SAGA_DEBUG__.dispatch({
+        type: "DEBUG_PATCH_STATE",
+        patch: {
+          running: true,
+          timer: 20,
+          score: 132,
+          combo: 3,
+          maxCombo: 3,
+          hero: { id: "faceweaver", name: "SyncFace Weaver", hp: 4, speed: 2, desc: "HP 4 / SPD 2" }
+        }
+      });
+    });
+
+    await expect(page.getByTestId("leaderboard-recap-chip")).toHaveText("OUTSIDE TOP 5");
+    await expect(page.getByTestId("leaderboard-recap-detail")).toContainText("Matching 132 pts still needs 1 more combo");
+    await expect(page.getByTestId("leaderboard-recap-detail")).toContainText("bump Sound Crafter off the cutline");
+    await expect(page.getByTestId("leaderboard-rival-detail")).toContainText("Matching 132 pts still needs 1 more combo to bump Sound Crafter off the board");
+  });
+
   test("leaderboard sorts tied scores by combo and recency", async ({ page }) => {
     await page.evaluate(() => {
       localStorage.setItem("saga_highscores", JSON.stringify([
