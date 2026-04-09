@@ -1542,6 +1542,12 @@ main {
   border-color: rgba(0, 212, 255, 0.3);
 }
 
+.version-item:focus-visible {
+  outline: 2px solid rgba(0, 212, 255, 0.75);
+  outline-offset: 2px;
+  border-color: rgba(0, 212, 255, 0.45);
+}
+
 .version-prompt { flex: 1; color: var(--text, #fff); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .version-latency { color: var(--text-dim, #888); font-size: 10px; white-space: nowrap; }
 .applied-badge {

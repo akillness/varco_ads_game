@@ -408,6 +408,70 @@ test.describe("Web UI", () => {
     await expect(page.locator(".edit-history")).toBeVisible();
   });
 
+  test("edit history entries support keyboard cycling and keyboard apply", async ({ page }) => {
+    await page.evaluate(() => {
+      window.__SAGA_DEBUG__.dispatch({
+        type: "DEBUG_PATCH_STATE",
+        patch: {
+          editHistory: [
+            {
+              id: "history-sound-v1",
+              type: "sound",
+              subType: "bgm",
+              prompt: "Retro arena baseline loop",
+              result: { audioUrl: "https://example.com/audio-v1.mp3" },
+              appliedAt: null,
+              versionNum: 1,
+              latencyMs: 900,
+              cacheHit: false
+            },
+            {
+              id: "history-sound-v2",
+              type: "sound",
+              subType: "bgm",
+              prompt: "Retro arena baseline loop extended mix",
+              result: { audioUrl: "https://example.com/audio-v2.mp3" },
+              appliedAt: null,
+              versionNum: 2,
+              latencyMs: 700,
+              cacheHit: true
+            }
+          ]
+        }
+      });
+    });
+
+    const tabGroup = page.getByTestId("studio-editor-tab-group");
+    await tabGroup.getByRole("button", { name: "📋 이력", exact: true }).click();
+
+    const historyList = page.getByTestId("edit-history-list");
+    const historyEntries = page.getByTestId("edit-history-entry");
+    await expect(historyList).toHaveAttribute("aria-label", "Edit history list");
+    await expect(historyEntries).toHaveCount(2);
+    await expect(historyEntries.nth(0)).toHaveAttribute("aria-description", /Edit history 1 of 2\./);
+    await expect(historyEntries.nth(0)).toHaveAttribute("title", /Cache hit\./);
+    await expect(historyEntries.nth(1)).toHaveAttribute("aria-description", /Press Enter or Space to apply this version\./);
+
+    await historyEntries.nth(0).focus();
+    await expect(historyEntries.nth(0)).toBeFocused();
+
+    await page.keyboard.press("ArrowDown");
+    await expect(historyEntries.nth(1)).toBeFocused();
+
+    await page.keyboard.press("Home");
+    await expect(historyEntries.nth(0)).toBeFocused();
+
+    await page.keyboard.press("End");
+    await expect(historyEntries.nth(1)).toBeFocused();
+
+    await page.keyboard.press("ArrowUp");
+    await expect(historyEntries.nth(0)).toBeFocused();
+
+    await page.keyboard.press("Enter");
+    await expect(historyEntries.nth(0)).toHaveAttribute("aria-description", /Currently applied\./);
+    await expect(historyEntries.nth(0)).toContainText("적용됨");
+  });
+
   test("asset editor cards support keyboard cycling and pressed-state accessibility", async ({ page }) => {
     await page.getByRole("button", { name: /에셋/ }).click();
 
