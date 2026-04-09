@@ -1257,6 +1257,66 @@ test.describe("Web UI", () => {
     expect(openedUrls).toEqual(["https://share.example/telegram-second"]);
   });
 
+  test("share panel exposes keyboard cycling across channels", async ({ page }) => {
+    await page.evaluate(() => {
+      window.__openedUrls = [];
+      window.open = (url) => {
+        window.__openedUrls.push(url);
+        return null;
+      };
+    });
+
+    await page.route("**/api/share/sns", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          links: {
+            x: "https://share.example/x",
+            facebook: "https://share.example/facebook",
+            telegram: "https://share.example/telegram"
+          }
+        })
+      });
+    });
+
+    const shareButtonX = page.getByTestId("share-button-x");
+    const shareButtonFacebook = page.getByTestId("share-button-facebook");
+    const shareButtonTelegram = page.getByTestId("share-button-telegram");
+    const shareFeedback = page.getByTestId("share-feedback");
+
+    await shareButtonX.focus();
+    await expect(shareButtonX).toBeFocused();
+
+    await shareButtonX.press("ArrowRight");
+    await expect(shareButtonFacebook).toBeFocused();
+    await expect(shareFeedback).toContainText("Opened Facebook share link.");
+    await expect(shareButtonFacebook).toHaveText("Shared Facebook");
+
+    await shareButtonFacebook.press("End");
+    await expect(shareButtonTelegram).toBeFocused();
+    await expect(shareFeedback).toContainText("Opened Telegram share link.");
+    await expect(shareButtonTelegram).toHaveText("Shared Telegram");
+
+    await shareButtonTelegram.press("Home");
+    await expect(shareButtonX).toBeFocused();
+    await expect(shareFeedback).toContainText("Opened X share link.");
+    await expect(shareButtonX).toHaveText("Shared X");
+
+    await shareButtonX.press("ArrowLeft");
+    await expect(shareButtonTelegram).toBeFocused();
+    await expect(shareFeedback).toContainText("Opened Telegram share link.");
+
+    const openedUrls = await page.evaluate(() => window.__openedUrls.slice());
+    expect(openedUrls).toEqual([
+      "https://share.example/facebook",
+      "https://share.example/telegram",
+      "https://share.example/x",
+      "https://share.example/telegram"
+    ]);
+  });
+
   test("share panel surfaces backend failures without opening a share window", async ({ page }) => {
     await page.evaluate(() => {
       window.__openedUrls = [];

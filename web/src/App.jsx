@@ -60,6 +60,8 @@ const SHARE_CHANNEL_LABELS = {
   telegram: "Telegram"
 };
 
+const SHARE_CHANNELS = Object.entries(SHARE_CHANNEL_LABELS).map(([id, label]) => ({ id, label }));
+
 const EDITOR_TABS = [
   { id: "sound", label: "🎵 사운드", ariaLabel: "sound editor" },
   { id: "asset", label: "🧊 에셋", ariaLabel: "asset editor" },
@@ -1356,6 +1358,45 @@ function handleArchiveFilterKeyDown(event, currentFilterId, filters, onSelect) {
     onSelect,
     "leaderboard-archive-filter"
   );
+}
+
+function handleShareButtonKeyDown(event, currentChannel, onSelect) {
+  const navigationKeys = ["ArrowLeft", "ArrowRight", "Home", "End"];
+  if (!navigationKeys.includes(event.key) || SHARE_CHANNELS.length < 2) {
+    return;
+  }
+
+  const currentIndex = SHARE_CHANNELS.findIndex((channel) => channel.id === currentChannel);
+  if (currentIndex === -1) {
+    return;
+  }
+
+  let nextIndex = currentIndex;
+  if (event.key === "ArrowRight") {
+    nextIndex = (currentIndex + 1) % SHARE_CHANNELS.length;
+  } else if (event.key === "ArrowLeft") {
+    nextIndex = (currentIndex - 1 + SHARE_CHANNELS.length) % SHARE_CHANNELS.length;
+  } else if (event.key === "Home") {
+    nextIndex = 0;
+  } else if (event.key === "End") {
+    nextIndex = SHARE_CHANNELS.length - 1;
+  }
+
+  if (nextIndex === currentIndex) {
+    return;
+  }
+
+  event.preventDefault();
+  const nextChannel = SHARE_CHANNELS[nextIndex];
+  onSelect(nextChannel.id);
+
+  const buttonGroup = event.currentTarget?.parentElement;
+  if (!buttonGroup) {
+    return;
+  }
+
+  const buttons = Array.from(buttonGroup.querySelectorAll('button[data-share-button="true"]'));
+  buttons[nextIndex]?.focus();
 }
 
 function handleHeroSelectKeyDown(event, currentHeroId, onSelect) {
@@ -3505,9 +3546,36 @@ export default function App() {
         <div className="panel">
           <div className="panel-title">Share</div>
           <div className="share-btns">
-            <button type="button" className="share-btn" data-testid="share-button-x" onClick={() => shareResult("x")}>{shareButtonLabel("x")}</button>
-            <button type="button" className="share-btn" data-testid="share-button-facebook" onClick={() => shareResult("facebook")}>{shareButtonLabel("facebook")}</button>
-            <button type="button" className="share-btn" data-testid="share-button-telegram" onClick={() => shareResult("telegram")}>{shareButtonLabel("telegram")}</button>
+            <button
+              type="button"
+              className="share-btn"
+              data-testid="share-button-x"
+              data-share-button="true"
+              onClick={() => shareResult("x")}
+              onKeyDown={(event) => handleShareButtonKeyDown(event, "x", shareResult)}
+            >
+              {shareButtonLabel("x")}
+            </button>
+            <button
+              type="button"
+              className="share-btn"
+              data-testid="share-button-facebook"
+              data-share-button="true"
+              onClick={() => shareResult("facebook")}
+              onKeyDown={(event) => handleShareButtonKeyDown(event, "facebook", shareResult)}
+            >
+              {shareButtonLabel("facebook")}
+            </button>
+            <button
+              type="button"
+              className="share-btn"
+              data-testid="share-button-telegram"
+              data-share-button="true"
+              onClick={() => shareResult("telegram")}
+              onKeyDown={(event) => handleShareButtonKeyDown(event, "telegram", shareResult)}
+            >
+              {shareButtonLabel("telegram")}
+            </button>
           </div>
           {shareFeedback && (
             <div
