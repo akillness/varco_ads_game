@@ -1038,6 +1038,23 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("leaderboard-control-list")).not.toContainText("Sound Crafter");
   });
 
+  test("leaderboard momentum summary stays neutral when only the live board exists", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        { hero: "Sound Crafter", score: 162, combo: 6, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 148, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z" },
+        { hero: "SyncFace Weaver", score: 141, combo: 5, date: "2026-04-03", createdAt: "2026-04-03T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 136, combo: 4, date: "2026-04-02", createdAt: "2026-04-02T10:00:00.000Z" },
+        { hero: "SyncFace Weaver", score: 128, combo: 4, date: "2026-04-01", createdAt: "2026-04-01T10:00:00.000Z" }
+      ]));
+      localStorage.removeItem("saga_highscore_history");
+    });
+    await page.reload();
+
+    await expect(page.getByTestId("leaderboard-control-item")).toHaveCount(3);
+    await expect(page.getByTestId("leaderboard-control-momentum")).toContainText("Season streaks unlock after the first archived run.");
+  });
+
   test("leaderboard board-control panel shows an empty-state prompt with no posted runs", async ({ page }) => {
     await page.evaluate(() => {
       localStorage.removeItem("saga_highscores");

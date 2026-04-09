@@ -534,20 +534,28 @@ function compareHighScoreHistory(a, b) {
   );
 }
 
-function loadHighScoreHistory(scores = []) {
+function loadArchivedHighScoreHistory() {
   try {
-    const parsedHistory = JSON.parse(localStorage.getItem("saga_highscore_history") || "[]")
+    const rawHistory = localStorage.getItem("saga_highscore_history");
+    if (rawHistory === null) {
+      return [];
+    }
+
+    return JSON.parse(rawHistory)
       .map(normalizeHighScoreHistoryEntry)
       .filter(Boolean)
       .sort(compareHighScoreHistory)
       .slice(0, HIGH_SCORE_HISTORY_LIMIT);
-
-    if (parsedHistory.length > 0) {
-      return parsedHistory;
-    }
   }
   catch {
-    // fall through to the leaderboard snapshot fallback
+    return [];
+  }
+}
+
+function loadHighScoreHistory(scores = [], { allowFallback = true } = {}) {
+  const archivedHistory = loadArchivedHighScoreHistory();
+  if (archivedHistory.length > 0 || !allowFallback) {
+    return archivedHistory;
   }
 
   return buildHighScoreHistoryFallback(scores)
@@ -557,7 +565,7 @@ function loadHighScoreHistory(scores = []) {
 
 function saveHighScore(entry) {
   const previousScores = loadHighScores();
-  const previousHistory = loadHighScoreHistory(previousScores);
+  const previousHistory = loadHighScoreHistory(previousScores, { allowFallback: false });
   const normalizedEntry = normalizeHighScoreEntry(entry);
   if (!normalizedEntry) {
     return {
@@ -927,7 +935,7 @@ function getHeroMomentumStats(history, hero) {
 }
 
 function getLeaderboardMomentum(scores) {
-  const history = loadHighScoreHistory(scores);
+  const history = loadHighScoreHistory(scores, { allowFallback: false });
   if (!history.length) {
     return {
       label: "MOMENTUM",
