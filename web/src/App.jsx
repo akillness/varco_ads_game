@@ -1297,6 +1297,27 @@ function getArchiveEntryTrendAriaLabel(hero, trendLabel, trendDetail) {
   return `${hero}. ${trendLabel}. ${trendDetail}`;
 }
 
+function getArchiveEntryAriaLabel(entry) {
+  if (!entry) return "Archive entry unavailable.";
+  return `${entry.hero}. ${entry.chip}. ${entry.detail}. ${entry.trendLabel}. ${entry.trendDetail}`;
+}
+
+function getArchiveEntryFormGroupAriaLabel(hero, form = []) {
+  if (!form.length) {
+    return `${hero}. RECENT FORM unavailable.`;
+  }
+  const summary = form
+    .map((formEntry) => {
+      const placementLabel = formEntry.qualified
+        ? formEntry.label.replace("#", "rank ")
+        : `outside the top ${HIGH_SCORE_LIMIT}`;
+      const timingLabel = formEntry.current ? "Current archived run" : "Previous archived run";
+      return `${timingLabel}: ${placementLabel}`;
+    })
+    .join(". ");
+  return `${hero}. RECENT FORM. ${summary}.`;
+}
+
 function getArchiveEntryTrend(entry, previousEntry) {
   if (!entry) {
     return {
@@ -3336,6 +3357,9 @@ export default function App() {
                     key={`${entry.hero}-${entry.score}-${entry.combo}-${entry.createdAt}`}
                     className="leaderboard-archive-card"
                     data-testid="leaderboard-archive-item"
+                    tabIndex={0}
+                    aria-label={getArchiveEntryAriaLabel(entry)}
+                    title={getArchiveEntryAriaLabel(entry)}
                   >
                     <div className="leaderboard-archive-topline">
                       <span className="leaderboard-archive-hero">{entry.hero}</span>
@@ -3353,7 +3377,13 @@ export default function App() {
                       <span className="leaderboard-archive-entry-trend-detail">{entry.trendDetail}</span>
                     </div>
                     {entry.form.length > 0 && (
-                      <div className="leaderboard-archive-entry-form" data-testid="leaderboard-archive-entry-form">
+                      <div
+                        className="leaderboard-archive-entry-form"
+                        data-testid="leaderboard-archive-entry-form"
+                        tabIndex={0}
+                        aria-label={getArchiveEntryFormGroupAriaLabel(entry.hero, entry.form)}
+                        title={getArchiveEntryFormGroupAriaLabel(entry.hero, entry.form)}
+                      >
                         <span className="leaderboard-archive-entry-form-label">RECENT FORM</span>
                         <div className="leaderboard-archive-entry-form-chips">
                           {entry.form.map((formEntry) => (

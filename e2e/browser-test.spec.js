@@ -1271,17 +1271,27 @@ test.describe("Web UI", () => {
     await archiveTrend.focus();
     await expect(archiveTrend).toBeFocused();
 
+    const archiveRows = page.getByTestId("leaderboard-archive-item");
+    await expect(archiveRows.first()).toHaveAttribute("tabindex", "0");
+    await expect(archiveRows.first()).toHaveAttribute("aria-label", "Sound Crafter. OUTSIDE TOP 5. 118 pts · 4x combo · 2026-04-06. SLIPPED. Sound Crafter fell from #2 to outside the top 5.");
+    await archiveRows.first().focus();
+    await expect(archiveRows.first()).toBeFocused();
+
     const entryTrends = page.getByTestId("leaderboard-archive-entry-trend");
     await expect(entryTrends.first()).toHaveAttribute("tabindex", "0");
     await expect(entryTrends.first()).toHaveAttribute("aria-label", "Sound Crafter. SLIPPED. Sound Crafter fell from #2 to outside the top 5.");
     await expect(entryTrends.nth(1)).toHaveAttribute("aria-label", "Sound Crafter. CLIMBING. Sound Crafter improved from #3 to #2.");
 
+    const formGroups = page.getByTestId("leaderboard-archive-entry-form");
+    await expect(formGroups.first()).toHaveAttribute("tabindex", "0");
+    await expect(formGroups.first()).toHaveAttribute("aria-label", "Sound Crafter. RECENT FORM. Current archived run: outside the top 5. Previous archived run: rank 2. Previous archived run: rank 3.");
+
     const formChips = page.getByTestId("leaderboard-archive-entry-form-chip");
     await expect(formChips.first()).toHaveAttribute("tabindex", "0");
     await expect(formChips.first()).toHaveAttribute("aria-label", "Sound Crafter. Current archived run. outside the top 5. 118 pts · 4x combo · 2026-04-06.");
     await expect(formChips.nth(1)).toHaveAttribute("aria-label", "Sound Crafter. Previous archived run. rank 2. 138 pts · 5x combo · 2026-04-04.");
-    await formChips.first().focus();
-    await expect(formChips.first()).toBeFocused();
+    await formGroups.first().focus();
+    await expect(formGroups.first()).toBeFocused();
   });
 
   test("leaderboard archive hero filter survives reloads and clears stale saved heroes", async ({ page }) => {
