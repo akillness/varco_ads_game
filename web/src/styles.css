@@ -1092,6 +1092,51 @@ main {
   color: #ffb4ae;
 }
 
+.leaderboard-archive-entry-trend {
+  display: grid;
+  gap: 3px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(139, 148, 158, 0.18);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.leaderboard-archive-entry-trend-up {
+  border-color: rgba(63, 185, 160, 0.28);
+  background: rgba(63, 185, 160, 0.08);
+}
+
+.leaderboard-archive-entry-trend-down {
+  border-color: rgba(248, 81, 73, 0.26);
+  background: rgba(248, 81, 73, 0.08);
+}
+
+.leaderboard-archive-entry-trend-fresh {
+  border-color: rgba(210, 168, 255, 0.28);
+  background: rgba(210, 168, 255, 0.08);
+}
+
+.leaderboard-archive-entry-trend-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #d2a8ff;
+}
+
+.leaderboard-archive-entry-trend-up .leaderboard-archive-entry-trend-label {
+  color: #7ee7d4;
+}
+
+.leaderboard-archive-entry-trend-down .leaderboard-archive-entry-trend-label {
+  color: #ffb4ae;
+}
+
+.leaderboard-archive-entry-trend-detail {
+  font-size: 10px;
+  line-height: 1.4;
+  color: #c9d1d9;
+}
+
 .leaderboard {
   list-style: none;
   font-size: 11px;

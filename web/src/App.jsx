@@ -1187,6 +1187,109 @@ function getLeaderboardArchiveTrend(history, activeFilter = "all") {
   };
 }
 
+function formatArchivePlacement(entry) {
+  if (entry?.qualified && entry?.placement) {
+    return `#${entry.placement}`;
+  }
+  return `outside top ${HIGH_SCORE_LIMIT}`;
+}
+
+function getArchiveEntryTrend(entry, previousEntry) {
+  if (!entry) {
+    return {
+      label: "TREND",
+      detail: "Archive trend unavailable.",
+      tone: "steady"
+    };
+  }
+
+  if (!previousEntry) {
+    return {
+      label: "SEASON OPENER",
+      detail: `First archived run for ${entry.hero}.`,
+      tone: "fresh"
+    };
+  }
+
+  if (entry.qualified && !previousEntry.qualified) {
+    return {
+      label: "BREAKTHROUGH",
+      detail: `${entry.hero} climbed from outside the top ${HIGH_SCORE_LIMIT} into ${formatArchivePlacement(entry)}.`,
+      tone: "up"
+    };
+  }
+
+  if (!entry.qualified && previousEntry.qualified) {
+    return {
+      label: "SLIPPED",
+      detail: `${entry.hero} fell from ${formatArchivePlacement(previousEntry)} to outside the top ${HIGH_SCORE_LIMIT}.`,
+      tone: "down"
+    };
+  }
+
+  if (entry.qualified && previousEntry.qualified) {
+    if (entry.placement < previousEntry.placement) {
+      return {
+        label: "CLIMBING",
+        detail: `${entry.hero} improved from ${formatArchivePlacement(previousEntry)} to ${formatArchivePlacement(entry)}.`,
+        tone: "up"
+      };
+    }
+
+    if (entry.placement > previousEntry.placement) {
+      return {
+        label: "COOLED",
+        detail: `${entry.hero} slipped from ${formatArchivePlacement(previousEntry)} to ${formatArchivePlacement(entry)}.`,
+        tone: "down"
+      };
+    }
+
+    if (entry.score > previousEntry.score || (entry.score === previousEntry.score && entry.combo > previousEntry.combo)) {
+      return {
+        label: "TUNED UP",
+        detail: `${entry.hero} held ${formatArchivePlacement(entry)} and sharpened the line to ${entry.score} pts / ${entry.combo}x.`,
+        tone: "up"
+      };
+    }
+
+    if (entry.score < previousEntry.score || (entry.score === previousEntry.score && entry.combo < previousEntry.combo)) {
+      return {
+        label: "HOLDING",
+        detail: `${entry.hero} stayed at ${formatArchivePlacement(entry)} while the line softened from ${previousEntry.score} pts / ${previousEntry.combo}x.`,
+        tone: "steady"
+      };
+    }
+
+    return {
+      label: "LOCKED",
+      detail: `${entry.hero} repeated the same ${entry.score}-pt / ${entry.combo}x finish at ${formatArchivePlacement(entry)}.`,
+      tone: "steady"
+    };
+  }
+
+  if (entry.score > previousEntry.score || (entry.score === previousEntry.score && entry.combo > previousEntry.combo)) {
+    return {
+      label: "RECOVERING",
+      detail: `${entry.hero} is still outside the top ${HIGH_SCORE_LIMIT}, but improved to ${entry.score} pts / ${entry.combo}x.`,
+      tone: "up"
+    };
+  }
+
+  if (entry.score < previousEntry.score || (entry.score === previousEntry.score && entry.combo < previousEntry.combo)) {
+    return {
+      label: "STALLING",
+      detail: `${entry.hero} stayed outside the top ${HIGH_SCORE_LIMIT} and dipped below the previous ${previousEntry.score}-pt / ${previousEntry.combo}x archive.`,
+      tone: "down"
+    };
+  }
+
+  return {
+    label: "STEADY",
+    detail: `${entry.hero} repeated the same archived line outside the top ${HIGH_SCORE_LIMIT}.`,
+    tone: "steady"
+  };
+}
+
 function getLeaderboardSeasonArchive(scores, heroFilter = "all") {
   const history = loadHighScoreHistory(scores, { allowFallback: false });
 
@@ -1197,10 +1300,10 @@ function getLeaderboardSeasonArchive(scores, heroFilter = "all") {
   const activeFilter = requestedFilter === "all" || heroFilters.includes(requestedFilter) ? requestedFilter : "all";
   const archiveDelta = getLeaderboardArchiveDelta(scores, history, activeFilter);
   const archiveTrend = getLeaderboardArchiveTrend(history, activeFilter);
-  const filteredHistory = (activeFilter === "all"
+  const archiveSource = activeFilter === "all"
     ? history
-    : history.filter((entry) => entry.hero === activeFilter)
-  ).slice(0, 4);
+    : history.filter((entry) => entry.hero === activeFilter);
+  const filteredHistory = archiveSource.slice(0, 4);
 
   if (!history.length) {
     return {
@@ -1267,13 +1370,23 @@ function getLeaderboardSeasonArchive(scores, heroFilter = "all") {
       ]
       : [],
     activeFilter,
-    entries: filteredHistory.map((entry) => ({
-      ...entry,
-      chip: entry.qualified && entry.placement
-        ? `#${entry.placement} FINISH`
-        : `OUTSIDE TOP ${HIGH_SCORE_LIMIT}`,
-      detail: `${entry.score} pts · ${entry.combo}x combo · ${entry.date}`
-    }))
+    entries: filteredHistory.map((entry, index) => {
+      const previousEntry = archiveSource.find((candidate, candidateIndex) => (
+        candidateIndex > index && candidate.hero === entry.hero
+      )) || null;
+      const entryTrend = getArchiveEntryTrend(entry, previousEntry);
+
+      return {
+        ...entry,
+        chip: entry.qualified && entry.placement
+          ? `#${entry.placement} FINISH`
+          : `OUTSIDE TOP ${HIGH_SCORE_LIMIT}`,
+        detail: `${entry.score} pts · ${entry.combo}x combo · ${entry.date}`,
+        trendLabel: entryTrend.label,
+        trendDetail: entryTrend.detail,
+        trendTone: entryTrend.tone
+      };
+    })
   };
 }
 
@@ -3068,6 +3181,13 @@ export default function App() {
                       <span className={`leaderboard-archive-chip${entry.qualified ? "" : " leaderboard-archive-chip-archived"}`}>{entry.chip}</span>
                     </div>
                     <div className="leaderboard-archive-meta">{entry.detail}</div>
+                    <div
+                      className={`leaderboard-archive-entry-trend leaderboard-archive-entry-trend-${entry.trendTone}`}
+                      data-testid="leaderboard-archive-entry-trend"
+                    >
+                      <span className="leaderboard-archive-entry-trend-label">{entry.trendLabel}</span>
+                      <span className="leaderboard-archive-entry-trend-detail">{entry.trendDetail}</span>
+                    </div>
                   </div>
                 ))}
               </div>
