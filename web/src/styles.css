@@ -977,6 +977,35 @@ main {
   color: #dce6f4;
 }
 
+.leaderboard-archive-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.leaderboard-archive-filter {
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(210, 168, 255, 0.22);
+  background: rgba(255, 255, 255, 0.03);
+  color: #dce6f4;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+
+.leaderboard-archive-filter:hover {
+  transform: translateY(-1px);
+  border-color: rgba(88, 166, 255, 0.35);
+}
+
+.leaderboard-archive-filter.active {
+  border-color: rgba(88, 166, 255, 0.45);
+  background: rgba(88, 166, 255, 0.14);
+  color: var(--ink);
+}
+
 .leaderboard-archive-list {
   display: grid;
   gap: 8px;

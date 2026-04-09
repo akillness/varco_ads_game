@@ -982,20 +982,37 @@ function getLeaderboardMomentum(scores) {
   };
 }
 
-function getLeaderboardSeasonArchive(scores) {
-  const history = loadHighScoreHistory(scores, { allowFallback: false }).slice(0, 4);
+function getLeaderboardSeasonArchive(scores, heroFilter = "all") {
+  const history = loadHighScoreHistory(scores, { allowFallback: false });
+  const heroFilters = Array.from(new Set(history.map((entry) => entry.hero)))
+    .sort((a, b) => a.localeCompare(b));
+  const activeFilter = heroFilter === "all" || heroFilters.includes(heroFilter) ? heroFilter : "all";
+  const filteredHistory = (activeFilter === "all"
+    ? history
+    : history.filter((entry) => entry.hero === activeFilter)
+  ).slice(0, 4);
+
   if (!history.length) {
     return {
       label: "SEASON ARCHIVE",
       detail: "Archived season history appears after the first completed run.",
+      filters: [],
+      activeFilter,
       entries: []
     };
   }
 
   return {
     label: "SEASON ARCHIVE",
-    detail: `Latest ${history.length} archived run${history.length === 1 ? "" : "s"} across the season table.`,
-    entries: history.map((entry) => ({
+    detail: activeFilter === "all"
+      ? `Latest ${filteredHistory.length} archived run${filteredHistory.length === 1 ? "" : "s"} across the season table.`
+      : `Latest ${filteredHistory.length} archived run${filteredHistory.length === 1 ? "" : "s"} for ${activeFilter}.`,
+    filters: [
+      { id: "all", label: "All heroes" },
+      ...heroFilters.map((hero) => ({ id: hero, label: hero }))
+    ],
+    activeFilter,
+    entries: filteredHistory.map((entry) => ({
       ...entry,
       chip: entry.qualified && entry.placement
         ? `#${entry.placement} FINISH`
@@ -1503,6 +1520,7 @@ export default function App() {
   const [highScores, setHighScores] = useState(loadHighScores());
   const [leaderboardUpdate, setLeaderboardUpdate] = useState(null);
   const [leaderboardMomentumUpdate, setLeaderboardMomentumUpdate] = useState(null);
+  const [selectedArchiveHero, setSelectedArchiveHero] = useState("all");
   const [studioBrief, setStudioBrief] = useState("Neon sponsor arena for creator-made hero collectibles");
   const [studioPack, setStudioPack] = useState(null);
   const [studioStatus, setStudioStatus] = useState("idle");
@@ -1585,7 +1603,13 @@ export default function App() {
   const leaderboardSeasonSummary = getLeaderboardSeasonSummary(leaderboardReference, leaderboardEntryPreview);
   const leaderboardBoardControl = getLeaderboardBoardControl(leaderboardReference);
   const leaderboardMomentum = getLeaderboardMomentum(leaderboardReference);
-  const leaderboardSeasonArchive = getLeaderboardSeasonArchive(leaderboardReference);
+  const leaderboardSeasonArchive = getLeaderboardSeasonArchive(leaderboardReference, selectedArchiveHero);
+
+  useEffect(() => {
+    if (selectedArchiveHero !== "all" && !leaderboardSeasonArchive.filters.some((filter) => filter.id === selectedArchiveHero)) {
+      setSelectedArchiveHero("all");
+    }
+  }, [leaderboardSeasonArchive.filters, selectedArchiveHero]);
 
   async function trackEvent(message, meta = {}) {
     try {
@@ -2721,6 +2745,21 @@ export default function App() {
           </div>
           <div className="leaderboard-archive-panel" data-testid="leaderboard-archive-panel">
             <div className="leaderboard-archive-label">{leaderboardSeasonArchive.label}</div>
+            {leaderboardSeasonArchive.filters.length > 1 && (
+              <div className="leaderboard-archive-filters" data-testid="leaderboard-archive-filters">
+                {leaderboardSeasonArchive.filters.map((filter) => (
+                  <button
+                    key={filter.id}
+                    type="button"
+                    className={`leaderboard-archive-filter${leaderboardSeasonArchive.activeFilter === filter.id ? " active" : ""}`}
+                    data-testid="leaderboard-archive-filter"
+                    onClick={() => setSelectedArchiveHero(filter.id)}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="leaderboard-archive-detail" data-testid="leaderboard-archive-detail">{leaderboardSeasonArchive.detail}</div>
             {leaderboardSeasonArchive.entries.length > 0 ? (
               <div className="leaderboard-archive-list" data-testid="leaderboard-archive-list">

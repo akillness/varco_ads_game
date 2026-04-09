@@ -1077,6 +1077,7 @@ test.describe("Web UI", () => {
 
     const archiveRows = page.getByTestId("leaderboard-archive-item");
     await expect(page.getByTestId("leaderboard-archive-detail")).toContainText("Latest 4 archived runs across the season table.");
+    await expect(page.getByTestId("leaderboard-archive-filters")).toBeVisible();
     await expect(archiveRows).toHaveCount(4);
     await expect(archiveRows.nth(0)).toContainText("Sound Crafter");
     await expect(archiveRows.nth(0)).toContainText("OUTSIDE TOP 5");
@@ -1084,6 +1085,22 @@ test.describe("Web UI", () => {
     await expect(archiveRows.nth(1)).toContainText("SyncFace Weaver");
     await expect(archiveRows.nth(1)).toContainText("#1 FINISH");
     await expect(archiveRows.nth(3)).toContainText("Sound Crafter");
+
+    const archiveFilters = page.getByTestId("leaderboard-archive-filters");
+    await archiveFilters.getByRole("button", { name: "Sound Crafter", exact: true }).click();
+    await expect(page.getByTestId("leaderboard-archive-detail")).toContainText("Latest 3 archived runs for Sound Crafter.");
+    await expect(archiveRows).toHaveCount(3);
+    await expect(archiveRows.nth(0)).toContainText("118 pts · 4x combo · 2026-04-06");
+    await expect(archiveRows.nth(2)).toContainText("131 pts · 5x combo · 2026-04-03");
+
+    await archiveFilters.getByRole("button", { name: "SyncFace Weaver", exact: true }).click();
+    await expect(page.getByTestId("leaderboard-archive-detail")).toContainText("Latest 1 archived run for SyncFace Weaver.");
+    await expect(archiveRows).toHaveCount(1);
+    await expect(archiveRows.nth(0)).toContainText("#1 FINISH");
+
+    await archiveFilters.getByRole("button", { name: "All heroes", exact: true }).click();
+    await expect(page.getByTestId("leaderboard-archive-detail")).toContainText("Latest 4 archived runs across the season table.");
+    await expect(archiveRows).toHaveCount(4);
     await expect(page.getByTestId("leaderboard-control-list")).not.toContainText("Sound Crafter");
   });
 
