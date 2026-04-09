@@ -1287,6 +1287,10 @@ function getArchiveFilterAriaLabel(filterLabel, isActive) {
   return scope;
 }
 
+function getHeroSelectAriaLabel(heroName, isActive) {
+  return `Select ${heroName}${isActive ? "; currently selected" : ""}.`;
+}
+
 function getMarketingAngleAriaLabel(angleLabel, isActive) {
   return `Show ${angleLabel} marketing copy${isActive ? "; currently selected" : ""}.`;
 }
@@ -1341,6 +1345,10 @@ function handleArchiveFilterKeyDown(event, currentFilterId, filters, onSelect) {
     onSelect,
     "leaderboard-archive-filter"
   );
+}
+
+function handleHeroSelectKeyDown(event, currentHeroId, onSelect) {
+  handleSegmentedArrowKeyDown(event, currentHeroId, heroes, onSelect, "hero-select-button");
 }
 
 function handleMarketingAngleKeyDown(event, currentAngleId, marketingAngles, onSelect) {
@@ -2903,12 +2911,30 @@ export default function App() {
       <header className="header">
         <div className="header-left">
           <span className="brand-title">VARCO AGENT SAGA</span>
-          <div className="hero-select">
-            {heroes.map((h) => (
-              <button key={h.id} type="button" className={`hero-btn${hero.id === h.id ? " active" : ""}`} onClick={() => dispatch({ type: "SET_HERO", hero: h })}>
-                {h.name}
-              </button>
-            ))}
+          <div className="hero-select" data-testid="hero-select-group">
+            {heroes.map((h) => {
+              const isActive = hero.id === h.id;
+              return (
+                <button
+                  key={h.id}
+                  type="button"
+                  className={`hero-btn${isActive ? " active" : ""}`}
+                  data-testid="hero-select-button"
+                  aria-pressed={isActive}
+                  aria-description={getHeroSelectAriaLabel(h.name, isActive)}
+                  title={getHeroSelectAriaLabel(h.name, isActive)}
+                  onClick={() => dispatch({ type: "SET_HERO", hero: h })}
+                  onKeyDown={(event) => handleHeroSelectKeyDown(event, hero.id, (nextHeroId) => {
+                    const nextHero = heroes.find((candidate) => candidate.id === nextHeroId);
+                    if (nextHero) {
+                      dispatch({ type: "SET_HERO", hero: nextHero });
+                    }
+                  })}
+                >
+                  {h.name}
+                </button>
+              );
+            })}
           </div>
         </div>
         <div className="header-stats">

@@ -405,6 +405,43 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("studio-copy-button")).toHaveText("Copy Discord copy");
   });
 
+  test("hero selector supports keyboard cycling and pressed-state accessibility", async ({ page }) => {
+    const heroGroup = page.getByTestId("hero-select-group");
+    const modelerButton = heroGroup.getByRole("button", { name: "3D Modeler", exact: true });
+    const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
+    const faceweaverButton = heroGroup.getByRole("button", { name: "SyncFace Weaver", exact: true });
+
+    await expect(modelerButton).toHaveAttribute("aria-pressed", "true");
+    await expect(modelerButton).toHaveAttribute("aria-description", "Select 3D Modeler; currently selected.");
+    await expect(sounderButton).toHaveAttribute("aria-pressed", "false");
+    await expect(sounderButton).toHaveAttribute("aria-description", "Select Sound Crafter.");
+    await expect(page.locator(".xp-info")).toContainText("HP 6 / SPD 1");
+
+    await modelerButton.focus();
+    await expect(modelerButton).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(sounderButton).toBeFocused();
+    await expect(sounderButton).toHaveAttribute("aria-pressed", "true");
+    await expect(modelerButton).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator(".xp-info")).toContainText("HP 5 / SPD 1");
+
+    await page.keyboard.press("End");
+    await expect(faceweaverButton).toBeFocused();
+    await expect(faceweaverButton).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".xp-info")).toContainText("HP 4 / SPD 2");
+
+    await page.keyboard.press("Home");
+    await expect(modelerButton).toBeFocused();
+    await expect(modelerButton).toHaveAttribute("aria-pressed", "true");
+    await expect(faceweaverButton).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator(".xp-info")).toContainText("HP 6 / SPD 1");
+
+    await page.keyboard.press("ArrowLeft");
+    await expect(faceweaverButton).toBeFocused();
+    await expect(faceweaverButton).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".xp-info")).toContainText("HP 4 / SPD 2");
+  });
+
   test("studio editor tabs support keyboard cycling and pressed-state accessibility", async ({ page }) => {
     const tabGroup = page.getByTestId("studio-editor-tab-group");
     const soundTab = tabGroup.getByRole("button", { name: "🎵 사운드", exact: true });
