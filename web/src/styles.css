@@ -881,6 +881,28 @@ main {
   gap: 8px;
 }
 
+.leaderboard-control-momentum {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(88, 166, 255, 0.2);
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.1), rgba(63, 185, 160, 0.06));
+}
+
+.leaderboard-control-momentum-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--orb);
+}
+
+.leaderboard-control-momentum-detail {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #dce6f4;
+}
+
 .leaderboard-control-card {
   display: grid;
   gap: 6px;

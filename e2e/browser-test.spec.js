@@ -994,6 +994,12 @@ test.describe("Web UI", () => {
         { hero: "Sound Crafter", score: 124, combo: 4, date: "2026-04-01", createdAt: "2026-04-01T10:00:00.000Z" },
         { hero: "3D Modeler", score: 120, combo: 3, date: "2026-03-30", createdAt: "2026-03-30T10:00:00.000Z" }
       ]));
+      localStorage.setItem("saga_highscore_history", JSON.stringify([
+        { hero: "Sound Crafter", score: 132, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z", placement: 2, qualified: true },
+        { hero: "Sound Crafter", score: 129, combo: 5, date: "2026-04-03", createdAt: "2026-04-03T08:00:00.000Z", placement: 3, qualified: true },
+        { hero: "Sound Crafter", score: 121, combo: 4, date: "2026-04-02", createdAt: "2026-04-02T08:00:00.000Z", placement: 5, qualified: true },
+        { hero: "3D Modeler", score: 128, combo: 4, date: "2026-04-02", createdAt: "2026-04-02T10:00:00.000Z", placement: 3, qualified: true }
+      ]));
     });
     await page.reload();
 
@@ -1007,16 +1013,41 @@ test.describe("Web UI", () => {
     await expect(controlRows.nth(2)).toContainText("SyncFace Weaver");
     await expect(controlRows.nth(2)).toContainText("PACE SETTER");
     await expect(controlRows.nth(2)).toContainText("#1 best · 1 slot · 145 pts · 6x combo");
+    await expect(page.getByTestId("leaderboard-control-momentum")).toContainText("Sound Crafter is riding a 3-run top-5 streak and has peaked at #2.");
+  });
+
+  test("leaderboard momentum summary preserves streak context even if the hero falls off the current board", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        { hero: "SyncFace Weaver", score: 145, combo: 6, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 141, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z" },
+        { hero: "SyncFace Weaver", score: 136, combo: 5, date: "2026-04-03", createdAt: "2026-04-03T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 133, combo: 4, date: "2026-04-02", createdAt: "2026-04-02T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 129, combo: 4, date: "2026-04-01", createdAt: "2026-04-01T10:00:00.000Z" }
+      ]));
+      localStorage.setItem("saga_highscore_history", JSON.stringify([
+        { hero: "Sound Crafter", score: 138, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T08:00:00.000Z", placement: 2, qualified: true },
+        { hero: "Sound Crafter", score: 131, combo: 5, date: "2026-04-03", createdAt: "2026-04-03T08:00:00.000Z", placement: 3, qualified: true },
+        { hero: "Sound Crafter", score: 124, combo: 4, date: "2026-04-02", createdAt: "2026-04-02T08:00:00.000Z", placement: 4, qualified: true },
+        { hero: "SyncFace Weaver", score: 145, combo: 6, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z", placement: 1, qualified: true }
+      ]));
+    });
+    await page.reload();
+
+    await expect(page.getByTestId("leaderboard-control-momentum")).toContainText("Sound Crafter is riding a 3-run top-5 streak and has peaked at #2.");
+    await expect(page.getByTestId("leaderboard-control-list")).not.toContainText("Sound Crafter");
   });
 
   test("leaderboard board-control panel shows an empty-state prompt with no posted runs", async ({ page }) => {
     await page.evaluate(() => {
       localStorage.removeItem("saga_highscores");
+      localStorage.removeItem("saga_highscore_history");
     });
     await page.reload();
 
     await expect(page.getByTestId("leaderboard-control-empty")).toContainText("Post the first clean run to reveal hero control badges.");
     await expect(page.getByTestId("leaderboard-control-item")).toHaveCount(0);
+    await expect(page.getByTestId("leaderboard-control-momentum")).toContainText("Season streaks unlock after the first archived run.");
   });
 
   test("game over overlay highlights a new #1 leaderboard finish", async ({ page }) => {

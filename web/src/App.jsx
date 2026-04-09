@@ -446,6 +446,7 @@ function triggerDirectorBeat(state, timer) {
 }
 
 const HIGH_SCORE_LIMIT = 5;
+const HIGH_SCORE_HISTORY_LIMIT = 30;
 
 function compareHighScores(a, b) {
   return (
@@ -500,6 +501,60 @@ function loadHighScores() {
   }
 }
 
+function normalizeHighScoreHistoryEntry(entry) {
+  const normalizedEntry = normalizeHighScoreEntry(entry);
+  if (!normalizedEntry) return null;
+
+  const rawPlacement = Number(entry.placement);
+  const placement = Number.isFinite(rawPlacement) && rawPlacement > 0 ? Math.floor(rawPlacement) : null;
+  const qualified = typeof entry.qualified === "boolean"
+    ? entry.qualified
+    : placement !== null && placement <= HIGH_SCORE_LIMIT;
+
+  return {
+    ...normalizedEntry,
+    placement,
+    qualified
+  };
+}
+
+function buildHighScoreHistoryFallback(scores) {
+  return scores.map((scoreEntry, index) => normalizeHighScoreHistoryEntry({
+    ...scoreEntry,
+    placement: index + 1,
+    qualified: index < HIGH_SCORE_LIMIT
+  })).filter(Boolean);
+}
+
+function compareHighScoreHistory(a, b) {
+  return (
+    b.createdAt.localeCompare(a.createdAt)
+    || (a.placement ?? Number.MAX_SAFE_INTEGER) - (b.placement ?? Number.MAX_SAFE_INTEGER)
+    || compareHighScores(a, b)
+  );
+}
+
+function loadHighScoreHistory(scores = []) {
+  try {
+    const parsedHistory = JSON.parse(localStorage.getItem("saga_highscore_history") || "[]")
+      .map(normalizeHighScoreHistoryEntry)
+      .filter(Boolean)
+      .sort(compareHighScoreHistory)
+      .slice(0, HIGH_SCORE_HISTORY_LIMIT);
+
+    if (parsedHistory.length > 0) {
+      return parsedHistory;
+    }
+  }
+  catch {
+    // fall through to the leaderboard snapshot fallback
+  }
+
+  return buildHighScoreHistoryFallback(scores)
+    .sort(compareHighScoreHistory)
+    .slice(0, HIGH_SCORE_HISTORY_LIMIT);
+}
+
 function saveHighScore(entry) {
   const previousScores = loadHighScores();
   const normalizedEntry = normalizeHighScoreEntry(entry);
@@ -516,14 +571,25 @@ function saveHighScore(entry) {
     .filter(Boolean)
     .sort(compareHighScores);
   const placementIndex = sortedScores.findIndex((scoreEntry) => isSameHighScoreEntry(scoreEntry, normalizedEntry));
-  const qualified = placementIndex !== -1 && placementIndex < HIGH_SCORE_LIMIT;
+  const overallPlacement = placementIndex === -1 ? null : placementIndex + 1;
+  const qualified = overallPlacement !== null && overallPlacement <= HIGH_SCORE_LIMIT;
   const scores = sortedScores.slice(0, HIGH_SCORE_LIMIT);
 
   localStorage.setItem("saga_highscores", JSON.stringify(scores));
+  const historyEntry = normalizeHighScoreHistoryEntry({
+    ...normalizedEntry,
+    placement: overallPlacement,
+    qualified
+  });
+  const history = historyEntry
+    ? [historyEntry, ...loadHighScoreHistory(previousScores).filter((item) => !isSameHighScoreEntry(item, historyEntry))]
+      .slice(0, HIGH_SCORE_HISTORY_LIMIT)
+    : loadHighScoreHistory(previousScores);
+  localStorage.setItem("saga_highscore_history", JSON.stringify(history));
 
   return {
     scores,
-    placement: qualified ? placementIndex + 1 : null,
+    placement: qualified ? overallPlacement : null,
     qualified,
     entry: normalizedEntry
   };
@@ -749,6 +815,92 @@ function getLeaderboardBoardControl(scores) {
         detail: `#${stat.bestRank} best · ${stat.slots} slot${stat.slots === 1 ? "" : "s"} · ${stat.bestScore} pts · ${stat.bestCombo}x combo`
       };
     });
+}
+
+function getLeaderboardMomentum(scores) {
+  const history = loadHighScoreHistory(scores);
+  if (!history.length) {
+    return {
+      label: "MOMENTUM",
+      detail: "Season streaks unlock after the first archived run."
+    };
+  }
+
+  const heroHistory = new Map();
+  history.forEach((entry) => {
+    if (!heroHistory.has(entry.hero)) {
+      heroHistory.set(entry.hero, []);
+    }
+    heroHistory.get(entry.hero).push(entry);
+  });
+
+  const momentumTable = Array.from(heroHistory.entries())
+    .map(([hero, entries]) => {
+      let currentStreak = 0;
+      while (currentStreak < entries.length && entries[currentStreak].qualified) {
+        currentStreak += 1;
+      }
+
+      let longestStreak = 0;
+      let streakCursor = 0;
+      entries.forEach((entry) => {
+        if (entry.qualified) {
+          streakCursor += 1;
+          longestStreak = Math.max(longestStreak, streakCursor);
+        } else {
+          streakCursor = 0;
+        }
+      });
+
+      const latestQualified = entries.find((entry) => entry.qualified) || null;
+      const bestPlacement = entries.reduce((best, entry) => {
+        if (entry.placement === null) return best;
+        return Math.min(best, entry.placement);
+      }, Number.MAX_SAFE_INTEGER);
+
+      return {
+        hero,
+        currentStreak,
+        longestStreak,
+        latestQualifiedAt: latestQualified?.createdAt || "1970-01-01T00:00:00.000Z",
+        bestPlacement
+      };
+    })
+    .filter((entry) => entry.longestStreak > 0)
+    .sort((a, b) => (
+      b.longestStreak - a.longestStreak
+      || b.currentStreak - a.currentStreak
+      || a.bestPlacement - b.bestPlacement
+      || b.latestQualifiedAt.localeCompare(a.latestQualifiedAt)
+      || a.hero.localeCompare(b.hero)
+    ));
+
+  const momentumLeader = momentumTable[0];
+  if (!momentumLeader) {
+    return {
+      label: "MOMENTUM",
+      detail: "Season streaks unlock after the first top-5 finish is archived."
+    };
+  }
+
+  if (momentumLeader.currentStreak > 1) {
+    return {
+      label: "MOMENTUM",
+      detail: `${momentumLeader.hero} is riding a ${momentumLeader.currentStreak}-run top-${HIGH_SCORE_LIMIT} streak and has peaked at #${momentumLeader.bestPlacement}.`
+    };
+  }
+
+  if (momentumLeader.longestStreak > 1) {
+    return {
+      label: "MOMENTUM",
+      detail: `${momentumLeader.hero} owns the best season streak at ${momentumLeader.longestStreak} straight top-${HIGH_SCORE_LIMIT} finishes.`
+    };
+  }
+
+  return {
+    label: "MOMENTUM",
+    detail: `${momentumLeader.hero} posted the latest archived top-${HIGH_SCORE_LIMIT} finish and peaked at #${momentumLeader.bestPlacement}.`
+  };
 }
 
 function loadProgress() {
@@ -1280,6 +1432,7 @@ export default function App() {
   const leaderboardRecap = getLeaderboardRecap(leaderboardReference, leaderboardEntryPreview);
   const leaderboardSeasonSummary = getLeaderboardSeasonSummary(leaderboardReference, leaderboardEntryPreview);
   const leaderboardBoardControl = getLeaderboardBoardControl(leaderboardReference);
+  const leaderboardMomentum = getLeaderboardMomentum(leaderboardReference);
 
   async function trackEvent(message, meta = {}) {
     try {
@@ -2370,6 +2523,10 @@ export default function App() {
           </div>
           <div className="leaderboard-control-panel" data-testid="leaderboard-control-panel">
             <div className="leaderboard-control-label">BOARD CONTROL</div>
+            <div className="leaderboard-control-momentum" data-testid="leaderboard-control-momentum">
+              <span className="leaderboard-control-momentum-label">{leaderboardMomentum.label}</span>
+              <span className="leaderboard-control-momentum-detail">{leaderboardMomentum.detail}</span>
+            </div>
             {leaderboardBoardControl.length > 0 ? (
               <div className="leaderboard-control-list" data-testid="leaderboard-control-list">
                 {leaderboardBoardControl.map((control) => (
