@@ -986,7 +986,9 @@ function getLeaderboardSeasonArchive(scores, heroFilter = "all") {
   const history = loadHighScoreHistory(scores, { allowFallback: false });
   const heroFilters = Array.from(new Set(history.map((entry) => entry.hero)))
     .sort((a, b) => a.localeCompare(b));
-  const activeFilter = heroFilter === "all" || heroFilters.includes(heroFilter) ? heroFilter : "all";
+  const supportsFiltering = heroFilters.length > 1;
+  const requestedFilter = supportsFiltering ? heroFilter : "all";
+  const activeFilter = requestedFilter === "all" || heroFilters.includes(requestedFilter) ? requestedFilter : "all";
   const filteredHistory = (activeFilter === "all"
     ? history
     : history.filter((entry) => entry.hero === activeFilter)
@@ -1007,10 +1009,12 @@ function getLeaderboardSeasonArchive(scores, heroFilter = "all") {
     detail: activeFilter === "all"
       ? `Latest ${filteredHistory.length} archived run${filteredHistory.length === 1 ? "" : "s"} across the season table.`
       : `Latest ${filteredHistory.length} archived run${filteredHistory.length === 1 ? "" : "s"} for ${activeFilter}.`,
-    filters: [
-      { id: "all", label: "All heroes" },
-      ...heroFilters.map((hero) => ({ id: hero, label: hero }))
-    ],
+    filters: supportsFiltering
+      ? [
+        { id: "all", label: "All heroes" },
+        ...heroFilters.map((hero) => ({ id: hero, label: hero }))
+      ]
+      : [],
     activeFilter,
     entries: filteredHistory.map((entry) => ({
       ...entry,

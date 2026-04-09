@@ -1146,6 +1146,29 @@ test.describe("Web UI", () => {
     expect(await page.evaluate(() => localStorage.getItem("saga_archive_hero_filter"))).toBeNull();
   });
 
+  test("leaderboard archive hides redundant hero filters when only one hero has archived runs", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_highscores", JSON.stringify([
+        { hero: "Sound Crafter", score: 142, combo: 6, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z" },
+        { hero: "3D Modeler", score: 139, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z" },
+        { hero: "SyncFace Weaver", score: 135, combo: 5, date: "2026-04-03", createdAt: "2026-04-03T10:00:00.000Z" }
+      ]));
+      localStorage.setItem("saga_highscore_history", JSON.stringify([
+        { hero: "Sound Crafter", score: 142, combo: 6, date: "2026-04-05", createdAt: "2026-04-05T10:00:00.000Z", placement: 1, qualified: true },
+        { hero: "Sound Crafter", score: 137, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z", placement: 2, qualified: true },
+        { hero: "Sound Crafter", score: 132, combo: 4, date: "2026-04-03", createdAt: "2026-04-03T10:00:00.000Z", placement: 4, qualified: true }
+      ]));
+      localStorage.setItem("saga_archive_hero_filter", "Sound Crafter");
+    });
+    await page.reload();
+
+    await expect(page.getByTestId("leaderboard-archive-detail")).toContainText("Latest 3 archived runs across the season table.");
+    await expect(page.getByTestId("leaderboard-archive-item")).toHaveCount(3);
+    await expect(page.getByTestId("leaderboard-archive-item").nth(0)).toContainText("Sound Crafter");
+    await expect(page.getByTestId("leaderboard-archive-filters")).toHaveCount(0);
+    expect(await page.evaluate(() => localStorage.getItem("saga_archive_hero_filter"))).toBeNull();
+  });
+
   test("leaderboard board-control panel shows an empty-state prompt with no posted runs", async ({ page }) => {
     await page.evaluate(() => {
       localStorage.removeItem("saga_highscores");
