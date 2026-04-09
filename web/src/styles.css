@@ -971,10 +971,27 @@ main {
 
 .leaderboard-archive-detail,
 .leaderboard-archive-empty,
-.leaderboard-archive-meta {
+.leaderboard-archive-meta,
+.leaderboard-archive-story-detail {
   font-size: 11px;
   line-height: 1.45;
   color: #dce6f4;
+}
+
+.leaderboard-archive-story {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(88, 166, 255, 0.18);
+  background: rgba(88, 166, 255, 0.08);
+}
+
+.leaderboard-archive-story-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #8b949e;
 }
 
 .leaderboard-archive-filters {

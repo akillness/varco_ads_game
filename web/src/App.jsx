@@ -998,17 +998,52 @@ function getLeaderboardSeasonArchive(scores, heroFilter = "all") {
     return {
       label: "SEASON ARCHIVE",
       detail: "Archived season history appears after the first completed run.",
+      storyLabel: "ARCHIVE STORY",
+      storyDetail: "Archive summaries unlock after the first completed run.",
       filters: [],
       activeFilter,
       entries: []
     };
   }
 
+  const storyDetail = activeFilter === "all"
+    ? (() => {
+      const qualifiedCount = history.filter((entry) => entry.qualified).length;
+      const latestEntry = history[0];
+      const latestResult = latestEntry?.qualified && latestEntry?.placement
+        ? `#${latestEntry.placement} finish`
+        : `outside the top ${HIGH_SCORE_LIMIT}`;
+      return `${heroFilters.length} hero${heroFilters.length === 1 ? "" : "es"} logged ${history.length} archived run${history.length === 1 ? "" : "s"}. ${qualifiedCount}/${history.length} stayed inside the top ${HIGH_SCORE_LIMIT}. Latest archive: ${latestEntry.hero} at ${latestEntry.score} pts (${latestResult}).`;
+    })()
+    : (() => {
+      const heroHistory = history.filter((entry) => entry.hero === activeFilter);
+      const heroStats = getHeroMomentumStats(history, activeFilter);
+      const latestEntry = heroHistory[0] || null;
+      const bestPlacement = Number.isFinite(heroStats.bestPlacement)
+        ? `peaked at #${heroStats.bestPlacement}`
+        : `has not cracked the top ${HIGH_SCORE_LIMIT} yet`;
+      let trend = `last archived run landed outside the top ${HIGH_SCORE_LIMIT}`;
+      if (heroStats.currentStreak > 1) {
+        trend = `is riding a ${heroStats.currentStreak}-run top-${HIGH_SCORE_LIMIT} streak`;
+      } else if (heroStats.currentStreak === 1) {
+        trend = latestEntry?.qualified
+          ? `just posted a fresh top-${HIGH_SCORE_LIMIT} finish`
+          : `has a single archived top-${HIGH_SCORE_LIMIT} finish so far`;
+      } else if (latestEntry?.qualified) {
+        trend = heroStats.longestStreak > 1
+          ? `owns a season-best ${heroStats.longestStreak}-run top-${HIGH_SCORE_LIMIT} streak`
+          : `has a single archived top-${HIGH_SCORE_LIMIT} finish so far`;
+      }
+      return `${activeFilter} has ${heroHistory.length} archived run${heroHistory.length === 1 ? "" : "s"}, ${bestPlacement}, and ${trend}.`;
+    })();
+
   return {
     label: "SEASON ARCHIVE",
     detail: activeFilter === "all"
       ? `Latest ${filteredHistory.length} archived run${filteredHistory.length === 1 ? "" : "s"} across the season table.`
       : `Latest ${filteredHistory.length} archived run${filteredHistory.length === 1 ? "" : "s"} for ${activeFilter}.`,
+    storyLabel: activeFilter === "all" ? "ARCHIVE STORY" : `${activeFilter.toUpperCase()} STORY`,
+    storyDetail,
     filters: supportsFiltering
       ? [
         { id: "all", label: "All heroes" },
@@ -2792,6 +2827,10 @@ export default function App() {
               </div>
             )}
             <div className="leaderboard-archive-detail" data-testid="leaderboard-archive-detail">{leaderboardSeasonArchive.detail}</div>
+            <div className="leaderboard-archive-story" data-testid="leaderboard-archive-story">
+              <span className="leaderboard-archive-story-label">{leaderboardSeasonArchive.storyLabel}</span>
+              <span className="leaderboard-archive-story-detail">{leaderboardSeasonArchive.storyDetail}</span>
+            </div>
             {leaderboardSeasonArchive.entries.length > 0 ? (
               <div className="leaderboard-archive-list" data-testid="leaderboard-archive-list">
                 {leaderboardSeasonArchive.entries.map((entry) => (

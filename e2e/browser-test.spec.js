@@ -1077,6 +1077,7 @@ test.describe("Web UI", () => {
 
     const archiveRows = page.getByTestId("leaderboard-archive-item");
     await expect(page.getByTestId("leaderboard-archive-detail")).toContainText("Latest 4 archived runs across the season table.");
+    await expect(page.getByTestId("leaderboard-archive-story")).toContainText("3 heroes logged 5 archived runs. 4/5 stayed inside the top 5. Latest archive: Sound Crafter at 118 pts (outside the top 5).");
     await expect(page.getByTestId("leaderboard-archive-filters")).toBeVisible();
     await expect(archiveRows).toHaveCount(4);
     await expect(archiveRows.nth(0)).toContainText("Sound Crafter");
@@ -1089,6 +1090,7 @@ test.describe("Web UI", () => {
     const archiveFilters = page.getByTestId("leaderboard-archive-filters");
     await archiveFilters.getByRole("button", { name: "Sound Crafter", exact: true }).click();
     await expect(page.getByTestId("leaderboard-archive-detail")).toContainText("Latest 3 archived runs for Sound Crafter.");
+    await expect(page.getByTestId("leaderboard-archive-story")).toContainText("Sound Crafter has 3 archived runs, peaked at #2, and last archived run landed outside the top 5.");
     await expect(archiveRows).toHaveCount(3);
     await expect(archiveRows.nth(0)).toContainText("118 pts · 4x combo · 2026-04-06");
     await expect(archiveRows.nth(2)).toContainText("131 pts · 5x combo · 2026-04-03");
@@ -1123,6 +1125,7 @@ test.describe("Web UI", () => {
     const archiveFilters = page.getByTestId("leaderboard-archive-filters");
     await archiveFilters.getByRole("button", { name: "Sound Crafter", exact: true }).click();
     await expect(page.getByTestId("leaderboard-archive-detail")).toContainText("Latest 2 archived runs for Sound Crafter.");
+    await expect(page.getByTestId("leaderboard-archive-story")).toContainText("Sound Crafter has 2 archived runs, peaked at #2, and is riding a 2-run top-5 streak.");
     expect(await page.evaluate(() => localStorage.getItem("saga_archive_hero_filter"))).toBe("Sound Crafter");
 
     await page.reload();
@@ -1179,6 +1182,7 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("leaderboard-control-empty")).toContainText("Post the first clean run to reveal hero control badges.");
     await expect(page.getByTestId("leaderboard-control-item")).toHaveCount(0);
     await expect(page.getByTestId("leaderboard-control-momentum")).toContainText("Season streaks unlock after the first archived run.");
+    await expect(page.getByTestId("leaderboard-archive-story")).toContainText("Archive summaries unlock after the first completed run.");
   });
 
   test("game over overlay highlights a new #1 leaderboard finish", async ({ page }) => {
