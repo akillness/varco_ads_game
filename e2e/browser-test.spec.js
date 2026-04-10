@@ -835,6 +835,53 @@ test.describe("Web UI", () => {
     await expect(page.locator(".xp-info")).toContainText("HP 4 / SPD 2");
   });
 
+  test("hero selector locks after the run starts until reset reopens hero choice", async ({ page }) => {
+    const heroGroup = page.getByTestId("hero-select-group");
+    const modelerButton = heroGroup.getByRole("button", { name: "3D Modeler", exact: true });
+    const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
+    const controlLegend = page.getByTestId("control-legend");
+    const runBriefing = page.getByTestId("run-briefing");
+    const timer = page.locator(".timer");
+    const score = page.locator(".score");
+
+    await page.getByRole("button", { name: "Start" }).click();
+    await page.evaluate(() => {
+      window.__SAGA_DEBUG__.dispatch({
+        type: "DEBUG_PATCH_STATE",
+        patch: {
+          running: false,
+          hasStartedRun: true,
+          timer: 45,
+          score: 12
+        }
+      });
+    });
+
+    await expect(modelerButton).toHaveAttribute("aria-disabled", "true");
+    await expect(sounderButton).toHaveAttribute("aria-disabled", "true");
+    await expect(modelerButton).toHaveAttribute("aria-description", "Select 3D Modeler; currently selected. Reset to change hero after a run starts.");
+    await expect(sounderButton).toHaveAttribute("aria-description", "Select Sound Crafter. Reset to change hero after a run starts.");
+    await expect(timer).toHaveText("45s");
+    await expect(score).toHaveText("12");
+    await expect(modelerButton).toHaveAttribute("aria-pressed", "true");
+    await expect(sounderButton).toHaveAttribute("aria-pressed", "false");
+    await expect(controlLegend).toHaveAttribute("aria-label", "Controls legend. Move with Arrow keys or WASD. Press Space to activate Hard-Light Shield. Use Start or Pause to control the match timer. Reset opens a fresh live match.");
+    await expect(runBriefing).toHaveAttribute("aria-label", /Hard-Light Shield: Shield \+ heal \+ scatter enemies\./);
+    await expect(page.locator(".xp-info")).toContainText("HP 6 / SPD 1");
+
+    await page.getByRole("button", { name: "Reset" }).click();
+    await expect(modelerButton).toHaveAttribute("aria-disabled", "false");
+    await expect(sounderButton).toHaveAttribute("aria-disabled", "false");
+    await expect(timer).toHaveText("60s");
+    await expect(score).toHaveText("0");
+
+    await sounderButton.click();
+    await expect(sounderButton).toHaveAttribute("aria-pressed", "true");
+    await expect(controlLegend).toHaveAttribute("aria-label", "Controls legend. Move with Arrow keys or WASD. Press Space to activate Bass Drop. Use Start or Pause to control the match timer. Reset opens a fresh live match.");
+    await expect(runBriefing).toHaveAttribute("aria-label", /Bass Drop: Freeze enemies \+ protect your combo\./);
+    await expect(page.locator(".xp-info")).toContainText("HP 5 / SPD 1");
+  });
+
   test("betting and promo director controls expose stable labels through pending states", async ({ page }) => {
     let releaseBetResponse;
     const betResponsePending = new Promise((resolve) => {

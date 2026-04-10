@@ -1289,8 +1289,12 @@ function getArchiveFilterAriaLabel(filterLabel, isActive) {
   return scope;
 }
 
-function getHeroSelectAriaLabel(heroName, isActive) {
-  return `Select ${heroName}${isActive ? "; currently selected" : ""}.`;
+function getHeroSelectAriaLabel(heroName, isActive, isLocked = false) {
+  const baseLabel = `Select ${heroName}${isActive ? "; currently selected" : ""}.`;
+  if (!isLocked) {
+    return baseLabel;
+  }
+  return `${baseLabel} Reset to change hero after a run starts.`;
 }
 
 function getMarketingAngleAriaLabel(angleLabel, isActive) {
@@ -2134,6 +2138,7 @@ const initState = (hero) => {
   return {
     hero,
     running: false,
+    hasStartedRun: false,
     gameOver: false,
     score: 0,
     hp: hero.hp,
@@ -2406,7 +2411,11 @@ function reducer(state, action) {
 
     case "TOGGLE_RUN":
       if (state.gameOver) return state;
-      return { ...state, running: !state.running };
+      return {
+        ...state,
+        running: !state.running,
+        hasStartedRun: state.hasStartedRun || !state.running
+      };
 
     case "RESET": {
       const s = initState(state.hero);
@@ -2599,6 +2608,7 @@ export default function App() {
   const {
     hero,
     running,
+    hasStartedRun,
     gameOver,
     score,
     hp,
@@ -2648,6 +2658,7 @@ export default function App() {
   }, [gameOver, highScores]);
 
   const activeAbility = HERO_ABILITIES[hero.id];
+  const heroSelectionLocked = hasStartedRun;
   const directorPhase = getDirectorPhase(timer);
   const elapsedSeconds = GAME_TIME - timer;
   const bettingStatus = getBettingStatusSnapshot(matchStatus, timer, elapsedSeconds, currentMatchId);
@@ -3331,6 +3342,7 @@ export default function App() {
           <div className="hero-select" data-testid="hero-select-group">
             {heroes.map((h) => {
               const isActive = hero.id === h.id;
+              const heroSelectLabel = getHeroSelectAriaLabel(h.name, isActive, heroSelectionLocked);
               return (
                 <button
                   key={h.id}
@@ -3338,15 +3350,22 @@ export default function App() {
                   className={`hero-btn${isActive ? " active" : ""}`}
                   data-testid="hero-select-button"
                   aria-pressed={isActive}
-                  aria-description={getHeroSelectAriaLabel(h.name, isActive)}
-                  title={getHeroSelectAriaLabel(h.name, isActive)}
-                  onClick={() => dispatch({ type: "SET_HERO", hero: h })}
-                  onKeyDown={(event) => handleHeroSelectKeyDown(event, hero.id, (nextHeroId) => {
-                    const nextHero = heroes.find((candidate) => candidate.id === nextHeroId);
-                    if (nextHero) {
-                      dispatch({ type: "SET_HERO", hero: nextHero });
-                    }
-                  })}
+                  aria-disabled={heroSelectionLocked}
+                  aria-description={heroSelectLabel}
+                  title={heroSelectLabel}
+                  onClick={() => {
+                    if (heroSelectionLocked) return;
+                    dispatch({ type: "SET_HERO", hero: h });
+                  }}
+                  onKeyDown={(event) => {
+                    if (heroSelectionLocked) return;
+                    handleHeroSelectKeyDown(event, hero.id, (nextHeroId) => {
+                      const nextHero = heroes.find((candidate) => candidate.id === nextHeroId);
+                      if (nextHero) {
+                        dispatch({ type: "SET_HERO", hero: nextHero });
+                      }
+                    });
+                  }}
                 >
                   {h.name}
                 </button>
