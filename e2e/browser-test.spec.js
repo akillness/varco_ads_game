@@ -515,6 +515,44 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("studio-pack-panel")).not.toContainText("3D Modeler");
   });
 
+  test("switching heroes after a ready studio pack clears stale loaded sound prompts", async ({ page }) => {
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      const payload = route.request().postDataJSON();
+      const heroName = payload.heroId === "sounder" ? "Sound Crafter" : "3D Modeler";
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(createStudioPackFixture("Retro arcade launch for creator heroes", {
+          heroName,
+          suffix: payload.heroId
+        }))
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const heroGroup = page.getByTestId("hero-select-group");
+    const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
+    const soundPromptInput = page.locator(".sound-editor .prompt-input");
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Fresh studio pack ready for 3D Modeler.");
+
+    await page.getByTestId("studio-queue-item").first().click();
+    await expect(soundPromptInput).toHaveValue("Retro arcade launch for creator heroes bgm prompt");
+    await expect(page.getByTestId("sound-tab-group")).toHaveAttribute("aria-label", /Retro arcade launch for creator heroes bgm prompt/);
+
+    await sounderButton.click();
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for Sound Crafter. Ready for a new campaign brief.");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(page.getByTestId("studio-pack-status")).toHaveCount(0);
+    await expect(page.getByTestId("studio-copy-card")).toHaveCount(0);
+    await expect(soundPromptInput).toHaveValue("ambient game background music");
+    await expect(page.getByTestId("sound-tab-group")).not.toHaveAttribute("aria-label", /Retro arcade launch for creator heroes bgm prompt/);
+  });
+
   test("studio pack status surfaces backend failures without leaving stale content behind", async ({ page }) => {
     await page.route("**/api/varco/studio-pack", async (route) => {
       await route.fulfill({
