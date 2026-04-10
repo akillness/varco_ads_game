@@ -3112,8 +3112,12 @@ export default function App() {
       : `Copy ${angleLabel} copy`;
   }
 
-  function selectMarketingAngle(angle) {
+  function selectMarketingAngle(angle, { syncQueueItem = true } = {}) {
     setSelectedMarketingAngle(angle);
+    if (syncQueueItem) {
+      const matchingQueueItem = studioPack?.productionQueue?.find((item) => item.lane === "social" && item.key === angle?.channel) || null;
+      setSelectedQueueItemId(matchingQueueItem?.id || null);
+    }
     clearMarketingCopyFeedback();
   }
 

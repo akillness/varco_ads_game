@@ -779,6 +779,60 @@ test.describe("Web UI", () => {
     await expect(copyFeedback).toBeFocused();
   });
 
+  test("marketing channel chips keep the social queue highlight aligned with the active copy", async ({ page }) => {
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      const fixture = createStudioPackFixture("Retro arcade launch for creator heroes", { suffix: "marketing-sync" });
+      fixture.studioPack.marketingAngles = [
+        {
+          id: "launch-x",
+          channel: "x",
+          label: "X",
+          copy: "Retro arcade launch X copy",
+          cta: "Drop into the arena"
+        },
+        {
+          id: "launch-instagram",
+          channel: "instagram",
+          label: "Instagram Reel",
+          copy: "Retro arcade launch Instagram Reel copy",
+          cta: "Swipe into the spotlight"
+        }
+      ];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(fixture)
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    await studioPanel.locator("textarea").fill("Retro arcade launch for creator heroes");
+    await studioPanel.getByRole("button", { name: "Generate Studio Pack" }).click();
+
+    const socialQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Social launch copy" });
+    const xAngleButton = page.getByRole("button", { name: "X", exact: true });
+    const instagramAngleButton = page.getByRole("button", { name: "Instagram Reel", exact: true });
+    const copyCard = page.getByTestId("studio-copy-card");
+
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
+
+    await socialQueueItem.click();
+    await expect(copyCard).toContainText("X");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+
+    await instagramAngleButton.click();
+    await expect(copyCard).toContainText("Instagram Reel");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
+
+    await xAngleButton.click();
+    await expect(copyCard).toContainText("X");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+  });
+
   test("marketing copy feedback surfaces clipboard failures with a keyboard-readable status", async ({ page }) => {
     await page.evaluate(() => {
       Object.defineProperty(navigator, "clipboard", {
