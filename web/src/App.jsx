@@ -1489,6 +1489,14 @@ function handleAchievementItemKeyDown(event) {
   handleFocusableSiblingKeyDown(event, '[data-testid="achievement-item"]', ["ArrowDown", "ArrowUp"]);
 }
 
+function handleGameOverCalloutKeyDown(event) {
+  handleFocusableSiblingKeyDown(
+    event,
+    '[data-testid="game-over-placement"], [data-testid="game-over-momentum"]',
+    ["ArrowDown", "ArrowUp"]
+  );
+}
+
 function getArchiveSummaryAriaLabel(label, detail) {
   return `${label}. ${detail}`;
 }
@@ -3484,6 +3492,7 @@ export default function App() {
                 tabIndex={0}
                 aria-label={getGameOverCalloutAriaLabel("LEADERBOARD UPDATE", leaderboardUpdate.message)}
                 title={getGameOverCalloutAriaLabel("LEADERBOARD UPDATE", leaderboardUpdate.message)}
+                onKeyDown={handleGameOverCalloutKeyDown}
               >
                 {leaderboardUpdate.message}
               </div>
@@ -3495,6 +3504,7 @@ export default function App() {
                 tabIndex={0}
                 aria-label={getGameOverCalloutAriaLabel("MOMENTUM UPDATE", leaderboardMomentumUpdate.message)}
                 title={getGameOverCalloutAriaLabel("MOMENTUM UPDATE", leaderboardMomentumUpdate.message)}
+                onKeyDown={handleGameOverCalloutKeyDown}
               >
                 {leaderboardMomentumUpdate.message}
               </div>

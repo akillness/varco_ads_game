@@ -2542,8 +2542,17 @@ test.describe("Web UI", () => {
     await expect(momentumCallout).toContainText("Sound Crafter extends their top-5 streak to 3 straight runs.");
     await expect(momentumCallout).toHaveAttribute("tabindex", "0");
     await expect(momentumCallout).toHaveAttribute("aria-label", "MOMENTUM UPDATE. Sound Crafter extends their top-5 streak to 3 straight runs.");
-    await momentumCallout.focus();
+
+    await placementCallout.focus();
+    await expect(placementCallout).toBeFocused();
+    await page.keyboard.press("ArrowDown");
     await expect(momentumCallout).toBeFocused();
+    await page.keyboard.press("ArrowUp");
+    await expect(placementCallout).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(momentumCallout).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(placementCallout).toBeFocused();
   });
 
   test("game over overlay opens a first top-5 streak when a hero archives their first qualifying finish", async ({ page }) => {
