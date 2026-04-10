@@ -1435,12 +1435,14 @@ function handleStudioQueueKeyDown(event, currentQueueItemId, queueItems, onSelec
   );
 }
 
-function handleFocusableSiblingKeyDown(event, selector, keyMap) {
+function handleFocusableSiblingKeyDown(event, selector, keyMap, containerSelector = null) {
   if (![...keyMap, "Home", "End"].includes(event.key)) {
     return;
   }
 
-  const siblingContainer = event.currentTarget?.parentElement;
+  const siblingContainer = containerSelector
+    ? event.currentTarget?.closest(containerSelector)
+    : event.currentTarget?.parentElement;
   if (!siblingContainer) {
     return;
   }
@@ -1487,6 +1489,15 @@ function handleArchiveItemKeyDown(event) {
     return;
   }
   handleFocusableSiblingKeyDown(event, '[data-testid="leaderboard-archive-item"]', ["ArrowDown", "ArrowUp"]);
+}
+
+function handleArchiveEntryTrendKeyDown(event) {
+  handleFocusableSiblingKeyDown(
+    event,
+    '[data-testid="leaderboard-archive-entry-trend"]',
+    ["ArrowDown", "ArrowUp"],
+    '[data-testid="leaderboard-archive-list"]'
+  );
 }
 
 function handleArchiveFormChipKeyDown(event) {
@@ -3788,6 +3799,7 @@ export default function App() {
                       tabIndex={0}
                       aria-label={getArchiveEntryTrendAriaLabel(entry.hero, entry.trendLabel, entry.trendDetail)}
                       title={getArchiveEntryTrendAriaLabel(entry.hero, entry.trendLabel, entry.trendDetail)}
+                      onKeyDown={handleArchiveEntryTrendKeyDown}
                     >
                       <span className="leaderboard-archive-entry-trend-label">{entry.trendLabel}</span>
                       <span className="leaderboard-archive-entry-trend-detail">{entry.trendDetail}</span>

@@ -1774,7 +1774,7 @@ test.describe("Web UI", () => {
     await expect(formGroups.first()).toBeFocused();
   });
 
-  test("leaderboard board-control cards and archive form chips support keyboard cycling", async ({ page }) => {
+  test("leaderboard board-control cards, archive trend chips, and archive form chips support keyboard cycling", async ({ page }) => {
     await page.evaluate(() => {
       localStorage.setItem("saga_highscores", JSON.stringify([
         { hero: "Sound Crafter", score: 132, combo: 5, date: "2026-04-04", createdAt: "2026-04-04T10:00:00.000Z" },
@@ -1808,6 +1808,23 @@ test.describe("Web UI", () => {
 
     await page.keyboard.press("ArrowUp");
     await expect(controlRows.nth(2)).toBeFocused();
+
+    const archiveEntryTrends = page.getByTestId("leaderboard-archive-entry-trend");
+    await expect(archiveEntryTrends).toHaveCount(4);
+    await archiveEntryTrends.nth(0).focus();
+    await expect(archiveEntryTrends.nth(0)).toBeFocused();
+
+    await page.keyboard.press("ArrowDown");
+    await expect(archiveEntryTrends.nth(1)).toBeFocused();
+
+    await page.keyboard.press("End");
+    await expect(archiveEntryTrends.nth(3)).toBeFocused();
+
+    await page.keyboard.press("Home");
+    await expect(archiveEntryTrends.nth(0)).toBeFocused();
+
+    await page.keyboard.press("ArrowUp");
+    await expect(archiveEntryTrends.nth(3)).toBeFocused();
 
     const formGroups = page.getByTestId("leaderboard-archive-entry-form");
     const firstFormChips = formGroups.first().getByTestId("leaderboard-archive-entry-form-chip");
