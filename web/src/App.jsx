@@ -1699,6 +1699,11 @@ function getArenaStatusStripAriaLabel(directorPhase, mission, activeAbility, swi
   return `Arena status. Phase: ${directorPhase?.label || "unknown"}. Mission: ${mission?.title || "unknown"}. Ability: ${activeAbility?.name || "unknown"}. Swing: ${swingTriggered ? "Triggered" : "Pending"}. Assets live: ${liveAssetCount}/3. Sound cues live: ${liveSoundCount}/5.`;
 }
 
+function getControlLegendAriaLabel(activeAbility) {
+  const abilityName = activeAbility?.name || "your hero ability";
+  return `Controls legend. Move with Arrow keys or WASD. Press Space to activate ${abilityName}. Use Start or Pause to control the match timer. Reset opens a fresh live match.`;
+}
+
 function getHpPanelAriaLabel(hp, maxHp) {
   const safeHp = Math.max(hp, 0);
   const safeMaxHp = Math.max(maxHp, 1);
@@ -3539,8 +3544,24 @@ export default function App() {
         </div>
 
         {/* Game Controls */}
-        <div className="panel">
+        <div className="panel control-panel" data-testid="control-panel">
           <div className="panel-title">Controls</div>
+          <div
+            className="control-legend"
+            data-testid="control-legend"
+            tabIndex={0}
+            aria-label={getControlLegendAriaLabel(activeAbility)}
+            title={getControlLegendAriaLabel(activeAbility)}
+          >
+            <div className="control-legend-row">
+              <span className="control-legend-label">Move</span>
+              <strong>Arrow keys / WASD</strong>
+            </div>
+            <div className="control-legend-row">
+              <span className="control-legend-label">Ability</span>
+              <strong>Space · {activeAbility.name}</strong>
+            </div>
+          </div>
           <div className="game-controls">
             <button type="button" className={`ctrl-btn${running ? " pause" : " start"}`} onClick={() => dispatch({ type: "TOGGLE_RUN" })}>
               {running ? "Pause" : "Start"}

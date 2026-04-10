@@ -782,6 +782,36 @@ main {
 }
 
 /* ==================== GAME CONTROLS ==================== */
+.control-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.control-legend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+}
+
+.control-legend-row strong {
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.control-legend-label {
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
 .game-controls {
   display: flex;
   gap: 6px;
@@ -1103,6 +1133,7 @@ main {
 .director-kpi-card:focus-visible,
 .powerup-panel:focus-visible,
 .watch-box:focus-visible,
+.control-legend:focus-visible,
 .arena-status-strip:focus-visible,
 .studio-kpi-strip:focus-visible,
 .achievement-item:focus-visible,
