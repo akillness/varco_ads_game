@@ -1485,6 +1485,10 @@ function handleHighScoreItemKeyDown(event) {
   handleFocusableSiblingKeyDown(event, '[data-testid="high-score-item"]', ["ArrowDown", "ArrowUp"]);
 }
 
+function handleAchievementItemKeyDown(event) {
+  handleFocusableSiblingKeyDown(event, '[data-testid="achievement-item"]', ["ArrowDown", "ArrowUp"]);
+}
+
 function getArchiveSummaryAriaLabel(label, detail) {
   return `${label}. ${detail}`;
 }
@@ -1680,6 +1684,17 @@ function getAgentLogEntryAriaLabel(entry, index) {
   const levelLabel = String(entry?.level || "info").toUpperCase();
   const message = entry?.message || "Log entry unavailable.";
   return `Agent log ${index + 1}. ${levelLabel}. ${message}`;
+}
+
+function getAchievementListAriaLabel(unlockedCount, totalCount) {
+  return `Achievements. ${unlockedCount} unlocked of ${totalCount}.`;
+}
+
+function getAchievementItemAriaLabel(achievement, unlocked) {
+  if (!achievement) {
+    return "Achievement unavailable.";
+  }
+  return `${achievement.name}. ${achievement.desc}. ${unlocked ? "Unlocked" : "Locked"}.`;
 }
 
 function getGameOverCalloutAriaLabel(label, message) {
@@ -3822,11 +3837,24 @@ export default function App() {
         {/* Achievements */}
         <div className="panel">
           <div className="panel-title">Achievements</div>
-          <div className="achievement-list">
+          <div
+            className="achievement-list"
+            data-testid="achievement-list"
+            aria-label={getAchievementListAriaLabel(achievements.length, ACHIEVEMENTS.length)}
+          >
             {ACHIEVEMENTS.map((a) => {
               const unlocked = achievements.includes(a.id);
+              const achievementAriaLabel = getAchievementItemAriaLabel(a, unlocked);
               return (
-                <div key={a.id} className={`achievement-item${unlocked ? " unlocked" : ""}`}>
+                <div
+                  key={a.id}
+                  className={`achievement-item${unlocked ? " unlocked" : ""}`}
+                  data-testid="achievement-item"
+                  tabIndex={0}
+                  aria-label={achievementAriaLabel}
+                  title={achievementAriaLabel}
+                  onKeyDown={handleAchievementItemKeyDown}
+                >
                   <span className="achievement-icon">{unlocked ? "*" : "-"}</span>
                   <span>{a.name}</span>
                 </div>

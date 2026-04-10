@@ -147,6 +147,8 @@ test.describe("Web UI", () => {
     const liveWatchPanel = page.getByTestId("live-watch-panel");
     const studioKpiStrip = page.getByTestId("studio-kpi-strip");
     const arenaStatusStrip = page.getByTestId("arena-status-strip");
+    const achievementList = page.getByTestId("achievement-list");
+    const achievementItems = page.getByTestId("achievement-item");
 
     await expect(hpPanel).toBeVisible();
     await expect(levelPanel).toBeVisible();
@@ -164,6 +166,8 @@ test.describe("Web UI", () => {
     await expect(liveWatchPanel).toContainText("Live");
     await expect(studioKpiStrip).toContainText("cache hits");
     await expect(arenaStatusStrip).toContainText("Mission:");
+    await expect(achievementList).toBeVisible();
+    await expect(achievementItems).toHaveCount(8);
 
     await expect(hpPanel).toHaveAttribute("tabindex", "0");
     await expect(hpPanel).toHaveAttribute("aria-label", "Health. 6 of 6 HP. 100 percent. Healthy.");
@@ -185,6 +189,10 @@ test.describe("Web UI", () => {
     await expect(studioKpiStrip).toHaveAttribute("aria-label", /Studio cache\. cache hits \d+\./);
     await expect(arenaStatusStrip).toHaveAttribute("tabindex", "0");
     await expect(arenaStatusStrip).toHaveAttribute("aria-label", /Arena status\. Phase:/);
+    await expect(achievementList).toHaveAttribute("aria-label", "Achievements. 0 unlocked of 8.");
+    await expect(achievementItems.nth(0)).toHaveAttribute("tabindex", "0");
+    await expect(achievementItems.nth(0)).toHaveAttribute("aria-label", "First Blood. Collect 1 orb. Locked.");
+    await expect(achievementItems.nth(0)).toHaveAttribute("title", "First Blood. Collect 1 orb. Locked.");
 
     await hpPanel.focus();
     await expect(hpPanel).toBeFocused();
@@ -202,6 +210,36 @@ test.describe("Web UI", () => {
     await expect(studioKpiStrip).toBeFocused();
     await arenaStatusStrip.focus();
     await expect(arenaStatusStrip).toBeFocused();
+    await achievementItems.nth(0).focus();
+    await expect(achievementItems.nth(0)).toBeFocused();
+  });
+
+  test("achievement list announces unlocked progress and supports keyboard navigation", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("saga_progress", JSON.stringify({
+        xp: 90,
+        level: 2,
+        achievements: ["first_orb", "combo3"]
+      }));
+    });
+    await page.reload();
+
+    const achievementList = page.getByTestId("achievement-list");
+    const achievementItems = page.getByTestId("achievement-item");
+    await expect(achievementList).toHaveAttribute("aria-label", "Achievements. 2 unlocked of 8.");
+    await expect(achievementItems).toHaveCount(8);
+    await expect(achievementItems.nth(0)).toHaveAttribute("aria-label", "First Blood. Collect 1 orb. Unlocked.");
+    await expect(achievementItems.nth(1)).toHaveAttribute("aria-label", "Triple Threat. 3x combo. Unlocked.");
+    await expect(achievementItems.nth(2)).toHaveAttribute("aria-label", "Unstoppable. 5x combo. Locked.");
+
+    await achievementItems.nth(0).focus();
+    await expect(achievementItems.nth(0)).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(achievementItems.nth(1)).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(achievementItems.nth(7)).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(achievementItems.nth(0)).toBeFocused();
   });
 
   test("agent log feed shows an empty state and focusable server log rows", async ({ page }) => {
