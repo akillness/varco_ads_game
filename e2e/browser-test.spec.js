@@ -145,6 +145,7 @@ test.describe("Web UI", () => {
     const directorPanel = page.getByTestId("director-panel");
     const powerupPanel = page.getByTestId("powerup-panel");
     const liveWatchPanel = page.getByTestId("live-watch-panel");
+    const directorKpiCards = page.getByTestId("director-kpi-card");
     const studioKpiStrip = page.getByTestId("studio-kpi-strip");
     const arenaStatusStrip = page.getByTestId("arena-status-strip");
     const achievementList = page.getByTestId("achievement-list");
@@ -158,6 +159,7 @@ test.describe("Web UI", () => {
     await expect(directorPanel).toBeVisible();
     await expect(powerupPanel).toBeVisible();
     await expect(liveWatchPanel).toBeVisible();
+    await expect(directorKpiCards).toHaveCount(3);
     await expect(page.getByTestId("studio-pack-panel")).toBeVisible();
     await expect(hpPanel).toContainText("HP");
     await expect(levelPanel).toContainText("Level");
@@ -185,6 +187,10 @@ test.describe("Web UI", () => {
     await expect(powerupPanel).toHaveAttribute("aria-label", /Power-ups\. Shield inactive\./);
     await expect(liveWatchPanel).toHaveAttribute("tabindex", "0");
     await expect(liveWatchPanel).toHaveAttribute("aria-label", /Live board\. \d+ spectators watching\./);
+    await expect(directorKpiCards.nth(0)).toHaveAttribute("tabindex", "0");
+    await expect(directorKpiCards.nth(0)).toHaveAttribute("aria-label", "Bonus core. Offline.");
+    await expect(directorKpiCards.nth(1)).toHaveAttribute("aria-label", "Live assets. 0/3.");
+    await expect(directorKpiCards.nth(2)).toHaveAttribute("aria-label", "Live cues. 0/5.");
     await expect(studioKpiStrip).toHaveAttribute("tabindex", "0");
     await expect(studioKpiStrip).toHaveAttribute("aria-label", /Studio cache\. cache hits \d+\./);
     await expect(arenaStatusStrip).toHaveAttribute("tabindex", "0");
@@ -206,6 +212,8 @@ test.describe("Web UI", () => {
     await expect(powerupPanel).toBeFocused();
     await liveWatchPanel.focus();
     await expect(liveWatchPanel).toBeFocused();
+    await directorKpiCards.nth(0).focus();
+    await expect(directorKpiCards.nth(0)).toBeFocused();
     await studioKpiStrip.focus();
     await expect(studioKpiStrip).toBeFocused();
     await arenaStatusStrip.focus();
@@ -735,6 +743,50 @@ test.describe("Web UI", () => {
     await expect(swingEventCard).toBeFocused();
     await page.keyboard.press("ArrowDown");
     await expect(directorBeatCard).toBeFocused();
+  });
+
+  test("director KPI cards are keyboard-readable and support horizontal focus cycling", async ({ page }) => {
+    await page.evaluate(() => {
+      window.__SAGA_DEBUG__.dispatch({
+        type: "DEBUG_PATCH_STATE",
+        patch: {
+          bonusOrb: { x: 5, y: 5 },
+          appliedAssets: {
+            orb: "/debug/orb.glb",
+            enemy: "/debug/enemy.glb",
+            player: null
+          },
+          appliedSounds: {
+            bgm: "/debug/bgm.mp3",
+            orb: "/debug/orb.wav",
+            hit: null,
+            win: null,
+            lose: null
+          }
+        }
+      });
+    });
+
+    const directorKpiCards = page.getByTestId("director-kpi-card");
+    await expect(directorKpiCards).toHaveCount(3);
+    await expect(directorKpiCards.nth(0)).toHaveAttribute("tabindex", "0");
+    await expect(directorKpiCards.nth(0)).toHaveAttribute("aria-label", "Bonus core. Live.");
+    await expect(directorKpiCards.nth(0)).toHaveAttribute("title", "Bonus core. Live.");
+    await expect(directorKpiCards.nth(1)).toHaveAttribute("aria-label", "Live assets. 2/3.");
+    await expect(directorKpiCards.nth(1)).toHaveAttribute("title", "Live assets. 2/3.");
+    await expect(directorKpiCards.nth(2)).toHaveAttribute("aria-label", "Live cues. 2/5.");
+    await expect(directorKpiCards.nth(2)).toHaveAttribute("title", "Live cues. 2/5.");
+
+    await directorKpiCards.nth(0).focus();
+    await expect(directorKpiCards.nth(0)).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(directorKpiCards.nth(1)).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(directorKpiCards.nth(2)).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(directorKpiCards.nth(0)).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
+    await expect(directorKpiCards.nth(2)).toBeFocused();
   });
 
   test("studio editor tabs support keyboard cycling and pressed-state accessibility", async ({ page }) => {

@@ -1100,6 +1100,7 @@ main {
 .ability-panel:focus-visible,
 .director-panel:focus-visible,
 .director-beat-card:focus-visible,
+.director-kpi-card:focus-visible,
 .powerup-panel:focus-visible,
 .watch-box:focus-visible,
 .arena-status-strip:focus-visible,
@@ -1770,7 +1771,7 @@ main {
   color: var(--brand);
 }
 
-.director-kpis > div {
+.director-kpi-card {
   flex: 1;
   display: flex;
   flex-direction: column;

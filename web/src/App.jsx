@@ -1493,6 +1493,10 @@ function handleDirectorBeatCardKeyDown(event) {
   handleFocusableSiblingKeyDown(event, '[data-testid="director-beat-card"], [data-testid="swing-event-card"]', ["ArrowDown", "ArrowUp"]);
 }
 
+function handleDirectorKpiKeyDown(event) {
+  handleFocusableSiblingKeyDown(event, '[data-testid="director-kpi-card"]', ["ArrowRight", "ArrowLeft"]);
+}
+
 function handleGameOverCalloutKeyDown(event) {
   handleFocusableSiblingKeyDown(
     event,
@@ -1716,6 +1720,10 @@ function getGameOverCalloutAriaLabel(label, message) {
 function getDirectorBeatCardAriaLabel(kind, event) {
   if (!event) return `${kind} unavailable.`;
   return `${kind}. ${event.title}. ${event.text}`;
+}
+
+function getDirectorKpiAriaLabel(label, value) {
+  return `${label}. ${value}.`;
 }
 
 function getLeaderboardControlAriaLabel(control) {
@@ -3384,16 +3392,37 @@ export default function App() {
               <span>{swingEvent.text}</span>
             </div>
           )}
-          <div className="director-kpis">
-            <div>
+          <div className="director-kpis" data-testid="director-kpi-group">
+            <div
+              className="director-kpi-card"
+              data-testid="director-kpi-card"
+              tabIndex={0}
+              aria-label={getDirectorKpiAriaLabel("Bonus core", bonusOrb ? "Live" : "Offline")}
+              title={getDirectorKpiAriaLabel("Bonus core", bonusOrb ? "Live" : "Offline")}
+              onKeyDown={handleDirectorKpiKeyDown}
+            >
               <span>Bonus core</span>
               <strong>{bonusOrb ? "Live" : "Offline"}</strong>
             </div>
-            <div>
+            <div
+              className="director-kpi-card"
+              data-testid="director-kpi-card"
+              tabIndex={0}
+              aria-label={getDirectorKpiAriaLabel("Live assets", `${liveAssetCount}/3`)}
+              title={getDirectorKpiAriaLabel("Live assets", `${liveAssetCount}/3`)}
+              onKeyDown={handleDirectorKpiKeyDown}
+            >
               <span>Live assets</span>
               <strong>{liveAssetCount}/3</strong>
             </div>
-            <div>
+            <div
+              className="director-kpi-card"
+              data-testid="director-kpi-card"
+              tabIndex={0}
+              aria-label={getDirectorKpiAriaLabel("Live cues", `${liveSoundCount}/5`)}
+              title={getDirectorKpiAriaLabel("Live cues", `${liveSoundCount}/5`)}
+              onKeyDown={handleDirectorKpiKeyDown}
+            >
               <span>Live cues</span>
               <strong>{liveSoundCount}/5</strong>
             </div>
