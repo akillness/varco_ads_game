@@ -629,6 +629,87 @@ test.describe("Web UI", () => {
     expect(requestedHeroIds).toEqual(["modeler"]);
   });
 
+  test("switching heroes after generating a fresh pack ignores stale delayed success from the previous hero", async ({ page }) => {
+    let releaseFirstPack;
+    const firstPackPending = new Promise((resolve) => {
+      releaseFirstPack = resolve;
+    });
+    const requestedHeroIds = [];
+    let requestCount = 0;
+
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const payload = route.request().postDataJSON();
+      requestedHeroIds.push(payload.heroId);
+
+      if (requestCount === 1) {
+        await firstPackPending;
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(createStudioPackFixture("Modeler delayed pack", {
+            heroName: "3D Modeler",
+            suffix: payload.heroId
+          }))
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(createStudioPackFixture("Sounder fresh pack", {
+          heroName: "Sound Crafter",
+          suffix: payload.heroId
+        }))
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const heroGroup = page.getByTestId("hero-select-group");
+    const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
+    const studioStatus = page.getByTestId("studio-pack-status");
+    const soundPromptInput = page.locator(".sound-editor .prompt-input");
+    const assetPromptInput = page.locator(".asset-editor .prompt-input");
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Generating a reusable promo pack for 3D Modeler.");
+
+    await sounderButton.click();
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for Sound Crafter. Ready for a new campaign brief.");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(studioStatus).toHaveCount(0);
+
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await expect(studioStatus).toContainText("Sounder fresh pack headline");
+    await expect(page.locator(".studio-pack-card")).toContainText("Sounder fresh pack headline");
+    await expect(page.locator(".studio-pack-card")).not.toContainText("Modeler delayed pack headline");
+    await expect(page.getByTestId("studio-copy-card")).toContainText("Sounder fresh pack launch copy");
+
+    await page.getByRole("button", { name: /^🎵 사운드$/ }).click();
+    await expect(page.getByTestId("sound-tab-bgm")).toHaveClass(/active/);
+    await expect(soundPromptInput).toHaveValue("Sounder fresh pack bgm prompt");
+
+    await page.getByRole("button", { name: /^🧊 에셋$/ }).click();
+    await expect(page.getByTestId("asset-card-orb")).toHaveClass(/selected/);
+    await expect(assetPromptInput).toHaveValue("Sounder fresh pack orb direction");
+
+    releaseFirstPack();
+    await page.waitForTimeout(50);
+
+    await expect(studioStatus).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await expect(studioStatus).toContainText("Sounder fresh pack headline");
+    await expect(page.locator(".studio-pack-card")).toContainText("Sounder fresh pack headline");
+    await expect(page.locator(".studio-pack-card")).not.toContainText("Modeler delayed pack headline");
+    await expect(page.getByTestId("studio-copy-card")).toContainText("Sounder fresh pack launch copy");
+    await expect(studioPanel).not.toContainText("3D Modeler");
+    expect(requestedHeroIds).toEqual(["modeler", "sounder"]);
+  });
+
   test("switching heroes after a ready studio pack clears stale loaded sound prompts", async ({ page }) => {
     await page.route("**/api/varco/studio-pack", async (route) => {
       const payload = route.request().postDataJSON();
