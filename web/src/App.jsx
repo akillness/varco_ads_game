@@ -54,6 +54,20 @@ const HERO_ABILITIES = {
   }
 };
 
+const SHARE_CHANNEL_LABELS = {
+  x: "X",
+  facebook: "Facebook",
+  telegram: "Telegram"
+};
+
+const SHARE_CHANNELS = Object.entries(SHARE_CHANNEL_LABELS).map(([id, label]) => ({ id, label }));
+
+const EDITOR_TABS = [
+  { id: "sound", label: "🎵 사운드", ariaLabel: "sound editor" },
+  { id: "asset", label: "🧊 에셋", ariaLabel: "asset editor" },
+  { id: "history", label: "📋 이력", ariaLabel: "history editor" }
+];
+
 const MISSION_TEMPLATES = [
   {
     kind: "collect",
@@ -162,6 +176,34 @@ function missionProgressText(mission) {
   if (!mission) return "";
   if (mission.kind === "survive") return "No damage";
   return `${mission.progress}/${mission.target}`;
+}
+
+function formatMatchRef(matchId) {
+  if (!matchId) return "pending sync";
+  return matchId.split("-").pop()?.slice(0, 6) || matchId.slice(0, 6);
+}
+
+function getBettingStatusSnapshot(matchStatus, timer, elapsedSeconds, matchId) {
+  const matchRef = formatMatchRef(matchId);
+  if (matchStatus === "running") {
+    return {
+      chip: "LIVE WINDOW",
+      tone: "live",
+      detail: `Betting open • ${Math.max(timer, 0)}s left in match ${matchRef}.`
+    };
+  }
+  if (matchStatus === "finished") {
+    return {
+      chip: "CLOSED",
+      tone: "closed",
+      detail: `Betting closed • match ${matchRef} ended after ${Math.max(elapsedSeconds, 0)}s.`
+    };
+  }
+  return {
+    chip: "STANDBY",
+    tone: "idle",
+    detail: "Betting opens when the live match is ready."
+  };
 }
 
 function moveEnemy(enemy, player, difficulty) {
@@ -411,15 +453,1653 @@ function triggerDirectorBeat(state, timer) {
   };
 }
 
-function loadHighScores() {
-  try { return JSON.parse(localStorage.getItem("saga_highscores") || "[]").slice(0, 5); }
-  catch { return []; }
+const HIGH_SCORE_LIMIT = 5;
+const HIGH_SCORE_HISTORY_LIMIT = 30;
+
+function compareHighScores(a, b) {
+  return (
+    b.score - a.score ||
+    b.combo - a.combo ||
+    b.createdAt.localeCompare(a.createdAt) ||
+    a.hero.localeCompare(b.hero)
+  );
 }
+
+function normalizeHighScoreEntry(entry) {
+  if (!entry || typeof entry !== "object") return null;
+
+  const score = Number(entry.score);
+  const combo = Number(entry.combo ?? 0);
+  const hero = typeof entry.hero === "string" && entry.hero.trim() ? entry.hero.trim() : "Unknown Agent";
+  const createdAt = typeof entry.createdAt === "string" && entry.createdAt
+    ? entry.createdAt
+    : typeof entry.date === "string" && entry.date
+      ? `${entry.date}T00:00:00.000Z`
+      : "1970-01-01T00:00:00.000Z";
+
+  if (!Number.isFinite(score)) return null;
+
+  return {
+    hero,
+    score,
+    combo: Number.isFinite(combo) ? combo : 0,
+    createdAt,
+    date: typeof entry.date === "string" && entry.date ? entry.date : createdAt.slice(0, 10)
+  };
+}
+
+function isSameHighScoreEntry(a, b) {
+  return Boolean(a) && Boolean(b)
+    && a.hero === b.hero
+    && a.score === b.score
+    && a.combo === b.combo
+    && a.createdAt === b.createdAt;
+}
+
+function loadHighScores() {
+  try {
+    return JSON.parse(localStorage.getItem("saga_highscores") || "[]")
+      .map(normalizeHighScoreEntry)
+      .filter(Boolean)
+      .sort(compareHighScores)
+      .slice(0, HIGH_SCORE_LIMIT);
+  }
+  catch {
+    return [];
+  }
+}
+
+function normalizeHighScoreHistoryEntry(entry) {
+  const normalizedEntry = normalizeHighScoreEntry(entry);
+  if (!normalizedEntry) return null;
+
+  const rawPlacement = Number(entry.placement);
+  const placement = Number.isFinite(rawPlacement) && rawPlacement > 0 ? Math.floor(rawPlacement) : null;
+  const qualified = typeof entry.qualified === "boolean"
+    ? entry.qualified
+    : placement !== null && placement <= HIGH_SCORE_LIMIT;
+
+  return {
+    ...normalizedEntry,
+    placement,
+    qualified
+  };
+}
+
+function buildHighScoreHistoryFallback(scores) {
+  return scores.map((scoreEntry, index) => normalizeHighScoreHistoryEntry({
+    ...scoreEntry,
+    placement: index + 1,
+    qualified: index < HIGH_SCORE_LIMIT
+  })).filter(Boolean);
+}
+
+function compareHighScoreHistory(a, b) {
+  return (
+    b.createdAt.localeCompare(a.createdAt)
+    || (a.placement ?? Number.MAX_SAFE_INTEGER) - (b.placement ?? Number.MAX_SAFE_INTEGER)
+    || compareHighScores(a, b)
+  );
+}
+
+function loadArchivedHighScoreHistory() {
+  try {
+    const rawHistory = localStorage.getItem("saga_highscore_history");
+    if (rawHistory === null) {
+      return [];
+    }
+
+    return JSON.parse(rawHistory)
+      .map(normalizeHighScoreHistoryEntry)
+      .filter(Boolean)
+      .sort(compareHighScoreHistory)
+      .slice(0, HIGH_SCORE_HISTORY_LIMIT);
+  }
+  catch {
+    return [];
+  }
+}
+
+function loadHighScoreHistory(scores = [], { allowFallback = true } = {}) {
+  const archivedHistory = loadArchivedHighScoreHistory();
+  if (archivedHistory.length > 0 || !allowFallback) {
+    return archivedHistory;
+  }
+
+  return buildHighScoreHistoryFallback(scores)
+    .sort(compareHighScoreHistory)
+    .slice(0, HIGH_SCORE_HISTORY_LIMIT);
+}
+
 function saveHighScore(entry) {
-  const scores = loadHighScores();
-  scores.push(entry);
-  scores.sort((a, b) => b.score - a.score);
-  localStorage.setItem("saga_highscores", JSON.stringify(scores.slice(0, 5)));
+  const previousScores = loadHighScores();
+  const previousHistory = loadHighScoreHistory(previousScores, { allowFallback: false });
+  const normalizedEntry = normalizeHighScoreEntry(entry);
+  if (!normalizedEntry) {
+    return {
+      scores: previousScores,
+      placement: null,
+      qualified: false,
+      entry: null,
+      history: previousHistory,
+      previousHistory
+    };
+  }
+
+  const sortedScores = [...previousScores, normalizedEntry]
+    .filter(Boolean)
+    .sort(compareHighScores);
+  const placementIndex = sortedScores.findIndex((scoreEntry) => isSameHighScoreEntry(scoreEntry, normalizedEntry));
+  const overallPlacement = placementIndex === -1 ? null : placementIndex + 1;
+  const qualified = overallPlacement !== null && overallPlacement <= HIGH_SCORE_LIMIT;
+  const scores = sortedScores.slice(0, HIGH_SCORE_LIMIT);
+
+  localStorage.setItem("saga_highscores", JSON.stringify(scores));
+  const historyEntry = normalizeHighScoreHistoryEntry({
+    ...normalizedEntry,
+    placement: overallPlacement,
+    qualified
+  });
+  const history = historyEntry
+    ? [historyEntry, ...previousHistory.filter((item) => !isSameHighScoreEntry(item, historyEntry))]
+      .slice(0, HIGH_SCORE_HISTORY_LIMIT)
+    : previousHistory;
+  localStorage.setItem("saga_highscore_history", JSON.stringify(history));
+
+  return {
+    scores,
+    placement: qualified ? overallPlacement : null,
+    qualified,
+    entry: normalizedEntry,
+    history,
+    previousHistory
+  };
+}
+
+function describeLeaderboardPlacement(result) {
+  if (!result?.entry) return null;
+  if (result.placement === 1) {
+    return {
+      tone: "top",
+      message: `New #1 high score — ${result.entry.hero} takes the lead.`
+    };
+  }
+  if (result.placement) {
+    return {
+      tone: "qualified",
+      message: `High score secured at #${result.placement}.`
+    };
+  }
+  return {
+    tone: "archived",
+    message: `Run archived outside the top ${HIGH_SCORE_LIMIT}.`
+  };
+}
+
+function previewHighScorePlacement(scores, entry) {
+  const normalizedEntry = normalizeHighScoreEntry(entry);
+  if (!normalizedEntry) {
+    return {
+      scores,
+      placement: null,
+      qualified: false,
+      entry: null
+    };
+  }
+
+  const sortedScores = [...scores, normalizedEntry]
+    .filter(Boolean)
+    .sort(compareHighScores);
+  const placementIndex = sortedScores.findIndex((scoreEntry) => isSameHighScoreEntry(scoreEntry, normalizedEntry));
+
+  return {
+    scores: sortedScores.slice(0, HIGH_SCORE_LIMIT),
+    placement: placementIndex === -1 ? null : placementIndex + 1,
+    qualified: placementIndex !== -1 && placementIndex < HIGH_SCORE_LIMIT,
+    entry: normalizedEntry
+  };
+}
+
+function getLeaderboardTargetGap(entry, target) {
+  if (!entry || !target) return null;
+
+  const scoreGap = target.score - entry.score;
+  if (scoreGap > 0) {
+    return { kind: "score", amount: scoreGap };
+  }
+
+  const comboGap = target.combo - entry.combo;
+  if (comboGap > 0) {
+    return { kind: "combo", amount: comboGap };
+  }
+
+  if (scoreGap === 0 && comboGap === 0) {
+    return { kind: "tiebreak", amount: 0 };
+  }
+
+  return { kind: "ahead", amount: 0 };
+}
+
+function getLeaderboardRecap(scores, entry) {
+  const leader = scores[0] || null;
+  const cutoff = scores[Math.min(scores.length, HIGH_SCORE_LIMIT) - 1] || null;
+
+  if (!leader) {
+    if ((entry?.score || 0) > 0) {
+      return {
+        tone: "open",
+        chip: "OPENING MARK",
+        detail: `${entry.hero} would set the first leaderboard mark at ${entry.score} pts.`
+      };
+    }
+
+    return {
+      tone: "idle",
+      chip: "OPEN BOARD",
+      detail: "No scores posted yet. The next clean run sets the opening mark."
+    };
+  }
+
+  if ((entry?.score || 0) <= 0) {
+    if (scores.length < HIGH_SCORE_LIMIT) {
+      return {
+        tone: "idle",
+        chip: "TOP TARGET",
+        detail: `Beat ${leader.score} pts from ${leader.hero}. ${HIGH_SCORE_LIMIT - scores.length} leaderboard slot${HIGH_SCORE_LIMIT - scores.length === 1 ? "" : "s"} still open.`
+      };
+    }
+
+    return {
+      tone: "idle",
+      chip: "TOP TARGET",
+      detail: `Beat ${leader.score} pts from ${leader.hero}. ${cutoff.score} pts currently enters the top ${HIGH_SCORE_LIMIT}.`
+    };
+  }
+
+  const preview = previewHighScorePlacement(scores, {
+    ...entry,
+    createdAt: entry.createdAt || "9999-12-31T23:59:59.999Z"
+  });
+
+  if (preview.placement === 1) {
+    const leaderGap = getLeaderboardTargetGap(entry, leader);
+    let detail = `${entry.hero} would move ahead of ${leader.hero} with ${entry.score} pts / ${entry.combo}x combo.`;
+    if (leaderGap?.kind === "tiebreak") {
+      detail = `${entry.hero} would match ${leader.hero} at ${entry.score} pts / ${entry.combo}x and take #1 on recency.`;
+    }
+
+    return {
+      tone: "top",
+      chip: "LIVE #1 PACE",
+      detail
+    };
+  }
+
+  if (preview.placement && preview.qualified) {
+    const nextTarget = scores[preview.placement - 2] || leader;
+    const gap = getLeaderboardTargetGap(entry, nextTarget);
+
+    let detail = `Current run would slot in at #${preview.placement}. ${Math.max(nextTarget.score - entry.score, 0)} more pts catches ${nextTarget.hero} above.`;
+    if (gap?.kind === "combo") {
+      detail = `Current run would slot in at #${preview.placement}. Matching ${nextTarget.score} pts is not enough — ${gap.amount} more combo catches ${nextTarget.hero} above.`;
+    } else if (gap?.kind === "tiebreak") {
+      detail = `Current run would slot in at #${preview.placement}. Matching ${nextTarget.score} pts / ${nextTarget.combo}x already edges ${nextTarget.hero} on recency.`;
+    }
+
+    return {
+      tone: "qualified",
+      chip: `LIVE #${preview.placement}`,
+      detail
+    };
+  }
+
+  const gap = getLeaderboardTargetGap(entry, cutoff);
+  const pointsNeeded = cutoff ? Math.max(cutoff.score - entry.score + 1, 1) : 1;
+  let detail = `Current run sits outside the board. About ${pointsNeeded} more pts likely needed to qualify.`;
+  if (gap?.kind === "combo") {
+    detail = `Current run sits outside the board. Matching ${cutoff.score} pts still needs ${gap.amount} more combo to bump ${cutoff.hero} off the cutline.`;
+  }
+
+  return {
+    tone: "archived",
+    chip: `OUTSIDE TOP ${HIGH_SCORE_LIMIT}`,
+    detail
+  };
+}
+
+function getLeaderboardSeasonSummary(scores, entry) {
+  const leader = scores[0] || null;
+  const cutoff = scores[Math.min(scores.length, HIGH_SCORE_LIMIT) - 1] || null;
+
+  if (!leader) {
+    return {
+      seasonDetail: "No leaderboard runs posted yet. The next clean run opens the season table.",
+      rivalDetail: (entry?.score || 0) > 0
+        ? `${entry.hero} can post the opening season mark at ${entry.score} pts.`
+        : "The first clean run claims the opening rivalry mark."
+    };
+  }
+
+  const leaderRuns = scores.filter((scoreEntry) => scoreEntry.hero === leader.hero).length;
+  const seasonDetail = leaderRuns > 1
+    ? `${leader.hero} leads the season with ${leader.score} pts and controls ${leaderRuns}/${scores.length} leaderboard slots.`
+    : `${leader.hero} leads the season with ${leader.score} pts and a ${leader.combo}x benchmark combo.`;
+
+  if ((entry?.score || 0) <= 0) {
+    if (scores.length < HIGH_SCORE_LIMIT) {
+      return {
+        seasonDetail,
+        rivalDetail: `${HIGH_SCORE_LIMIT - scores.length} leaderboard slot${HIGH_SCORE_LIMIT - scores.length === 1 ? " is" : "s are"} still open before the cutline locks.`
+      };
+    }
+
+    return {
+      seasonDetail,
+      rivalDetail: `${cutoff.hero} currently defends the final slot at ${cutoff.score} pts / ${cutoff.combo}x combo.`
+    };
+  }
+
+  const preview = previewHighScorePlacement(scores, {
+    ...entry,
+    createdAt: entry.createdAt || "9999-12-31T23:59:59.999Z"
+  });
+
+  if (preview.placement === 1) {
+    const leaderGap = getLeaderboardTargetGap(entry, leader);
+    let rivalDetail = `${leader.hero} owns the current benchmark at ${leader.score} pts. ${entry.hero} is ${Math.max(entry.score - leader.score, 1)} pt${Math.max(entry.score - leader.score, 1) === 1 ? "" : "s"} ahead on live pace.`;
+    if (leaderGap?.kind === "tiebreak") {
+      rivalDetail = `${leader.hero} owns the current benchmark at ${leader.score} pts / ${leader.combo}x, but matching that line already flips #1 on recency.`;
+    }
+
+    return {
+      seasonDetail,
+      rivalDetail
+    };
+  }
+
+  if (preview.placement && preview.qualified) {
+    const rival = scores[preview.placement - 2] || leader;
+    const gap = getLeaderboardTargetGap(entry, rival);
+    const chasePoints = Math.max(rival.score - entry.score, 0);
+
+    let rivalDetail = `${rival.hero} holds #${preview.placement - 1} at ${rival.score} pts. ${chasePoints} more pt${chasePoints === 1 ? "" : "s"} steals that rival spot.`;
+    if (gap?.kind === "combo") {
+      rivalDetail = `${rival.hero} holds #${preview.placement - 1} at ${rival.score} pts. Matching ${rival.score} pts still needs ${gap.amount} more combo to steal that rival spot.`;
+    } else if (gap?.kind === "tiebreak") {
+      rivalDetail = `${rival.hero} holds #${preview.placement - 1} at ${rival.score} pts, but matching ${rival.score} pts / ${rival.combo}x already flips the tiebreak.`;
+    }
+
+    return {
+      seasonDetail,
+      rivalDetail
+    };
+  }
+
+  const gap = getLeaderboardTargetGap(entry, cutoff);
+  const pointsNeeded = cutoff ? Math.max(cutoff.score - entry.score + 1, 1) : 1;
+  let rivalDetail = `${cutoff.hero} defends #${HIGH_SCORE_LIMIT} at ${cutoff.score} pts. ${pointsNeeded} more pt${pointsNeeded === 1 ? "" : "s"} bumps them off the board.`;
+  if (gap?.kind === "combo") {
+    rivalDetail = `${cutoff.hero} defends #${HIGH_SCORE_LIMIT} at ${cutoff.score} pts. Matching ${cutoff.score} pts still needs ${gap.amount} more combo to bump ${cutoff.hero} off the board.`;
+  }
+
+  return {
+    seasonDetail,
+    rivalDetail
+  };
+}
+
+function getLeaderboardBoardControl(scores) {
+  if (!scores.length) {
+    return [];
+  }
+
+  const heroStats = new Map();
+  scores.forEach((scoreEntry, index) => {
+    const rank = index + 1;
+    const existing = heroStats.get(scoreEntry.hero);
+    if (!existing) {
+      heroStats.set(scoreEntry.hero, {
+        hero: scoreEntry.hero,
+        slots: 1,
+        bestRank: rank,
+        bestScore: scoreEntry.score,
+        bestCombo: scoreEntry.combo
+      });
+      return;
+    }
+
+    existing.slots += 1;
+  });
+
+  return Array.from(heroStats.values())
+    .sort((a, b) => (
+      b.slots - a.slots
+      || a.bestRank - b.bestRank
+      || b.bestScore - a.bestScore
+      || b.bestCombo - a.bestCombo
+      || a.hero.localeCompare(b.hero)
+    ))
+    .map((stat) => {
+      let badge = "CHASER";
+      if (stat.slots >= 3) {
+        badge = "BOARD CONTROL";
+      } else if (stat.slots === 2) {
+        badge = "DOUBLE HOLD";
+      } else if (stat.bestRank === 1) {
+        badge = "PACE SETTER";
+      } else if (stat.bestRank === HIGH_SCORE_LIMIT) {
+        badge = "CUTLINE DEFENDER";
+      }
+
+      return {
+        ...stat,
+        badge,
+        detail: `#${stat.bestRank} best · ${stat.slots} slot${stat.slots === 1 ? "" : "s"} · ${stat.bestScore} pts · ${stat.bestCombo}x combo`
+      };
+    });
+}
+
+function getHeroMomentumStats(history, hero) {
+  const entries = history.filter((entry) => entry.hero === hero);
+  if (!entries.length) {
+    return {
+      hero,
+      currentStreak: 0,
+      longestStreak: 0,
+      latestQualifiedAt: "1970-01-01T00:00:00.000Z",
+      bestPlacement: Number.MAX_SAFE_INTEGER
+    };
+  }
+
+  let currentStreak = 0;
+  while (currentStreak < entries.length && entries[currentStreak].qualified) {
+    currentStreak += 1;
+  }
+
+  let longestStreak = 0;
+  let streakCursor = 0;
+  entries.forEach((entry) => {
+    if (entry.qualified) {
+      streakCursor += 1;
+      longestStreak = Math.max(longestStreak, streakCursor);
+    } else {
+      streakCursor = 0;
+    }
+  });
+
+  const latestQualified = entries.find((entry) => entry.qualified) || null;
+  const bestPlacement = entries.reduce((best, entry) => {
+    if (entry.placement === null) return best;
+    return Math.min(best, entry.placement);
+  }, Number.MAX_SAFE_INTEGER);
+
+  return {
+    hero,
+    currentStreak,
+    longestStreak,
+    latestQualifiedAt: latestQualified?.createdAt || "1970-01-01T00:00:00.000Z",
+    bestPlacement
+  };
+}
+
+function getLeaderboardMomentum(scores) {
+  const history = loadHighScoreHistory(scores, { allowFallback: false });
+  if (!history.length) {
+    return {
+      label: "MOMENTUM",
+      detail: "Season streaks unlock after the first archived run."
+    };
+  }
+
+  const momentumTable = Array.from(new Set(history.map((entry) => entry.hero)))
+    .map((hero) => getHeroMomentumStats(history, hero))
+    .filter((entry) => entry.longestStreak > 0)
+    .sort((a, b) => (
+      b.longestStreak - a.longestStreak
+      || b.currentStreak - a.currentStreak
+      || a.bestPlacement - b.bestPlacement
+      || b.latestQualifiedAt.localeCompare(a.latestQualifiedAt)
+      || a.hero.localeCompare(b.hero)
+    ));
+
+  const momentumLeader = momentumTable[0];
+  if (!momentumLeader) {
+    return {
+      label: "MOMENTUM",
+      detail: "Season streaks unlock after the first top-5 finish is archived."
+    };
+  }
+
+  if (momentumLeader.currentStreak > 1) {
+    return {
+      label: "MOMENTUM",
+      detail: `${momentumLeader.hero} is riding a ${momentumLeader.currentStreak}-run top-${HIGH_SCORE_LIMIT} streak and has peaked at #${momentumLeader.bestPlacement}.`
+    };
+  }
+
+  if (momentumLeader.longestStreak > 1) {
+    return {
+      label: "MOMENTUM",
+      detail: `${momentumLeader.hero} owns the best season streak at ${momentumLeader.longestStreak} straight top-${HIGH_SCORE_LIMIT} finishes.`
+    };
+  }
+
+  return {
+    label: "MOMENTUM",
+    detail: `${momentumLeader.hero} posted the latest archived top-${HIGH_SCORE_LIMIT} finish and peaked at #${momentumLeader.bestPlacement}.`
+  };
+}
+
+function getLeaderboardArchiveGapCopy(entry, target, messages) {
+  const gap = getLeaderboardTargetGap(entry, target);
+  if (gap?.kind === "score") return messages.score(gap.amount, target);
+  if (gap?.kind === "combo") return messages.combo(gap.amount, target);
+  if (gap?.kind === "tiebreak") {
+    const entryWinsTiebreak = compareHighScores(entry, target) < 0;
+    if (!entryWinsTiebreak && typeof messages.tiebreakBehind === "function") {
+      return messages.tiebreakBehind(target);
+    }
+    return messages.tiebreak(target);
+  }
+  return messages.ahead(target);
+}
+
+function isSameArchivedHighScoreEntry(a, b) {
+  return isSameHighScoreEntry(a, b)
+    || (
+      Boolean(a) && Boolean(b)
+      && a.hero === b.hero
+      && a.score === b.score
+      && a.combo === b.combo
+      && a.date === b.date
+    );
+}
+
+function getCurrentHighScorePlacement(scores, entry) {
+  if (!entry) {
+    return {
+      placement: null,
+      qualified: false
+    };
+  }
+
+  const placementIndex = scores.findIndex((scoreEntry) => isSameArchivedHighScoreEntry(scoreEntry, entry));
+  return {
+    placement: placementIndex === -1 ? null : placementIndex + 1,
+    qualified: placementIndex !== -1
+  };
+}
+
+function getLeaderboardArchiveDelta(scores, history, activeFilter = "all") {
+  if (!history.length) {
+    return {
+      label: "ARCHIVE DELTA",
+      detail: "Delta guidance unlocks after the first completed run."
+    };
+  }
+
+  const latestEntry = history[0] || null;
+  const leader = scores[0] || null;
+  const cutoff = scores[Math.min(scores.length, HIGH_SCORE_LIMIT) - 1] || null;
+
+  if (activeFilter !== "all") {
+    const heroHistory = history.filter((entry) => entry.hero === activeFilter);
+    const latestHeroEntry = heroHistory[0] || null;
+    const latestQualifiedEntry = heroHistory.find((entry) => entry.qualified) || null;
+    const bestQualifiedEntry = heroHistory
+      .filter((entry) => entry.qualified)
+      .sort((a, b) => (
+        (a.placement ?? Number.MAX_SAFE_INTEGER) - (b.placement ?? Number.MAX_SAFE_INTEGER)
+        || compareHighScores(a, b)
+      ))[0] || null;
+
+    if (!latestHeroEntry) {
+      return {
+        label: `${activeFilter.toUpperCase()} DELTA`,
+        detail: `${activeFilter} has no archived delta to compare yet.`
+      };
+    }
+
+    if (!latestHeroEntry.qualified) {
+      if (latestQualifiedEntry) {
+        return {
+          label: `${activeFilter.toUpperCase()} RETURN PATH`,
+          detail: getLeaderboardArchiveGapCopy(latestHeroEntry, latestQualifiedEntry, {
+            score: (amount, target) => `${activeFilter}'s latest archive is ${amount} pt${amount === 1 ? "" : "s"} below their last top-${HIGH_SCORE_LIMIT} finish (#${target.placement} at ${target.score} pts).`,
+            combo: (amount, target) => `${activeFilter}'s latest archive matches ${target.score} pts, but still needs ${amount} more combo to revisit their last top-${HIGH_SCORE_LIMIT} finish (#${target.placement}).`,
+            tiebreak: (target) => `${activeFilter}'s latest archive already matches their last top-${HIGH_SCORE_LIMIT} line at ${target.score} pts / ${target.combo}x and would reclaim that finish on recency.`,
+            tiebreakBehind: (target) => `${activeFilter}'s latest archive matches their last top-${HIGH_SCORE_LIMIT} line at ${target.score} pts / ${target.combo}x, but still trails that finish on recency.`,
+            ahead: (target) => `${activeFilter}'s latest archive has already cleared their last top-${HIGH_SCORE_LIMIT} line (#${target.placement}).`
+          })
+        };
+      }
+
+      if (cutoff) {
+        const pointsNeeded = Math.max(cutoff.score - latestHeroEntry.score + 1, 1);
+        return {
+          label: `${activeFilter.toUpperCase()} BREAKTHROUGH`,
+          detail: getLeaderboardArchiveGapCopy(latestHeroEntry, cutoff, {
+            score: () => `${activeFilter} needs about ${pointsNeeded} more pt${pointsNeeded === 1 ? "" : "s"} on the next archive to crack today's live top ${HIGH_SCORE_LIMIT}.`,
+            combo: (amount, target) => `${activeFilter} can match today's ${target.score}-pt cutline, but still needs ${amount} more combo to break into the live top ${HIGH_SCORE_LIMIT}.`,
+            tiebreak: (target) => `${activeFilter} already matches today's ${target.score}-pt / ${target.combo}x cutline and would flip into the live top ${HIGH_SCORE_LIMIT} on recency.`,
+            tiebreakBehind: (target) => `${activeFilter} already matches today's ${target.score}-pt / ${target.combo}x cutline, but still trails the live top ${HIGH_SCORE_LIMIT} on recency.`,
+            ahead: () => `${activeFilter} is already pacing above today's live cutline.`
+          })
+        };
+      }
+    }
+
+    if (bestQualifiedEntry) {
+      if (!isSameHighScoreEntry(latestHeroEntry, bestQualifiedEntry)) {
+        return {
+          label: `${activeFilter.toUpperCase()} SEASON-BEST CHASE`,
+          detail: getLeaderboardArchiveGapCopy(latestHeroEntry, bestQualifiedEntry, {
+            score: (amount, target) => `${activeFilter}'s latest archive is ${amount} pt${amount === 1 ? "" : "s"} shy of their season-best finish (#${target.placement} at ${target.score} pts).`,
+            combo: (amount, target) => `${activeFilter}'s latest archive matches ${target.score} pts, but still needs ${amount} more combo to tie their season-best finish (#${target.placement}).`,
+            tiebreak: (target) => `${activeFilter}'s latest archive already matches their season-best ${target.score}-pt / ${target.combo}x line and now owns it on recency.`,
+            tiebreakBehind: (target) => `${activeFilter}'s latest archive matches their season-best ${target.score}-pt / ${target.combo}x line, but still trails that finish on recency.`,
+            ahead: (target) => `${activeFilter}'s latest archive has already pushed past their old season-best finish (#${target.placement}).`
+          })
+        };
+      }
+
+      return {
+        label: `${activeFilter.toUpperCase()} SEASON BEST`,
+        detail: `${activeFilter}'s latest archive already stands as their season-best finish at #${bestQualifiedEntry.placement}.`
+      };
+    }
+
+    return {
+      label: `${activeFilter.toUpperCase()} DELTA`,
+      detail: `${activeFilter} is still hunting their first archived top-${HIGH_SCORE_LIMIT} finish.`
+    };
+  }
+
+  if (!latestEntry) {
+    return {
+      label: "ARCHIVE DELTA",
+      detail: "Delta guidance unlocks after the first completed run."
+    };
+  }
+
+  const livePlacement = getCurrentHighScorePlacement(scores, latestEntry);
+
+  if (!latestEntry.qualified || !livePlacement.qualified) {
+    if (cutoff) {
+      const pointsNeeded = Math.max(cutoff.score - latestEntry.score + 1, 1);
+      return {
+        label: "CUTLINE DELTA",
+        detail: getLeaderboardArchiveGapCopy(latestEntry, cutoff, {
+          score: () => `${latestEntry.hero}'s latest archive needs about ${pointsNeeded} more pt${pointsNeeded === 1 ? "" : "s"} to re-enter today's live top ${HIGH_SCORE_LIMIT}.`,
+          combo: (amount, target) => `${latestEntry.hero}'s latest archive can match the ${target.score}-pt cutline, but still needs ${amount} more combo to re-enter today's live top ${HIGH_SCORE_LIMIT}.`,
+          tiebreak: (target) => `${latestEntry.hero}'s latest archive already matches the ${target.score}-pt / ${target.combo}x cutline and would flip back into the live top ${HIGH_SCORE_LIMIT} on recency.`,
+          tiebreakBehind: (target) => `${latestEntry.hero}'s latest archive matches the ${target.score}-pt / ${target.combo}x cutline, but still trails today's live top ${HIGH_SCORE_LIMIT} on recency.`,
+          ahead: () => `${latestEntry.hero}'s latest archive is already back above today's live cutline.`
+        })
+      };
+    }
+
+    return {
+      label: "CUTLINE DELTA",
+      detail: `${latestEntry.hero}'s latest archive is waiting for the first live cutline to form.`
+    };
+  }
+
+  if (livePlacement.placement === 1) {
+    return {
+      label: "BENCHMARK HOLD",
+      detail: `${latestEntry.hero}'s latest archive already owns the season benchmark at ${latestEntry.score} pts / ${latestEntry.combo}x.`
+    };
+  }
+
+  const rival = scores[Math.max((livePlacement.placement || 2) - 2, 0)] || leader;
+  if (!rival) {
+    return {
+      label: "ARCHIVE DELTA",
+      detail: `${latestEntry.hero}'s latest archive is setting the pace for the next board.`
+    };
+  }
+
+  const rivalPlacement = scores.findIndex((scoreEntry) => isSameHighScoreEntry(scoreEntry, rival)) + 1 || 1;
+
+  return {
+    label: "LEADER GAP",
+    detail: getLeaderboardArchiveGapCopy(latestEntry, rival, {
+      score: (amount, target) => `${latestEntry.hero}'s latest archive is ${amount} pt${amount === 1 ? "" : "s"} shy of ${target.hero}'s higher live slot (#${rivalPlacement} at ${target.score} pts).`,
+      combo: (amount, target) => `${latestEntry.hero}'s latest archive matches ${target.score} pts, but still needs ${amount} more combo to steal ${target.hero}'s higher live slot.`,
+      tiebreak: (target) => `${latestEntry.hero}'s latest archive already matches ${target.hero}'s ${target.score}-pt / ${target.combo}x line and would flip that higher slot on recency.`,
+      tiebreakBehind: (target) => `${latestEntry.hero}'s latest archive matches ${target.hero}'s ${target.score}-pt / ${target.combo}x line, but still trails that higher live slot on recency.`,
+      ahead: (target) => `${latestEntry.hero}'s latest archive has already climbed above ${target.hero}'s higher live slot.`
+    })
+  };
+}
+
+function getLeaderboardArchiveTrend(history, activeFilter = "all") {
+  if (!history.length) {
+    return {
+      label: "ARCHIVE TREND",
+      detail: "Trend chips unlock after the first completed run."
+    };
+  }
+
+  const focusHero = activeFilter === "all" ? history[0]?.hero : activeFilter;
+  const heroHistory = history.filter((entry) => entry.hero === focusHero);
+  const latestEntry = heroHistory[0] || null;
+  const latestQualifiedEntry = heroHistory.find((entry) => entry.qualified) || null;
+  const heroStats = getHeroMomentumStats(history, focusHero);
+
+  if (!latestEntry) {
+    return {
+      label: "ARCHIVE TREND",
+      detail: "Trend chips unlock after the first completed run."
+    };
+  }
+
+  if (latestEntry.qualified && latestEntry.placement === 1) {
+    return {
+      label: "PACE SETTER",
+      detail: `${focusHero} owns the latest #1 archive.`
+    };
+  }
+
+  if (heroStats.currentStreak > 1) {
+    return {
+      label: "HOT STREAK",
+      detail: `${focusHero} has ${heroStats.currentStreak} straight top-${HIGH_SCORE_LIMIT} archives.`
+    };
+  }
+
+  if (latestEntry.qualified) {
+    return {
+      label: "BACK ON BOARD",
+      detail: `${focusHero} just banked a #${latestEntry.placement} archive.`
+    };
+  }
+
+  if (latestQualifiedEntry && heroStats.longestStreak > 1) {
+    return {
+      label: "STREAK SNAPPED",
+      detail: `${focusHero}'s best run was ${heroStats.longestStreak} straight top-${HIGH_SCORE_LIMIT} archives.`
+    };
+  }
+
+  if (latestQualifiedEntry) {
+    return {
+      label: "CHASE MODE",
+      detail: `${focusHero}'s last top-${HIGH_SCORE_LIMIT} archive was #${latestQualifiedEntry.placement}.`
+    };
+  }
+
+  return {
+    label: "FIRST BREAKTHROUGH",
+    detail: `${focusHero} is still chasing the first top-${HIGH_SCORE_LIMIT} archive.`
+  };
+}
+
+function formatArchivePlacement(entry) {
+  if (entry?.qualified && entry?.placement) {
+    return `#${entry.placement}`;
+  }
+  return `outside top ${HIGH_SCORE_LIMIT}`;
+}
+
+function formatArchivePlacementChip(entry) {
+  if (entry?.qualified && entry?.placement) {
+    return `#${entry.placement}`;
+  }
+  return "OUT";
+}
+
+function getArchiveEntryForm(history, entry, limit = 3) {
+  if (!entry) {
+    return [];
+  }
+
+  const heroHistory = history.filter((candidate) => candidate.hero === entry.hero);
+  const startIndex = heroHistory.findIndex((candidate) => (
+    candidate.createdAt === entry.createdAt
+    && candidate.score === entry.score
+    && candidate.combo === entry.combo
+    && candidate.hero === entry.hero
+  ));
+
+  if (startIndex === -1) {
+    return [];
+  }
+
+  return heroHistory.slice(startIndex, startIndex + limit).map((candidate, index) => ({
+    id: `${candidate.hero}-${candidate.createdAt}-${candidate.score}-${candidate.combo}-${index}`,
+    label: formatArchivePlacementChip(candidate),
+    detail: `${candidate.score} pts · ${candidate.combo}x combo · ${candidate.date}`,
+    current: index === 0,
+    qualified: candidate.qualified
+  }));
+}
+
+function getArchiveFormChipAriaLabel(hero, formEntry) {
+  const placementLabel = formEntry.qualified ? formEntry.label.replace("#", "rank ") : `outside the top ${HIGH_SCORE_LIMIT}`;
+  const timingLabel = formEntry.current ? "Current archived run" : "Previous archived run";
+  return `${hero}. ${timingLabel}. ${placementLabel}. ${formEntry.detail}.`;
+}
+
+function getArchiveFilterAriaLabel(filterLabel, isActive) {
+  const scope = filterLabel === "All heroes"
+    ? `Show archived runs for all heroes${isActive ? "; currently selected" : ""}.`
+    : `Show archived runs for ${filterLabel}${isActive ? "; currently selected" : ""}.`;
+  return scope;
+}
+
+function getHeroSelectAriaLabel(heroName, isActive, isLocked = false) {
+  const baseLabel = `Select ${heroName}${isActive ? "; currently selected" : ""}.`;
+  if (!isLocked) {
+    return baseLabel;
+  }
+  return `${baseLabel} Reset to change hero after a run starts.`;
+}
+
+function getMarketingAngleAriaLabel(angleLabel, isActive) {
+  return `Show ${angleLabel} marketing copy${isActive ? "; currently selected" : ""}.`;
+}
+
+function getEditorTabAriaLabel(tabLabel, isActive) {
+  return `Show the ${tabLabel}${isActive ? "; currently selected" : ""}.`;
+}
+
+function getStudioQueueItemAriaLabel(item, isActive) {
+  if (!item) {
+    return "Load production queue item.";
+  }
+
+  const laneLabel = item.lane === "social"
+    ? `marketing copy for ${item.key}`
+    : `${item.lane} prompt for ${item.key}`;
+  return `Load ${item.label} into ${laneLabel}${isActive ? "; currently selected" : ""}.`;
+}
+
+function getBetFieldAriaLabel(field) {
+  const labels = {
+    userName: "Betting user name. Enter the bettor name before placing a wager.",
+    side: "Betting side. Choose whether the player or enemy wins.",
+    amount: "Betting amount. Enter the wager amount in credits."
+  };
+  return labels[field] || "Betting field.";
+}
+
+function getBetSubmitButtonAriaLabel(isPending) {
+  return isPending
+    ? "Place bet. Submitting the current wager."
+    : "Place bet. Submit the current wager.";
+}
+
+function getStudioPackPanelAriaLabel(heroName, studioStatus) {
+  const statusLabel = {
+    idle: "Ready for a new campaign brief.",
+    loading: `Building a studio pack for ${heroName}.`,
+    ready: `Studio pack ready for ${heroName}.`,
+    cached: `Cached studio pack ready for ${heroName}.`,
+    error: "Studio pack request needs another pass."
+  }[studioStatus] || "Ready for a new campaign brief.";
+  return `Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for ${heroName}. ${statusLabel}`;
+}
+
+function getStudioBriefAriaLabel(heroName) {
+  return `Studio brief. Describe one campaign brief for ${heroName} and reuse it across sounds, assets, and social copy.`;
+}
+
+function getStudioGenerateButtonAriaLabel(heroName, isPending) {
+  return isPending
+    ? `Generate Studio Pack. Building a reusable promo pack for ${heroName}.`
+    : `Generate Studio Pack. Build a reusable promo pack for ${heroName}.`;
+}
+
+function handleSegmentedArrowKeyDown(event, currentId, items, onSelect, buttonTestId) {
+  const navigationKeys = ["ArrowLeft", "ArrowRight", "Home", "End"];
+  if (!navigationKeys.includes(event.key) || !Array.isArray(items) || items.length < 2) {
+    return;
+  }
+
+  const currentIndex = items.findIndex((item) => item.id === currentId);
+  if (currentIndex === -1) {
+    return;
+  }
+
+  let nextIndex = currentIndex;
+  if (event.key === "ArrowRight") {
+    nextIndex = (currentIndex + 1) % items.length;
+  } else if (event.key === "ArrowLeft") {
+    nextIndex = (currentIndex - 1 + items.length) % items.length;
+  } else if (event.key === "Home") {
+    nextIndex = 0;
+  } else if (event.key === "End") {
+    nextIndex = items.length - 1;
+  }
+
+  if (nextIndex === currentIndex) {
+    return;
+  }
+
+  event.preventDefault();
+  onSelect(items[nextIndex].id);
+
+  const buttonGroup = event.currentTarget?.parentElement;
+  if (!buttonGroup) {
+    return;
+  }
+
+  const buttons = Array.from(buttonGroup.querySelectorAll(`button[data-testid="${buttonTestId}"]`));
+  buttons[nextIndex]?.focus();
+}
+
+function handleArchiveFilterKeyDown(event, currentFilterId, filters, onSelect) {
+  handleSegmentedArrowKeyDown(
+    event,
+    currentFilterId,
+    filters,
+    onSelect,
+    "leaderboard-archive-filter"
+  );
+}
+
+function handleShareButtonKeyDown(event) {
+  handleFocusableSiblingKeyDown(event, 'button[data-share-button="true"]', ["ArrowRight", "ArrowLeft"]);
+}
+
+function handleHeroSelectKeyDown(event, currentHeroId, onSelect) {
+  handleSegmentedArrowKeyDown(event, currentHeroId, heroes, onSelect, "hero-select-button");
+}
+
+function handleMarketingAngleKeyDown(event, currentAngleId, marketingAngles, onSelect) {
+  handleSegmentedArrowKeyDown(
+    event,
+    currentAngleId,
+    marketingAngles,
+    (angleId) => {
+      const nextAngle = marketingAngles.find((angle) => angle.id === angleId) || null;
+      onSelect(nextAngle);
+    },
+    "studio-marketing-angle"
+  );
+}
+
+function handleEditorTabKeyDown(event, currentTabId, onSelect) {
+  handleSegmentedArrowKeyDown(event, currentTabId, EDITOR_TABS, onSelect, "studio-editor-tab");
+}
+
+function handleStudioQueueKeyDown(event, currentQueueItemId, queueItems, onSelect) {
+  handleSegmentedArrowKeyDown(
+    event,
+    currentQueueItemId,
+    queueItems,
+    (queueItemId) => {
+      const nextQueueItem = queueItems.find((item) => item.id === queueItemId);
+      if (nextQueueItem) {
+        onSelect(nextQueueItem);
+      }
+    },
+    "studio-queue-item"
+  );
+}
+
+function handleFocusableSiblingKeyDown(event, selector, keyMap, containerSelector = null) {
+  if (![...keyMap, "Home", "End"].includes(event.key)) {
+    return;
+  }
+
+  const siblingContainer = containerSelector
+    ? event.currentTarget?.closest(containerSelector)
+    : event.currentTarget?.parentElement;
+  if (!siblingContainer) {
+    return;
+  }
+
+  const siblings = Array.from(siblingContainer.querySelectorAll(selector));
+  const currentIndex = siblings.indexOf(event.currentTarget);
+  if (currentIndex === -1) {
+    return;
+  }
+
+  let nextIndex = currentIndex;
+  if (event.key === keyMap[0]) {
+    nextIndex = (currentIndex + 1) % siblings.length;
+  } else if (event.key === keyMap[1]) {
+    nextIndex = (currentIndex - 1 + siblings.length) % siblings.length;
+  } else if (event.key === "Home") {
+    nextIndex = 0;
+  } else if (event.key === "End") {
+    nextIndex = siblings.length - 1;
+  }
+
+  if (nextIndex === currentIndex) {
+    return;
+  }
+
+  event.preventDefault();
+  siblings[nextIndex]?.focus();
+}
+
+function handleLeaderboardSummaryKeyDown(event) {
+  handleFocusableSiblingKeyDown(event, '[data-testid="leaderboard-season-summary"], [data-testid="leaderboard-rival-summary"]', ["ArrowRight", "ArrowLeft"]);
+}
+
+function handleLeaderboardControlKeyDown(event) {
+  handleFocusableSiblingKeyDown(event, '[data-testid="leaderboard-control-item"]', ["ArrowDown", "ArrowUp"]);
+}
+
+function handleArchiveSummaryKeyDown(event) {
+  handleFocusableSiblingKeyDown(event, '[data-testid="leaderboard-archive-story"], [data-testid="leaderboard-archive-delta"], [data-testid="leaderboard-archive-trend"]', ["ArrowRight", "ArrowLeft"]);
+}
+
+function handleArchiveItemKeyDown(event) {
+  if (event.target !== event.currentTarget) {
+    return;
+  }
+  handleFocusableSiblingKeyDown(event, '[data-testid="leaderboard-archive-item"]', ["ArrowDown", "ArrowUp"]);
+}
+
+function handleArchiveEntryTrendKeyDown(event) {
+  handleFocusableSiblingKeyDown(
+    event,
+    '[data-testid="leaderboard-archive-entry-trend"]',
+    ["ArrowDown", "ArrowUp"],
+    '[data-testid="leaderboard-archive-list"]'
+  );
+}
+
+function handleArchiveFormGroupKeyDown(event) {
+  if (event.target !== event.currentTarget) {
+    return;
+  }
+  handleFocusableSiblingKeyDown(
+    event,
+    '[data-testid="leaderboard-archive-entry-form"]',
+    ["ArrowDown", "ArrowUp"],
+    '[data-testid="leaderboard-archive-list"]'
+  );
+}
+
+function handleArchiveFormChipKeyDown(event) {
+  handleFocusableSiblingKeyDown(event, '[data-testid="leaderboard-archive-entry-form-chip"]', ["ArrowRight", "ArrowLeft"]);
+}
+
+function handleHighScoreItemKeyDown(event) {
+  handleFocusableSiblingKeyDown(event, '[data-testid="high-score-item"]', ["ArrowDown", "ArrowUp"]);
+}
+
+function handleAchievementItemKeyDown(event) {
+  handleFocusableSiblingKeyDown(event, '[data-testid="achievement-item"]', ["ArrowDown", "ArrowUp"]);
+}
+
+function handleAgentLogItemKeyDown(event) {
+  handleFocusableSiblingKeyDown(event, '[data-testid="agent-log-item"]', ["ArrowDown", "ArrowUp"]);
+}
+
+function handleDirectorBeatCardKeyDown(event) {
+  handleFocusableSiblingKeyDown(event, '[data-testid="director-beat-card"], [data-testid="swing-event-card"]', ["ArrowDown", "ArrowUp"]);
+}
+
+function handleDirectorKpiKeyDown(event) {
+  handleFocusableSiblingKeyDown(event, '[data-testid="director-kpi-card"]', ["ArrowRight", "ArrowLeft"]);
+}
+
+function handleGameOverCalloutKeyDown(event) {
+  handleFocusableSiblingKeyDown(
+    event,
+    '[data-testid="game-over-placement"], [data-testid="game-over-momentum"]',
+    ["ArrowDown", "ArrowUp"]
+  );
+}
+
+function getArchiveSummaryAriaLabel(label, detail) {
+  return `${label}. ${detail}`;
+}
+
+function getShareFeedbackAriaLabel(feedback) {
+  if (!feedback?.message) {
+    return "Share status unavailable.";
+  }
+
+  const toneLabel = {
+    pending: "Pending",
+    ready: "Ready",
+    error: "Error"
+  }[feedback.tone] || "Update";
+  const channelLabel = feedback.channel ? SHARE_CHANNEL_LABELS[feedback.channel] || feedback.channel : null;
+  return `Share status. ${toneLabel}${channelLabel ? ` ${channelLabel}` : ""}. ${feedback.message}`;
+}
+
+function getBetFeedbackAriaLabel(feedback) {
+  if (!feedback?.message) {
+    return "Bet status unavailable.";
+  }
+
+  const toneLabel = {
+    pending: "Pending",
+    ready: "Ready",
+    error: "Error"
+  }[feedback.tone] || "Update";
+  return `Bet status. ${toneLabel}. ${feedback.message}`;
+}
+
+function getMarketingCopyFeedbackAriaLabel(feedback, angleLabel = "marketing copy") {
+  if (!feedback?.message) {
+    return "Marketing copy status unavailable.";
+  }
+
+  const toneLabel = {
+    pending: "Pending",
+    ready: "Ready",
+    error: "Error"
+  }[feedback.tone] || "Update";
+  return `Marketing copy status. ${toneLabel}. ${angleLabel}. ${feedback.message}`;
+}
+
+function getMarketingCopyCardAriaLabel(angle) {
+  if (!angle) {
+    return "Marketing copy card unavailable.";
+  }
+
+  const ctaText = angle.cta ? ` Call to action: ${angle.cta}.` : "";
+  return `Marketing copy card. ${angle.label}. ${angle.copy}.${ctaText}`;
+}
+
+function getStudioPackCardAriaLabel(studioPack) {
+  if (!studioPack?.campaign) {
+    return "Studio pack unavailable.";
+  }
+
+  const freshnessLabel = studioPack.cache_hit ? "cached pack" : "fresh pack";
+  const queueCount = Array.isArray(studioPack.productionQueue) ? studioPack.productionQueue.length : 0;
+  const marketingAngleCount = Array.isArray(studioPack.marketingAngles) ? studioPack.marketingAngles.length : 0;
+  return [
+    "Studio pack.",
+    studioPack.campaign.headline,
+    studioPack.campaign.tagline,
+    `${freshnessLabel}.`,
+    `${studioPack.savings?.estimatedCallsSaved ?? 0} calls saved.`,
+    `${studioPack.savings?.estimatedCallsWithPack ?? 0}/${studioPack.savings?.estimatedCallsWithoutPack ?? 0} planned.`,
+    `${queueCount} production queue item${queueCount === 1 ? "" : "s"}.`,
+    `${marketingAngleCount} marketing angle${marketingAngleCount === 1 ? "" : "s"}.`
+  ].join(" ");
+}
+
+function getStudioPackStatusSnapshot(status, studioPack, heroName, errorMessage = "") {
+  if (status === "loading") {
+    return {
+      tone: "pending",
+      chip: "BUILDING PACK",
+      detail: `Generating a reusable promo pack for ${heroName}.`
+    };
+  }
+
+  if (status === "blocked") {
+    return {
+      tone: "error",
+      chip: "BRIEF REQUIRED",
+      detail: errorMessage || "Enter a campaign brief before generating a studio pack."
+    };
+  }
+
+  if (status === "cached") {
+    return {
+      tone: "ready",
+      chip: "CACHE HIT",
+      detail: `Reused the latest studio pack for ${heroName}. ${studioPack?.campaign?.headline || "Cached prompts are ready to review."}`
+    };
+  }
+
+  if (status === "ready") {
+    return {
+      tone: "ready",
+      chip: "PACK READY",
+      detail: `Fresh studio pack ready for ${heroName}. ${studioPack?.campaign?.headline || "Prompts are ready to review."}`
+    };
+  }
+
+  if (status === "error") {
+    return {
+      tone: "error",
+      chip: "PACK ERROR",
+      detail: `Studio pack request failed. ${errorMessage || "Try refining the brief and retrying."}`
+    };
+  }
+
+  return null;
+}
+
+function getStudioPackStatusAriaLabel(snapshot) {
+  if (!snapshot) {
+    return "Studio pack status unavailable.";
+  }
+
+  const toneLabel = {
+    pending: "Pending",
+    ready: "Ready",
+    error: "Error"
+  }[snapshot.tone] || "Update";
+  return `Studio pack status. ${toneLabel}. ${snapshot.chip}. ${snapshot.detail}`;
+}
+
+function getMissionPanelAriaLabel(mission, missionSecondsLeft) {
+  if (!mission) {
+    return "Director Mission unavailable.";
+  }
+  return `Director Mission. ${mission.title}. ${missionProgressText(mission)}. ${mission.rewardLabel}. ${Math.max(missionSecondsLeft, 0)} seconds left.`;
+}
+
+function getAbilityPanelAriaLabel(activeAbility, abilityPercent, abilityReady, abilityCooldown) {
+  if (!activeAbility) {
+    return "Hero Ability unavailable.";
+  }
+  const readiness = abilityReady ? "Ready now." : `${abilityCooldown}s cooldown remaining.`;
+  return `Hero Ability. ${activeAbility.name}. ${activeAbility.summary}. ${Math.round(abilityPercent)} percent charged. ${readiness}`;
+}
+
+function getDirectorPanelAriaLabel(directorPhase, directorBeat, swingEvent, bonusOrb, liveAssetCount, liveSoundCount) {
+  if (!directorPhase) {
+    return "Arena Director unavailable.";
+  }
+  const beatLabel = directorBeat ? `${directorBeat.title}. ${directorBeat.text}` : "No active director beat.";
+  const swingLabel = swingEvent ? `${swingEvent.title}. ${swingEvent.text}` : "No active swing event.";
+  return `Arena Director. ${directorPhase.label}. ${directorPhase.threat} threat. ${directorPhase.callout}. ${beatLabel} ${swingLabel} Bonus core ${bonusOrb ? "live" : "offline"}. Live assets ${liveAssetCount} of 3. Live cues ${liveSoundCount} of 5.`;
+}
+
+function getArenaStatusStripAriaLabel(directorPhase, mission, activeAbility, swingTriggered, liveAssetCount, liveSoundCount) {
+  return `Arena status. Phase: ${directorPhase?.label || "unknown"}. Mission: ${mission?.title || "unknown"}. Ability: ${activeAbility?.name || "unknown"}. Swing: ${swingTriggered ? "Triggered" : "Pending"}. Assets live: ${liveAssetCount}/3. Sound cues live: ${liveSoundCount}/5.`;
+}
+
+function getControlLegendAriaLabel(activeAbility) {
+  const abilityName = activeAbility?.name || "your hero ability";
+  return `Controls legend. Move with Arrow keys or WASD. Press Space to activate ${abilityName}. Use Start or Pause to control the match timer. Reset opens a fresh live match.`;
+}
+
+function getRunBriefingAriaLabel(mission, activeAbility) {
+  const missionTitle = mission?.title || "Director Mission";
+  const missionReward = mission?.rewardLabel || "Mission reward unavailable.";
+  const abilityName = activeAbility?.name || "Hero ability";
+  const abilitySummary = activeAbility?.summary || "Use your hero ability when the charge meter is full.";
+  return `Run briefing. Collect UGC cores for 10 points each. Keep the combo alive within ${Math.round(COMBO_WINDOW / 1000)} seconds to climb from 1.5x at 2, to 2.0x at 3, and 3.0x at 5. Current mission: ${missionTitle}. Reward: ${missionReward}. ${abilityName}: ${abilitySummary}.`;
+}
+
+function getHpPanelAriaLabel(hp, maxHp) {
+  const safeHp = Math.max(hp, 0);
+  const safeMaxHp = Math.max(maxHp, 1);
+  const healthPercent = Math.round((safeHp / safeMaxHp) * 100);
+  const healthState = healthPercent <= 30 ? "Critical health." : healthPercent <= 60 ? "Damaged but stable." : "Healthy.";
+  return `Health. ${safeHp} of ${safeMaxHp} HP. ${healthPercent} percent. ${healthState}`;
+}
+
+function getLevelPanelAriaLabel(level, xp, hero) {
+  const nextXp = xpForLevel(level);
+  const heroSummary = hero?.desc || "Hero profile unavailable.";
+  return `Level. ${level}. XP ${xp} of ${nextXp}. ${heroSummary}`;
+}
+
+function getComboPanelAriaLabel(combo) {
+  return `Combo. ${combo}x multiplier. ${comboMultiplier(combo).toFixed(1)}x points.`;
+}
+
+function getPowerupPanelAriaLabel(activePowerups = {}, powerup = null) {
+  const now = Date.now();
+  const statusSummary = POWERUP_TYPES.map((pt) => {
+    const activeUntil = activePowerups[pt.id];
+    const isActive = activeUntil && now < activeUntil;
+    return isActive
+      ? `${pt.label} active for ${Math.max(1, Math.ceil((activeUntil - now) / 1000))} seconds`
+      : `${pt.label} inactive`;
+  }).join(". ");
+  const pickupSummary = powerup ? `${powerup.type.label} pickup is on the arena floor.` : "No pickup is currently spawned.";
+  return `Power-ups. ${statusSummary}. ${pickupSummary}`;
+}
+
+function getLiveWatchPanelAriaLabel(spectators, odds, enemyFrozen, liveAssetCount, betPools, totalPool) {
+  const playerPoolPercent = Math.round((betPools.player / totalPool) * 100);
+  const enemyPoolPercent = Math.round((betPools.enemy / totalPool) * 100);
+  return `Live board. ${spectators} spectators watching. Player odds ${odds.player}x. Enemy odds ${odds.enemy}x. ${enemyFrozen ? "Enemies frozen" : "Arena hot"}. ${liveAssetCount} skins live. Player pool ${betPools.player} at ${playerPoolPercent} percent. Enemy pool ${betPools.enemy} at ${enemyPoolPercent} percent.`;
+}
+
+function getStudioKpiStripAriaLabel(studioCache) {
+  return `Studio cache. cache hits ${studioCache?.hits ?? 0}. saved calls ${studioCache?.savedCalls ?? 0}. studio hits ${studioCache?.studioPackHits ?? 0}.`;
+}
+
+function getAgentLogEntryAriaLabel(entry, index) {
+  const levelLabel = String(entry?.level || "info").toUpperCase();
+  const message = entry?.message || "Log entry unavailable.";
+  return `Agent log ${index + 1}. ${levelLabel}. ${message}`;
+}
+
+function getAgentLogUpdateSummary(prevLogs = [], nextLogs = []) {
+  if (!Array.isArray(nextLogs) || nextLogs.length === 0) {
+    return null;
+  }
+
+  const previousTopId = prevLogs[0]?.id || null;
+  const nextTopEntry = nextLogs[0] || null;
+  if (!nextTopEntry) {
+    return null;
+  }
+
+  const hasFreshTopEntry = previousTopId !== nextTopEntry.id;
+  if (!hasFreshTopEntry) {
+    return null;
+  }
+
+  const levelLabel = String(nextTopEntry.level || "info").toUpperCase();
+  const countLabel = `${nextLogs.length} log${nextLogs.length === 1 ? "" : "s"} synced.`;
+  const latestLabel = `Latest ${levelLabel}. ${nextTopEntry.message || "Log entry unavailable."}`;
+  return {
+    message: `${countLabel} ${latestLabel}`
+  };
+}
+
+function getAgentLogSummaryAriaLabel(summary) {
+  if (!summary?.message) {
+    return "Agent log update unavailable.";
+  }
+  return `Agent log update. ${summary.message}`;
+}
+
+function getAchievementListAriaLabel(unlockedCount, totalCount) {
+  return `Achievements. ${unlockedCount} unlocked of ${totalCount}.`;
+}
+
+function getAchievementItemAriaLabel(achievement, unlocked) {
+  if (!achievement) {
+    return "Achievement unavailable.";
+  }
+  return `${achievement.name}. ${achievement.desc}. ${unlocked ? "Unlocked" : "Locked"}.`;
+}
+
+function getGameOverCalloutAriaLabel(label, message) {
+  return `${label}. ${message}`;
+}
+
+function getDirectorBeatCardAriaLabel(kind, event) {
+  if (!event) return `${kind} unavailable.`;
+  return `${kind}. ${event.title}. ${event.text}`;
+}
+
+function getDirectorKpiAriaLabel(label, value) {
+  return `${label}. ${value}.`;
+}
+
+function getLeaderboardControlAriaLabel(control) {
+  return `${control.hero}. ${control.badge}. ${control.detail}`;
+}
+
+function getHighScoreItemAriaLabel(entry, rank) {
+  if (!entry) return `Leaderboard rank ${rank} unavailable.`;
+  return `Leaderboard rank ${rank}. ${entry.hero}. ${entry.score} pts. ${entry.combo}x combo on ${entry.date}.`;
+}
+
+function getArchiveEntryTrendAriaLabel(hero, trendLabel, trendDetail) {
+  return `${hero}. ${trendLabel}. ${trendDetail}`;
+}
+
+function getArchiveEntryAriaLabel(entry) {
+  if (!entry) return "Archive entry unavailable.";
+  return `${entry.hero}. ${entry.chip}. ${entry.detail}. ${entry.trendLabel}. ${entry.trendDetail}`;
+}
+
+function getArchiveEntryFormGroupAriaLabel(hero, form = []) {
+  if (!form.length) {
+    return `${hero}. RECENT FORM unavailable.`;
+  }
+  const summary = form
+    .map((formEntry) => {
+      const placementLabel = formEntry.qualified
+        ? formEntry.label.replace("#", "rank ")
+        : `outside the top ${HIGH_SCORE_LIMIT}`;
+      const timingLabel = formEntry.current ? "Current archived run" : "Previous archived run";
+      return `${timingLabel}: ${placementLabel}`;
+    })
+    .join(". ");
+  return `${hero}. RECENT FORM. ${summary}.`;
+}
+
+function getArchiveEntryTrend(entry, previousEntry) {
+  if (!entry) {
+    return {
+      label: "TREND",
+      detail: "Archive trend unavailable.",
+      tone: "steady"
+    };
+  }
+
+  if (!previousEntry) {
+    return {
+      label: "SEASON OPENER",
+      detail: `First archived run for ${entry.hero}.`,
+      tone: "fresh"
+    };
+  }
+
+  if (entry.qualified && !previousEntry.qualified) {
+    return {
+      label: "BREAKTHROUGH",
+      detail: `${entry.hero} climbed from outside the top ${HIGH_SCORE_LIMIT} into ${formatArchivePlacement(entry)}.`,
+      tone: "up"
+    };
+  }
+
+  if (!entry.qualified && previousEntry.qualified) {
+    return {
+      label: "SLIPPED",
+      detail: `${entry.hero} fell from ${formatArchivePlacement(previousEntry)} to outside the top ${HIGH_SCORE_LIMIT}.`,
+      tone: "down"
+    };
+  }
+
+  if (entry.qualified && previousEntry.qualified) {
+    if (entry.placement < previousEntry.placement) {
+      return {
+        label: "CLIMBING",
+        detail: `${entry.hero} improved from ${formatArchivePlacement(previousEntry)} to ${formatArchivePlacement(entry)}.`,
+        tone: "up"
+      };
+    }
+
+    if (entry.placement > previousEntry.placement) {
+      return {
+        label: "COOLED",
+        detail: `${entry.hero} slipped from ${formatArchivePlacement(previousEntry)} to ${formatArchivePlacement(entry)}.`,
+        tone: "down"
+      };
+    }
+
+    if (entry.score > previousEntry.score || (entry.score === previousEntry.score && entry.combo > previousEntry.combo)) {
+      return {
+        label: "TUNED UP",
+        detail: `${entry.hero} held ${formatArchivePlacement(entry)} and sharpened the line to ${entry.score} pts / ${entry.combo}x.`,
+        tone: "up"
+      };
+    }
+
+    if (entry.score < previousEntry.score || (entry.score === previousEntry.score && entry.combo < previousEntry.combo)) {
+      return {
+        label: "HOLDING",
+        detail: `${entry.hero} stayed at ${formatArchivePlacement(entry)} while the line softened from ${previousEntry.score} pts / ${previousEntry.combo}x.`,
+        tone: "steady"
+      };
+    }
+
+    return {
+      label: "LOCKED",
+      detail: `${entry.hero} repeated the same ${entry.score}-pt / ${entry.combo}x finish at ${formatArchivePlacement(entry)}.`,
+      tone: "steady"
+    };
+  }
+
+  if (entry.score > previousEntry.score || (entry.score === previousEntry.score && entry.combo > previousEntry.combo)) {
+    return {
+      label: "RECOVERING",
+      detail: `${entry.hero} is still outside the top ${HIGH_SCORE_LIMIT}, but improved to ${entry.score} pts / ${entry.combo}x.`,
+      tone: "up"
+    };
+  }
+
+  if (entry.score < previousEntry.score || (entry.score === previousEntry.score && entry.combo < previousEntry.combo)) {
+    return {
+      label: "STALLING",
+      detail: `${entry.hero} stayed outside the top ${HIGH_SCORE_LIMIT} and dipped below the previous ${previousEntry.score}-pt / ${previousEntry.combo}x archive.`,
+      tone: "down"
+    };
+  }
+
+  return {
+    label: "STEADY",
+    detail: `${entry.hero} repeated the same archived line outside the top ${HIGH_SCORE_LIMIT}.`,
+    tone: "steady"
+  };
+}
+
+function getLeaderboardSeasonArchive(scores, heroFilter = "all") {
+  const history = loadHighScoreHistory(scores, { allowFallback: false });
+
+  const heroFilters = Array.from(new Set(history.map((entry) => entry.hero)))
+    .sort((a, b) => a.localeCompare(b));
+  const supportsFiltering = heroFilters.length > 1;
+  const requestedFilter = supportsFiltering ? heroFilter : "all";
+  const activeFilter = requestedFilter === "all" || heroFilters.includes(requestedFilter) ? requestedFilter : "all";
+  const archiveDelta = getLeaderboardArchiveDelta(scores, history, activeFilter);
+  const archiveTrend = getLeaderboardArchiveTrend(history, activeFilter);
+  const archiveSource = activeFilter === "all"
+    ? history
+    : history.filter((entry) => entry.hero === activeFilter);
+  const filteredHistory = archiveSource.slice(0, 4);
+
+  if (!history.length) {
+    return {
+      label: "SEASON ARCHIVE",
+      detail: "Archived season history appears after the first completed run.",
+      storyLabel: "ARCHIVE STORY",
+      storyDetail: "Archive summaries unlock after the first completed run.",
+      deltaLabel: archiveDelta.label,
+      deltaDetail: archiveDelta.detail,
+      trendLabel: archiveTrend.label,
+      trendDetail: archiveTrend.detail,
+      filters: [],
+      activeFilter,
+      entries: []
+    };
+  }
+
+  const storyDetail = activeFilter === "all"
+    ? (() => {
+      const qualifiedCount = history.filter((entry) => entry.qualified).length;
+      const latestEntry = history[0];
+      const latestResult = latestEntry?.qualified && latestEntry?.placement
+        ? `#${latestEntry.placement} finish`
+        : `outside the top ${HIGH_SCORE_LIMIT}`;
+      return `${heroFilters.length} hero${heroFilters.length === 1 ? "" : "es"} logged ${history.length} archived run${history.length === 1 ? "" : "s"}. ${qualifiedCount}/${history.length} stayed inside the top ${HIGH_SCORE_LIMIT}. Latest archive: ${latestEntry.hero} at ${latestEntry.score} pts (${latestResult}).`;
+    })()
+    : (() => {
+      const heroHistory = history.filter((entry) => entry.hero === activeFilter);
+      const heroStats = getHeroMomentumStats(history, activeFilter);
+      const latestEntry = heroHistory[0] || null;
+      const bestPlacement = Number.isFinite(heroStats.bestPlacement)
+        ? `peaked at #${heroStats.bestPlacement}`
+        : `has not cracked the top ${HIGH_SCORE_LIMIT} yet`;
+      let trend = `last archived run landed outside the top ${HIGH_SCORE_LIMIT}`;
+      if (heroStats.currentStreak > 1) {
+        trend = `is riding a ${heroStats.currentStreak}-run top-${HIGH_SCORE_LIMIT} streak`;
+      } else if (heroStats.currentStreak === 1) {
+        trend = latestEntry?.qualified
+          ? `just posted a fresh top-${HIGH_SCORE_LIMIT} finish`
+          : `has a single archived top-${HIGH_SCORE_LIMIT} finish so far`;
+      } else if (latestEntry?.qualified) {
+        trend = heroStats.longestStreak > 1
+          ? `owns a season-best ${heroStats.longestStreak}-run top-${HIGH_SCORE_LIMIT} streak`
+          : `has a single archived top-${HIGH_SCORE_LIMIT} finish so far`;
+      }
+      return `${activeFilter} has ${heroHistory.length} archived run${heroHistory.length === 1 ? "" : "s"}, ${bestPlacement}, and ${trend}.`;
+    })();
+
+  return {
+    label: "SEASON ARCHIVE",
+    detail: activeFilter === "all"
+      ? `Latest ${filteredHistory.length} archived run${filteredHistory.length === 1 ? "" : "s"} across the season table.`
+      : `Latest ${filteredHistory.length} archived run${filteredHistory.length === 1 ? "" : "s"} for ${activeFilter}.`,
+    storyLabel: activeFilter === "all" ? "ARCHIVE STORY" : `${activeFilter.toUpperCase()} STORY`,
+    storyDetail,
+    deltaLabel: archiveDelta.label,
+    deltaDetail: archiveDelta.detail,
+    trendLabel: archiveTrend.label,
+    trendDetail: archiveTrend.detail,
+    filters: supportsFiltering
+      ? [
+        { id: "all", label: "All heroes" },
+        ...heroFilters.map((hero) => ({ id: hero, label: hero }))
+      ]
+      : [],
+    activeFilter,
+    entries: filteredHistory.map((entry, index) => {
+      const previousEntry = archiveSource.find((candidate, candidateIndex) => (
+        candidateIndex > index && candidate.hero === entry.hero
+      )) || null;
+      const entryTrend = getArchiveEntryTrend(entry, previousEntry);
+
+      return {
+        ...entry,
+        chip: entry.qualified && entry.placement
+          ? `#${entry.placement} FINISH`
+          : `OUTSIDE TOP ${HIGH_SCORE_LIMIT}`,
+        detail: `${entry.score} pts · ${entry.combo}x combo · ${entry.date}`,
+        trendLabel: entryTrend.label,
+        trendDetail: entryTrend.detail,
+        trendTone: entryTrend.tone,
+        form: getArchiveEntryForm(archiveSource, entry)
+      };
+    })
+  };
+}
+
+function describeLeaderboardMomentumShift(previousHistory, history, result) {
+  if (!result?.entry) return null;
+
+  const before = getHeroMomentumStats(previousHistory || [], result.entry.hero);
+  const after = getHeroMomentumStats(history || [], result.entry.hero);
+  const tone = result.placement === 1 ? "top" : result.qualified ? "qualified" : "archived";
+  const improvedBestPlacement = after.bestPlacement < before.bestPlacement && Number.isFinite(after.bestPlacement);
+
+  if (!result.qualified) {
+    if (before.currentStreak > 0 && after.currentStreak === 0) {
+      return {
+        tone,
+        message: `${result.entry.hero}'s ${before.currentStreak}-run top-${HIGH_SCORE_LIMIT} streak snaps with this archived finish.`
+      };
+    }
+    return null;
+  }
+
+  if (after.currentStreak > before.currentStreak) {
+    if (before.currentStreak === 0) {
+      if (improvedBestPlacement && before.bestPlacement < Number.MAX_SAFE_INTEGER) {
+        return {
+          tone,
+          message: `${result.entry.hero} locks in a new season-best placement at #${after.bestPlacement}.`
+        };
+      }
+
+      return {
+        tone,
+        message: `${result.entry.hero} opens a new top-${HIGH_SCORE_LIMIT} streak with this #${result.placement} finish.`
+      };
+    }
+
+    return {
+      tone,
+      message: `${result.entry.hero} extends their top-${HIGH_SCORE_LIMIT} streak to ${after.currentStreak} straight runs.`
+    };
+  }
+
+  if (improvedBestPlacement) {
+    return {
+      tone,
+      message: `${result.entry.hero} locks in a new season-best placement at #${after.bestPlacement}.`
+    };
+  }
+
+  return null;
 }
 
 function loadProgress() {
@@ -430,11 +2110,35 @@ function saveProgress(data) {
   localStorage.setItem("saga_progress", JSON.stringify(data));
 }
 
+function loadArchiveHeroFilter() {
+  try {
+    const value = localStorage.getItem("saga_archive_hero_filter");
+    return typeof value === "string" && value.trim() ? value : "all";
+  }
+  catch {
+    return "all";
+  }
+}
+
+function saveArchiveHeroFilter(heroFilter) {
+  try {
+    if (!heroFilter || heroFilter === "all") {
+      localStorage.removeItem("saga_archive_hero_filter");
+      return;
+    }
+    localStorage.setItem("saga_archive_hero_filter", heroFilter);
+  }
+  catch {
+    // Ignore storage persistence failures for non-critical UI state.
+  }
+}
+
 const initState = (hero) => {
   const mission = createMission(1);
   return {
     hero,
     running: false,
+    hasStartedRun: false,
     gameOver: false,
     score: 0,
     hp: hero.hp,
@@ -707,7 +2411,11 @@ function reducer(state, action) {
 
     case "TOGGLE_RUN":
       if (state.gameOver) return state;
-      return { ...state, running: !state.running };
+      return {
+        ...state,
+        running: !state.running,
+        hasStartedRun: state.hasStartedRun || !state.running
+      };
 
     case "RESET": {
       const s = initState(state.hero);
@@ -845,7 +2553,12 @@ async function jsonRequest(path, options = {}) {
     ...options
   });
   const json = await res.json();
-  if (!res.ok) throw new Error(json.message || "request failed");
+  if (!res.ok) {
+    const error = new Error(json.message || "request failed");
+    error.status = res.status;
+    error.data = json.data;
+    throw error;
+  }
   return json;
 }
 
@@ -854,6 +2567,7 @@ export default function App() {
   const keysRef = useRef({});
   const [log, setLog] = useState([]);
   const [currentMatchId, setCurrentMatchId] = useState(null);
+  const [matchStatus, setMatchStatus] = useState("idle");
   const [spectators, setSpectators] = useState(0);
   const [odds, setOdds] = useState({ player: 1.9, enemy: 1.9 });
   const [betPools, setBetPools] = useState({ player: 0, enemy: 0 });
@@ -862,18 +2576,39 @@ export default function App() {
   const [betSide, setBetSide] = useState("player");
   const [betAmount, setBetAmount] = useState(100);
   const [serverLogs, setServerLogs] = useState([]);
+  const [agentLogSummary, setAgentLogSummary] = useState(null);
   const [highScores, setHighScores] = useState(loadHighScores());
+  const [leaderboardUpdate, setLeaderboardUpdate] = useState(null);
+  const [leaderboardMomentumUpdate, setLeaderboardMomentumUpdate] = useState(null);
+  const [selectedArchiveHero, setSelectedArchiveHero] = useState(() => loadArchiveHeroFilter());
   const [studioBrief, setStudioBrief] = useState("Neon sponsor arena for creator-made hero collectibles");
   const [studioPack, setStudioPack] = useState(null);
   const [studioStatus, setStudioStatus] = useState("idle");
+  const [studioStatusMessage, setStudioStatusMessage] = useState("");
   const [studioCache, setStudioCache] = useState(null);
   const [selectedMarketingAngle, setSelectedMarketingAngle] = useState(null);
+  const [selectedQueueItemId, setSelectedQueueItemId] = useState(null);
+  const [marketingCopyFeedback, setMarketingCopyFeedback] = useState(null);
+  const [betFeedback, setBetFeedback] = useState(null);
+  const [betPending, setBetPending] = useState(false);
+  const [shareFeedback, setShareFeedback] = useState(null);
+  const [sharePendingChannel, setSharePendingChannel] = useState(null);
   const [editorDrafts, setEditorDrafts] = useState({ sound: {}, asset: {} });
+  const [editorSelection, setEditorSelection] = useState({ sound: "bgm", asset: "orb" });
   const latestStateRef = useRef(state);
+  const latestServerLogsRef = useRef(serverLogs);
+  const serverLogsHydratedRef = useRef(false);
+  const marketingCopyActionRef = useRef(0);
+  const studioPackRequestRef = useRef(0);
+  const betActionRef = useRef(0);
+  const shareActionRef = useRef(0);
+  const gameOverHandledRef = useRef(false);
+  const leaderboardBaselineRef = useRef(highScores);
 
   const {
     hero,
     running,
+    hasStartedRun,
     gameOver,
     score,
     hp,
@@ -901,6 +2636,7 @@ export default function App() {
     abilityEvent,
     directorBeat,
     swingEvent,
+    swingEventEndsAt,
     bonusOrb,
     editHistory,
     appliedSounds,
@@ -911,9 +2647,45 @@ export default function App() {
     latestStateRef.current = state;
   }, [state]);
 
+  useEffect(() => {
+    latestServerLogsRef.current = serverLogs;
+  }, [serverLogs]);
+
+  useEffect(() => {
+    if (!gameOver) {
+      leaderboardBaselineRef.current = highScores;
+    }
+  }, [gameOver, highScores]);
+
   const activeAbility = HERO_ABILITIES[hero.id];
+  const heroSelectionLocked = hasStartedRun;
   const directorPhase = getDirectorPhase(timer);
   const elapsedSeconds = GAME_TIME - timer;
+  const bettingStatus = getBettingStatusSnapshot(matchStatus, timer, elapsedSeconds, currentMatchId);
+  const leaderboardReference = gameOver ? leaderboardBaselineRef.current : highScores;
+  const leaderboardEntryPreview = {
+    hero: hero.name,
+    score,
+    combo: maxCombo,
+    date: "live-run",
+    createdAt: "9999-12-31T23:59:59.999Z"
+  };
+  const leaderboardRecap = getLeaderboardRecap(leaderboardReference, leaderboardEntryPreview);
+  const leaderboardSeasonSummary = getLeaderboardSeasonSummary(leaderboardReference, leaderboardEntryPreview);
+  const leaderboardBoardControl = getLeaderboardBoardControl(leaderboardReference);
+  const leaderboardMomentum = getLeaderboardMomentum(leaderboardReference);
+  const leaderboardSeasonArchive = getLeaderboardSeasonArchive(leaderboardReference, selectedArchiveHero);
+  const studioPackStatus = getStudioPackStatusSnapshot(studioStatus, studioPack, hero.name, studioStatusMessage);
+
+  useEffect(() => {
+    if (selectedArchiveHero !== "all" && !leaderboardSeasonArchive.filters.some((filter) => filter.id === selectedArchiveHero)) {
+      setSelectedArchiveHero("all");
+    }
+  }, [leaderboardSeasonArchive.filters, selectedArchiveHero]);
+
+  useEffect(() => {
+    saveArchiveHeroFilter(leaderboardSeasonArchive.activeFilter);
+  }, [leaderboardSeasonArchive.activeFilter]);
 
   async function trackEvent(message, meta = {}) {
     try {
@@ -937,19 +2709,46 @@ export default function App() {
 
   // Save high score on game over
   useEffect(() => {
-    if (gameOver && score > 0) {
-      saveHighScore({ hero: hero.name, score, combo: maxCombo, date: new Date().toISOString().slice(0, 10) });
-      setHighScores(loadHighScores());
-      jsonRequest("/api/match/finish", {
-        method: "POST",
-        body: JSON.stringify({
-          winner: score >= 50 ? "player" : "enemy",
-          elapsedSeconds,
-          playerId: hero.id
-        })
-      }).catch(() => null);
+    if (!gameOver) {
+      gameOverHandledRef.current = false;
+      setLeaderboardMomentumUpdate(null);
+      return;
     }
-  }, [gameOver]);
+    if (gameOverHandledRef.current || score <= 0) return;
+
+    gameOverHandledRef.current = true;
+    leaderboardBaselineRef.current = highScores;
+    const completedAt = new Date().toISOString();
+    const highScoreResult = saveHighScore({
+      hero: hero.name,
+      score,
+      combo: maxCombo,
+      date: completedAt.slice(0, 10),
+      createdAt: completedAt
+    });
+    setHighScores(highScoreResult.scores);
+    setLeaderboardUpdate(describeLeaderboardPlacement(highScoreResult));
+    setLeaderboardMomentumUpdate(
+      describeLeaderboardMomentumShift(
+        highScoreResult.previousHistory,
+        highScoreResult.history,
+        highScoreResult
+      )
+    );
+
+    jsonRequest("/api/match/finish", {
+      method: "POST",
+      body: JSON.stringify({
+        winner: score >= 50 ? "player" : "enemy",
+        elapsedSeconds,
+        playerId: hero.id
+      })
+    })
+      .then((json) => {
+        setMatchStatus(json.status || "finished");
+      })
+      .catch(() => null);
+  }, [elapsedSeconds, gameOver, hero.id, hero.name, maxCombo, score]);
 
   async function refreshCacheStats() {
     try {
@@ -1006,6 +2805,7 @@ export default function App() {
     jsonRequest("/api/match/start", { method: "POST" })
       .then((json) => {
         setCurrentMatchId(json.matchId);
+        setMatchStatus(json.status || "running");
         return trackEvent("match_started", {
           matchId: json.matchId,
           playerId: hero.id,
@@ -1021,10 +2821,22 @@ export default function App() {
           jsonRequest("/api/agent/logs")
         ]);
         setCurrentMatchId(match.match.matchId);
+        setMatchStatus(match.match.status);
         setSpectators(match.match.spectators);
         setOdds(match.match.odds);
         setBetPools(match.match.pools);
-        setServerLogs(logsRes.logs);
+        const nextLogs = Array.isArray(logsRes.logs) ? logsRes.logs : [];
+        const isFirstLogSync = !serverLogsHydratedRef.current;
+        const logSummary = isFirstLogSync
+          ? null
+          : getAgentLogUpdateSummary(latestServerLogsRef.current, nextLogs);
+        serverLogsHydratedRef.current = true;
+        setServerLogs(nextLogs);
+        if (nextLogs.length === 0) {
+          setAgentLogSummary(null);
+        } else {
+          setAgentLogSummary(logSummary);
+        }
       } catch { /* polling non-fatal */ }
     }, 2500);
     const cachePoll = setInterval(() => {
@@ -1181,6 +2993,8 @@ export default function App() {
     } else {
       setSelectedMarketingAngle(null);
     }
+    setSelectedQueueItemId(null);
+    clearMarketingCopyFeedback();
   }, [studioPack?.packId]);
 
   const totalPool = betPools.player + betPools.enemy || 1;
@@ -1188,6 +3002,7 @@ export default function App() {
   const abilityCooldown = Math.max(0, Math.ceil((abilityCooldownUntil - Date.now()) / 1000));
   const abilityReady = abilityCharge >= ABILITY_MAX && abilityCooldown <= 0;
   const enemyFrozen = enemyFreezeUntil && Date.now() < enemyFreezeUntil;
+  const powerupPanelAriaLabel = getPowerupPanelAriaLabel(activePowerups, powerup);
 
   // Build tile data
   const tiles = useMemo(() => {
@@ -1237,6 +3052,7 @@ export default function App() {
   const xpPercent = (xp / xpForLevel(level)) * 100;
   const liveAssetCount = Object.values(appliedAssets).filter(Boolean).length;
   const liveSoundCount = Object.values(appliedSounds).filter(Boolean).length;
+  const liveWatchPanelAriaLabel = getLiveWatchPanelAriaLabel(spectators, odds, enemyFrozen, liveAssetCount, betPools, totalPool);
 
   function updateEditorDraft(kind, key, value) {
     setEditorDrafts((prev) => ({
@@ -1250,67 +3066,214 @@ export default function App() {
 
   function applyStudioSuggestion(kind, key, prompt) {
     updateEditorDraft(kind, key, prompt);
+    setEditorSelection((prev) => ({ ...prev, [kind]: key }));
     setEditorTab(kind === "sound" ? "sound" : "asset");
     setLog((prev) => [`Prompt loaded: ${key}`, ...prev].slice(0, 8));
   }
 
+  function clearMarketingCopyFeedback() {
+    marketingCopyActionRef.current += 1;
+    setMarketingCopyFeedback(null);
+  }
+
+  function resetStudioPackState({ cancelInFlight = false, nextStatus = "idle" } = {}) {
+    if (cancelInFlight) {
+      studioPackRequestRef.current += 1;
+    }
+    setStudioPack(null);
+    setStudioStatus(nextStatus);
+    setStudioStatusMessage("");
+    setEditorDrafts({ sound: {}, asset: {} });
+    setSelectedMarketingAngle(null);
+    setSelectedQueueItemId(null);
+    clearMarketingCopyFeedback();
+  }
+
+  function marketingCopyButtonLabel() {
+    const angleLabel = selectedMarketingAngle?.label || "launch";
+    if (marketingCopyFeedback?.tone === "pending") {
+      return `Copying ${angleLabel} copy...`;
+    }
+    return marketingCopyFeedback?.tone === "ready"
+      ? `Copied ${angleLabel} copy`
+      : `Copy ${angleLabel} copy`;
+  }
+
+  function selectMarketingAngle(angle) {
+    setSelectedMarketingAngle(angle);
+    clearMarketingCopyFeedback();
+  }
+
+  function shareButtonLabel(channel) {
+    const label = SHARE_CHANNEL_LABELS[channel] || channel;
+    if (sharePendingChannel === channel) return `Sharing ${label}...`;
+    if (shareFeedback?.tone === "ready" && shareFeedback.channel === channel) return `Shared ${label}`;
+    return `Share ${label}`;
+  }
+
   function loadQueueItem(item) {
+    setSelectedQueueItemId(item.id);
     if (item.lane === "social") {
       const angle = studioPack?.marketingAngles?.find((entry) => entry.channel === item.key) || null;
-      setSelectedMarketingAngle(angle);
+      selectMarketingAngle(angle);
       setLog((prev) => [`Copy loaded: ${item.key}`, ...prev].slice(0, 8));
       return;
     }
     applyStudioSuggestion(item.lane, item.key, item.prompt);
   }
 
+  function clearBetFeedback() {
+    betActionRef.current += 1;
+    setBetPending(false);
+    setBetFeedback(null);
+  }
+
+  function betSideLabel(side) {
+    return side === "enemy" ? "Enemy Win" : "Player Win";
+  }
+
+  function validateBetDraft(name, amount) {
+    if (!name.trim()) return "Enter a bettor name before placing a bet.";
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      return "Enter a bet amount greater than zero.";
+    }
+    if (matchStatus !== "running") {
+      return matchStatus === "finished"
+        ? "Betting is closed until the next match starts."
+        : "Betting will open when the live match starts.";
+    }
+    return null;
+  }
+
+  function validateStudioBrief(brief) {
+    if (!brief.trim()) {
+      return "Enter a campaign brief before generating a studio pack.";
+    }
+    return null;
+  }
+
   async function copyMarketingCopy() {
-    if (!selectedMarketingAngle?.copy || typeof navigator === "undefined" || !navigator.clipboard) return;
+    if (!selectedMarketingAngle?.copy) return;
+
+    const actionId = marketingCopyActionRef.current + 1;
+    marketingCopyActionRef.current = actionId;
+    setMarketingCopyFeedback({ tone: "pending", message: `Copying ${selectedMarketingAngle.label} copy to the clipboard...` });
+
+    if (typeof navigator === "undefined" || typeof navigator.clipboard?.writeText !== "function") {
+      if (marketingCopyActionRef.current !== actionId) return;
+      setMarketingCopyFeedback({ tone: "error", message: "Clipboard unavailable in this browser." });
+      setLog((prev) => ["Clipboard unavailable", ...prev].slice(0, 8));
+      return;
+    }
+
     try {
       await navigator.clipboard.writeText(`${selectedMarketingAngle.copy}\nCTA: ${selectedMarketingAngle.cta}`);
+      if (marketingCopyActionRef.current !== actionId) return;
+      setMarketingCopyFeedback({ tone: "ready", message: `${selectedMarketingAngle.label} copy copied.` });
       setLog((prev) => [`Copied ${selectedMarketingAngle.label} copy`, ...prev].slice(0, 8));
     } catch {
+      if (marketingCopyActionRef.current !== actionId) return;
+      setMarketingCopyFeedback({ tone: "error", message: "Clipboard copy blocked. Try again after granting permissions." });
       setLog((prev) => ["Clipboard copy blocked", ...prev].slice(0, 8));
     }
   }
 
   async function generateStudioPack() {
-    setStudioStatus("loading");
+    const briefAtStart = studioBrief;
+    const validationMessage = validateStudioBrief(briefAtStart);
+    if (validationMessage) {
+      studioPackRequestRef.current += 1;
+      resetStudioPackState({ nextStatus: "blocked" });
+      setStudioStatusMessage(validationMessage);
+      setLog((prev) => [`Studio pack blocked: ${validationMessage}`, ...prev].slice(0, 8));
+      return;
+    }
+
+    const requestToken = studioPackRequestRef.current + 1;
+    studioPackRequestRef.current = requestToken;
+    const heroIdAtStart = hero.id;
+    const applyIfActive = (callback) => {
+      if (studioPackRequestRef.current !== requestToken) return;
+      callback();
+    };
+
+    resetStudioPackState({ nextStatus: "loading" });
     try {
       const json = await jsonRequest("/api/varco/studio-pack", {
         method: "POST",
-        body: JSON.stringify({ brief: studioBrief, heroId: hero.id })
+        body: JSON.stringify({ brief: briefAtStart, heroId: heroIdAtStart })
       });
-      setStudioPack(json.studioPack);
-      setStudioStatus(json.studioPack.cache_hit ? "cached" : "ready");
-      setEditorDrafts({
-        sound: json.studioPack.sounds,
-        asset: json.studioPack.assets
+      applyIfActive(() => {
+        setStudioPack(json.studioPack);
+        setStudioStatus(json.studioPack.cache_hit ? "cached" : "ready");
+        setStudioStatusMessage("");
+        setEditorDrafts({
+          sound: json.studioPack.sounds,
+          asset: json.studioPack.assets
+        });
+        setSelectedMarketingAngle(json.studioPack.marketingAngles?.[0] || null);
+        clearMarketingCopyFeedback();
+        refreshCacheStats().catch(() => null);
+        setLog((prev) => [`Studio pack ${json.studioPack.cache_hit ? "cached" : "ready"}`, ...prev].slice(0, 8));
       });
-      setSelectedMarketingAngle(json.studioPack.marketingAngles?.[0] || null);
-      refreshCacheStats().catch(() => null);
-      setLog((prev) => [`Studio pack ${json.studioPack.cache_hit ? "cached" : "ready"}`, ...prev].slice(0, 8));
     } catch (error) {
-      setStudioStatus("error");
-      setLog((prev) => [`Studio pack failed: ${error.message}`, ...prev].slice(0, 8));
+      applyIfActive(() => {
+        setStudioStatus("error");
+        setStudioStatusMessage(error.message || "request failed");
+        setLog((prev) => [`Studio pack failed: ${error.message}`, ...prev].slice(0, 8));
+      });
     }
   }
 
   async function placeBet() {
+    const userName = betName.trim();
+    const amount = Number(betAmount);
+    const validationMessage = validateBetDraft(userName, amount);
+    if (validationMessage) {
+      setBetFeedback({ tone: "error", message: validationMessage });
+      setLog((prev) => [`Bet blocked: ${validationMessage}`, ...prev].slice(0, 8));
+      return;
+    }
+
+    const actionId = betActionRef.current + 1;
+    betActionRef.current = actionId;
+    setBetPending(true);
+    setBetFeedback({ tone: "pending", message: `Submitting ${betSideLabel(betSide)} for ${amount}.` });
+
     try {
       const json = await jsonRequest("/api/match/bet", {
         method: "POST",
-        body: JSON.stringify({ userName: betName, side: betSide, amount: Number(betAmount) })
+        body: JSON.stringify({ userName, side: betSide, amount })
       });
+      if (betActionRef.current !== actionId) return;
+      setBetName(userName);
+      setBetPending(false);
       setBetPools(json.pools);
       setOdds(json.odds);
-      setLog((prev) => [`Bet: ${betSide} ${betAmount}`, ...prev].slice(0, 8));
+      setBetFeedback({ tone: "ready", message: `${userName} backed ${betSideLabel(betSide)} for ${amount}.` });
+      setLog((prev) => [`Bet: ${betSide} ${amount}`, ...prev].slice(0, 8));
     } catch (error) {
+      if (betActionRef.current !== actionId) return;
+      setBetPending(false);
+      if (error?.data?.status) {
+        setMatchStatus(error.data.status);
+      }
+      if (error?.data?.matchId) {
+        setCurrentMatchId(error.data.matchId);
+      }
+      setBetFeedback({ tone: "error", message: error.message || "Bet failed." });
       setLog((prev) => [`Bet failed: ${error.message}`, ...prev].slice(0, 8));
     }
   }
 
   async function shareResult(channel) {
+    const actionId = shareActionRef.current + 1;
+    shareActionRef.current = actionId;
+    const channelLabel = SHARE_CHANNEL_LABELS[channel] || channel;
+    setSharePendingChannel(channel);
+    setShareFeedback({ tone: "pending", channel, message: `Preparing ${channelLabel} share link...` });
+
     try {
       const winner = score >= 50 ? "player" : "enemy";
       const json = await jsonRequest("/api/share/sns", {
@@ -1324,9 +3287,21 @@ export default function App() {
           soundVariant: editHistory.findLast?.((entry) => entry.type === "sound" && entry.appliedAt)?.prompt || null
         })
       });
-      window.open(json.links[channel], "_blank", "noopener,noreferrer");
+      if (shareActionRef.current !== actionId) return;
+
+      const shareUrl = json.links?.[channel];
+      if (!shareUrl) {
+        throw new Error(`${channelLabel} share link unavailable.`);
+      }
+
+      window.open(shareUrl, "_blank", "noopener,noreferrer");
+      setSharePendingChannel(null);
+      setShareFeedback({ tone: "ready", channel, message: `Opened ${channelLabel} share link.` });
       setLog((prev) => [`Shared: ${channel}`, ...prev].slice(0, 8));
     } catch (error) {
+      if (shareActionRef.current !== actionId) return;
+      setSharePendingChannel(null);
+      setShareFeedback({ tone: "error", channel, message: error.message || `${channelLabel} share failed.` });
       setLog((prev) => [`Share failed: ${error.message}`, ...prev].slice(0, 8));
     }
   }
@@ -1339,11 +3314,16 @@ export default function App() {
         elapsedSeconds
       });
     }
+    gameOverHandledRef.current = false;
+    setLeaderboardUpdate(null);
+    setLeaderboardMomentumUpdate(null);
     dispatch({ type: "RESET" });
     setLog([]);
+    setMatchStatus("idle");
     jsonRequest("/api/match/start", { method: "POST" })
       .then((json) => {
         setCurrentMatchId(json.matchId);
+        setMatchStatus(json.status || "running");
         return trackEvent("match_started", {
           matchId: json.matchId,
           playerId: hero.id,
@@ -1359,12 +3339,49 @@ export default function App() {
       <header className="header">
         <div className="header-left">
           <span className="brand-title">VARCO AGENT SAGA</span>
-          <div className="hero-select">
-            {heroes.map((h) => (
-              <button key={h.id} type="button" className={`hero-btn${hero.id === h.id ? " active" : ""}`} onClick={() => dispatch({ type: "SET_HERO", hero: h })}>
-                {h.name}
-              </button>
-            ))}
+          <div className="hero-select" data-testid="hero-select-group">
+            {heroes.map((h) => {
+              const isActive = hero.id === h.id;
+              const heroSelectLabel = getHeroSelectAriaLabel(h.name, isActive, heroSelectionLocked);
+              return (
+                <button
+                  key={h.id}
+                  type="button"
+                  className={`hero-btn${isActive ? " active" : ""}`}
+                  data-testid="hero-select-button"
+                  aria-pressed={isActive}
+                  aria-disabled={heroSelectionLocked}
+                  aria-description={heroSelectLabel}
+                  title={heroSelectLabel}
+                  onClick={() => {
+                    if (heroSelectionLocked) return;
+                    dispatch({ type: "SET_HERO", hero: h });
+                  }}
+                  onKeyDown={(event) => {
+                    if (heroSelectionLocked) return;
+                    handleHeroSelectKeyDown(event, hero.id, (nextHeroId) => {
+                      const nextHero = heroes.find((candidate) => candidate.id === nextHeroId);
+                      if (nextHero) {
+                        dispatch({ type: "SET_HERO", hero: nextHero });
+                      }
+                    });
+                  }}
+                >
+                  {h.name}
+                </button>
+              );
+            })}
+            {heroSelectionLocked && (
+              <span
+                className="hero-lock-hint"
+                data-testid="hero-lock-hint"
+                role="status"
+                aria-label="Hero lock active. Reset to switch agents."
+                title="Reset to switch agents"
+              >
+                Locked • Reset to switch agents
+              </span>
+            )}
           </div>
         </div>
         <div className="header-stats">
@@ -1390,7 +3407,13 @@ export default function App() {
       {/* LEFT PANEL */}
       <div className="left-panel">
         {/* HP */}
-        <div className="panel">
+        <div
+          className="panel hp-panel"
+          data-testid="hp-panel"
+          tabIndex={0}
+          aria-label={getHpPanelAriaLabel(hp, hero.hp)}
+          title={getHpPanelAriaLabel(hp, hero.hp)}
+        >
           <div className="panel-title">HP</div>
           <div className="hp-bar-wrap">
             <div className={`hp-bar-fill${hpPercent <= 30 ? " low" : ""}`} style={{ width: `${hpPercent}%` }} />
@@ -1399,7 +3422,13 @@ export default function App() {
         </div>
 
         {/* XP / Level */}
-        <div className="panel">
+        <div
+          className="panel level-panel"
+          data-testid="level-panel"
+          tabIndex={0}
+          aria-label={getLevelPanelAriaLabel(level, xp, hero)}
+          title={getLevelPanelAriaLabel(level, xp, hero)}
+        >
           <div className="panel-title">Level {level}</div>
           <div className="xp-bar-wrap">
             <div className="xp-bar-fill" style={{ width: `${xpPercent}%` }} />
@@ -1411,7 +3440,13 @@ export default function App() {
         </div>
 
         {/* Combo */}
-        <div className="panel">
+        <div
+          className="panel combo-panel"
+          data-testid="combo-panel"
+          tabIndex={0}
+          aria-label={getComboPanelAriaLabel(combo)}
+          title={getComboPanelAriaLabel(combo)}
+        >
           <div className="panel-title">Combo</div>
           <div className="combo-display">
             <div className={`combo-count${combo > 1 ? " bump" : ""}`}>{combo}x</div>
@@ -1420,7 +3455,13 @@ export default function App() {
           </div>
         </div>
 
-        <div className="panel mission-panel" data-testid="mission-panel">
+        <div
+          className="panel mission-panel"
+          data-testid="mission-panel"
+          tabIndex={0}
+          aria-label={getMissionPanelAriaLabel(mission, missionSecondsLeft)}
+          title={getMissionPanelAriaLabel(mission, missionSecondsLeft)}
+        >
           <div className="panel-title">Director Mission</div>
           <div className="mission-header">
             <strong>{mission.title}</strong>
@@ -1438,7 +3479,13 @@ export default function App() {
           </div>
         </div>
 
-        <div className="panel ability-panel" data-testid="ability-panel">
+        <div
+          className="panel ability-panel"
+          data-testid="ability-panel"
+          tabIndex={0}
+          aria-label={getAbilityPanelAriaLabel(activeAbility, abilityPercent, abilityReady, abilityCooldown)}
+          title={getAbilityPanelAriaLabel(activeAbility, abilityPercent, abilityReady, abilityCooldown)}
+        >
           <div className="panel-title">Hero Ability</div>
           <div className="ability-header">
             <strong>{activeAbility.name}</strong>
@@ -1462,7 +3509,13 @@ export default function App() {
           </button>
         </div>
 
-        <div className="panel director-panel" data-testid="director-panel">
+        <div
+          className="panel director-panel"
+          data-testid="director-panel"
+          tabIndex={0}
+          aria-label={getDirectorPanelAriaLabel(directorPhase, directorBeat, swingEvent, bonusOrb, liveAssetCount, liveSoundCount)}
+          title={getDirectorPanelAriaLabel(directorPhase, directorBeat, swingEvent, bonusOrb, liveAssetCount, liveSoundCount)}
+        >
           <div className="panel-title">Arena Director</div>
           <div className="director-phase-row">
             <strong>{directorPhase.label}</strong>
@@ -1470,27 +3523,62 @@ export default function App() {
           </div>
           <p className="director-phase-copy">{directorPhase.callout}</p>
           {directorBeat && (
-            <div className="director-beat-card">
+            <div
+              className="director-beat-card"
+              data-testid="director-beat-card"
+              tabIndex={0}
+              aria-label={getDirectorBeatCardAriaLabel("Director beat", directorBeat)}
+              title={getDirectorBeatCardAriaLabel("Director beat", directorBeat)}
+              onKeyDown={handleDirectorBeatCardKeyDown}
+            >
               <strong>{directorBeat.title}</strong>
               <span>{directorBeat.text}</span>
             </div>
           )}
           {swingEvent && (
-            <div className="director-beat-card" data-testid="swing-event-card">
+            <div
+              className="director-beat-card"
+              data-testid="swing-event-card"
+              tabIndex={0}
+              aria-label={getDirectorBeatCardAriaLabel("Swing event", swingEvent)}
+              title={getDirectorBeatCardAriaLabel("Swing event", swingEvent)}
+              onKeyDown={handleDirectorBeatCardKeyDown}
+            >
               <strong>{swingEvent.title}</strong>
               <span>{swingEvent.text}</span>
             </div>
           )}
-          <div className="director-kpis">
-            <div>
+          <div className="director-kpis" data-testid="director-kpi-group">
+            <div
+              className="director-kpi-card"
+              data-testid="director-kpi-card"
+              tabIndex={0}
+              aria-label={getDirectorKpiAriaLabel("Bonus core", bonusOrb ? "Live" : "Offline")}
+              title={getDirectorKpiAriaLabel("Bonus core", bonusOrb ? "Live" : "Offline")}
+              onKeyDown={handleDirectorKpiKeyDown}
+            >
               <span>Bonus core</span>
               <strong>{bonusOrb ? "Live" : "Offline"}</strong>
             </div>
-            <div>
+            <div
+              className="director-kpi-card"
+              data-testid="director-kpi-card"
+              tabIndex={0}
+              aria-label={getDirectorKpiAriaLabel("Live assets", `${liveAssetCount}/3`)}
+              title={getDirectorKpiAriaLabel("Live assets", `${liveAssetCount}/3`)}
+              onKeyDown={handleDirectorKpiKeyDown}
+            >
               <span>Live assets</span>
               <strong>{liveAssetCount}/3</strong>
             </div>
-            <div>
+            <div
+              className="director-kpi-card"
+              data-testid="director-kpi-card"
+              tabIndex={0}
+              aria-label={getDirectorKpiAriaLabel("Live cues", `${liveSoundCount}/5`)}
+              title={getDirectorKpiAriaLabel("Live cues", `${liveSoundCount}/5`)}
+              onKeyDown={handleDirectorKpiKeyDown}
+            >
               <span>Live cues</span>
               <strong>{liveSoundCount}/5</strong>
             </div>
@@ -1498,7 +3586,13 @@ export default function App() {
         </div>
 
         {/* Power-ups */}
-        <div className="panel">
+        <div
+          className="panel powerup-panel"
+          data-testid="powerup-panel"
+          tabIndex={0}
+          aria-label={powerupPanelAriaLabel}
+          title={powerupPanelAriaLabel}
+        >
           <div className="panel-title">Power-ups</div>
           <div className="powerup-list">
             {POWERUP_TYPES.map((pt) => {
@@ -1517,7 +3611,13 @@ export default function App() {
         </div>
 
         {/* Watch / Spectators */}
-        <div className="panel watch-box">
+        <div
+          className="panel watch-box"
+          data-testid="live-watch-panel"
+          tabIndex={0}
+          aria-label={liveWatchPanelAriaLabel}
+          title={liveWatchPanelAriaLabel}
+        >
           <div className="panel-title">Live</div>
           <div className="watch-live">{spectators}</div>
           <div className="odds-row">
@@ -1535,8 +3635,47 @@ export default function App() {
         </div>
 
         {/* Game Controls */}
-        <div className="panel">
+        <div className="panel control-panel" data-testid="control-panel">
           <div className="panel-title">Controls</div>
+          <div
+            className="control-legend"
+            data-testid="control-legend"
+            tabIndex={0}
+            aria-label={getControlLegendAriaLabel(activeAbility)}
+            title={getControlLegendAriaLabel(activeAbility)}
+          >
+            <div className="control-legend-row">
+              <span className="control-legend-label">Move</span>
+              <strong>Arrow keys / WASD</strong>
+            </div>
+            <div className="control-legend-row">
+              <span className="control-legend-label">Ability</span>
+              <strong>Space · {activeAbility.name}</strong>
+            </div>
+          </div>
+          <div
+            className="run-briefing"
+            data-testid="run-briefing"
+            tabIndex={0}
+            aria-label={getRunBriefingAriaLabel(mission, activeAbility)}
+            title={getRunBriefingAriaLabel(mission, activeAbility)}
+          >
+            <div className="run-briefing-row">
+              <span className="control-legend-label">Score Loop</span>
+              <strong>UGC cores = 10 pts</strong>
+              <span>Chain inside 2s to climb 1.5x / 2x / 3x.</span>
+            </div>
+            <div className="run-briefing-row">
+              <span className="control-legend-label">Mission Reward</span>
+              <strong>{mission.title}</strong>
+              <span>{mission.rewardLabel}</span>
+            </div>
+            <div className="run-briefing-row">
+              <span className="control-legend-label">Hero Edge</span>
+              <strong>{activeAbility.name}</strong>
+              <span>{activeAbility.summary}</span>
+            </div>
+          </div>
           <div className="game-controls">
             <button type="button" className={`ctrl-btn${running ? " pause" : " start"}`} onClick={() => dispatch({ type: "TOGGLE_RUN" })}>
               {running ? "Pause" : "Start"}
@@ -1548,7 +3687,13 @@ export default function App() {
 
       {/* ARENA */}
       <div className="arena-wrap">
-        <div className="arena-status-strip" data-testid="arena-status-strip">
+        <div
+          className="arena-status-strip"
+          data-testid="arena-status-strip"
+          tabIndex={0}
+          aria-label={getArenaStatusStripAriaLabel(directorPhase, mission, activeAbility, state.swingEventTriggered, liveAssetCount, liveSoundCount)}
+          title={getArenaStatusStripAriaLabel(directorPhase, mission, activeAbility, state.swingEventTriggered, liveAssetCount, liveSoundCount)}
+        >
           <span>Phase: {directorPhase.label}</span>
           <span>Mission: {mission.title}</span>
           <span>Ability: {activeAbility.name}</span>
@@ -1588,6 +3733,30 @@ export default function App() {
           <div className="game-over-overlay" data-testid="game-over-overlay">
             <div className="game-over-title">GAME OVER</div>
             <div className="game-over-score">Score: {score} | Best Combo: {maxCombo}x</div>
+            {leaderboardUpdate && (
+              <div
+                className={`game-over-placement game-over-placement-${leaderboardUpdate.tone}`}
+                data-testid="game-over-placement"
+                tabIndex={0}
+                aria-label={getGameOverCalloutAriaLabel("LEADERBOARD UPDATE", leaderboardUpdate.message)}
+                title={getGameOverCalloutAriaLabel("LEADERBOARD UPDATE", leaderboardUpdate.message)}
+                onKeyDown={handleGameOverCalloutKeyDown}
+              >
+                {leaderboardUpdate.message}
+              </div>
+            )}
+            {leaderboardMomentumUpdate && (
+              <div
+                className={`game-over-placement game-over-placement-${leaderboardMomentumUpdate.tone} game-over-momentum`}
+                data-testid="game-over-momentum"
+                tabIndex={0}
+                aria-label={getGameOverCalloutAriaLabel("MOMENTUM UPDATE", leaderboardMomentumUpdate.message)}
+                title={getGameOverCalloutAriaLabel("MOMENTUM UPDATE", leaderboardMomentumUpdate.message)}
+                onKeyDown={handleGameOverCalloutKeyDown}
+              >
+                {leaderboardMomentumUpdate.message}
+              </div>
+            )}
             <button type="button" onClick={handleReset}>Play Again</button>
           </div>
         )}
@@ -1599,34 +3768,148 @@ export default function App() {
         <div className="panel">
           <div className="panel-title">Betting</div>
           <div className="bet-inputs">
-            <input value={betName} onChange={(e) => setBetName(e.target.value)} placeholder="user name" />
-            <select value={betSide} onChange={(e) => setBetSide(e.target.value)}>
+            <input
+              data-testid="bet-name-input"
+              value={betName}
+              onChange={(e) => {
+                clearBetFeedback();
+                setBetName(e.target.value);
+              }}
+              placeholder="user name"
+              aria-label={getBetFieldAriaLabel("userName")}
+              title={getBetFieldAriaLabel("userName")}
+            />
+            <select
+              data-testid="bet-side-select"
+              value={betSide}
+              onChange={(e) => {
+                clearBetFeedback();
+                setBetSide(e.target.value);
+              }}
+              aria-label={getBetFieldAriaLabel("side")}
+              title={getBetFieldAriaLabel("side")}
+            >
               <option value="player">Player Win</option>
               <option value="enemy">Enemy Win</option>
             </select>
-            <input type="number" min="10" step="10" value={betAmount} onChange={(e) => setBetAmount(e.target.value)} />
+            <input
+              data-testid="bet-amount-input"
+              type="number"
+              min="10"
+              step="10"
+              value={betAmount}
+              onChange={(e) => {
+                clearBetFeedback();
+                setBetAmount(e.target.value);
+              }}
+              aria-label={getBetFieldAriaLabel("amount")}
+              title={getBetFieldAriaLabel("amount")}
+            />
           </div>
-          <button type="button" className="bet-btn" onClick={placeBet}>Place Bet</button>
+          <button
+            type="button"
+            className="bet-btn"
+            data-testid="bet-submit-button"
+            onClick={placeBet}
+            disabled={betPending}
+            aria-label={getBetSubmitButtonAriaLabel(betPending)}
+            title={getBetSubmitButtonAriaLabel(betPending)}
+          >
+            {betPending ? "Placing Bet..." : "Place Bet"}
+          </button>
+          <div
+            className="bet-status-strip"
+            data-testid="bet-status-strip"
+            tabIndex={0}
+            aria-label={getArchiveSummaryAriaLabel(bettingStatus.chip, bettingStatus.detail)}
+            title={getArchiveSummaryAriaLabel(bettingStatus.chip, bettingStatus.detail)}
+          >
+            <span className={`bet-status-chip bet-status-chip-${bettingStatus.tone}`} data-testid="bet-status-chip">
+              {bettingStatus.chip}
+            </span>
+            <span className="bet-status-note" data-testid="bet-status-note">{bettingStatus.detail}</span>
+          </div>
+          {betFeedback && (
+            <div
+              className={`bet-feedback share-feedback share-feedback-${betFeedback.tone}`}
+              data-testid="bet-feedback"
+              role="status"
+              aria-live="polite"
+              tabIndex={0}
+              aria-label={getBetFeedbackAriaLabel(betFeedback)}
+              title={getBetFeedbackAriaLabel(betFeedback)}
+            >
+              {betFeedback.message}
+            </div>
+          )}
         </div>
 
-        <div className="panel promo-director" data-testid="studio-pack-panel">
+        <div
+          className="panel promo-director"
+          data-testid="studio-pack-panel"
+          tabIndex={0}
+          aria-label={getStudioPackPanelAriaLabel(hero.name, studioStatus)}
+          title={getStudioPackPanelAriaLabel(hero.name, studioStatus)}
+        >
           <div className="panel-title">Promo Director</div>
           <textarea
             className="studio-brief-input"
             value={studioBrief}
-            onChange={(e) => setStudioBrief(e.target.value)}
+            onChange={(e) => {
+              setStudioBrief(e.target.value);
+              if (studioStatus !== "idle" || studioPack) {
+                resetStudioPackState({ cancelInFlight: studioStatus === "loading" });
+              }
+            }}
             placeholder="Describe the campaign brief once, then reuse it across sounds, assets, and social copy."
+            aria-label={getStudioBriefAriaLabel(hero.name)}
+            title={getStudioBriefAriaLabel(hero.name)}
           />
-          <button type="button" className="bet-btn" onClick={generateStudioPack} disabled={studioStatus === "loading"}>
+          <button
+            type="button"
+            className="bet-btn"
+            onClick={generateStudioPack}
+            disabled={studioStatus === "loading"}
+            aria-label={getStudioGenerateButtonAriaLabel(hero.name, studioStatus === "loading")}
+            title={getStudioGenerateButtonAriaLabel(hero.name, studioStatus === "loading")}
+          >
             {studioStatus === "loading" ? "Building Pack..." : "Generate Studio Pack"}
           </button>
-          <div className="studio-kpi-strip" data-testid="studio-kpi-strip">
+          {studioPackStatus && (
+            <div
+              className={`studio-pack-status share-feedback share-feedback-${studioPackStatus.tone}`}
+              data-testid="studio-pack-status"
+              role="status"
+              aria-live="polite"
+              tabIndex={0}
+              aria-label={getStudioPackStatusAriaLabel(studioPackStatus)}
+              title={getStudioPackStatusAriaLabel(studioPackStatus)}
+            >
+              <span className={`studio-pack-status-chip studio-pack-status-chip-${studioPackStatus.tone}`} data-testid="studio-pack-status-chip">
+                {studioPackStatus.chip}
+              </span>
+              <span className="studio-pack-status-detail" data-testid="studio-pack-status-detail">{studioPackStatus.detail}</span>
+            </div>
+          )}
+          <div
+            className="studio-kpi-strip"
+            data-testid="studio-kpi-strip"
+            tabIndex={0}
+            aria-label={getStudioKpiStripAriaLabel(studioCache)}
+            title={getStudioKpiStripAriaLabel(studioCache)}
+          >
             <span>cache hits {studioCache?.hits ?? 0}</span>
             <span>saved calls {studioCache?.savedCalls ?? 0}</span>
             <span>studio hits {studioCache?.studioPackHits ?? 0}</span>
           </div>
           {studioPack && (
-            <div className="studio-pack-card">
+            <div
+              className="studio-pack-card"
+              data-testid="studio-pack-card"
+              tabIndex={0}
+              aria-label={getStudioPackCardAriaLabel(studioPack)}
+              title={getStudioPackCardAriaLabel(studioPack)}
+            >
               <div className="studio-pack-header">
                 <strong>{studioPack.campaign.headline}</strong>
                 <span>{studioPack.cache_hit ? "cached" : "fresh"}</span>
@@ -1636,19 +3919,27 @@ export default function App() {
                 <span>{studioPack.savings.estimatedCallsSaved} calls saved</span>
                 <span>{studioPack.savings.estimatedCallsWithPack}/{studioPack.savings.estimatedCallsWithoutPack} planned</span>
               </div>
-              <div className="studio-queue">
+              <div className="studio-queue" data-testid="studio-queue-group">
                 <div className="studio-suggestion-title">Production Queue</div>
-                {studioPack.productionQueue.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="studio-queue-item"
-                    onClick={() => loadQueueItem(item)}
-                  >
-                    <strong>{item.label}</strong>
-                    <span>{item.lane} / {item.key}</span>
-                  </button>
-                ))}
+                {studioPack.productionQueue.map((item) => {
+                  const isActive = selectedQueueItemId === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`studio-queue-item${isActive ? " active" : ""}`}
+                      data-testid="studio-queue-item"
+                      aria-pressed={isActive}
+                      aria-description={getStudioQueueItemAriaLabel(item, isActive)}
+                      title={getStudioQueueItemAriaLabel(item, isActive)}
+                      onClick={() => loadQueueItem(item)}
+                      onKeyDown={(event) => handleStudioQueueKeyDown(event, item.id, studioPack.productionQueue, loadQueueItem)}
+                    >
+                      <strong>{item.label}</strong>
+                      <span>{item.lane} / {item.key}</span>
+                    </button>
+                  );
+                })}
               </div>
               <div className="studio-suggestion-group">
                 <div className="studio-suggestion-title">Sound Prompts</div>
@@ -1666,27 +3957,53 @@ export default function App() {
                   </button>
                 ))}
               </div>
-              <div className="studio-suggestion-group">
+              <div className="studio-suggestion-group" data-testid="studio-marketing-angle-group">
                 <div className="studio-suggestion-title">Marketing Copy</div>
-                {studioPack.marketingAngles.map((angle) => (
-                  <button
-                    key={angle.id}
-                    type="button"
-                    className={`studio-chip${selectedMarketingAngle?.id === angle.id ? " active" : ""}`}
-                    onClick={() => setSelectedMarketingAngle(angle)}
-                  >
-                    {angle.label}
-                  </button>
-                ))}
+                {studioPack.marketingAngles.map((angle) => {
+                  const isActive = selectedMarketingAngle?.id === angle.id;
+                  return (
+                    <button
+                      key={angle.id}
+                      type="button"
+                      data-testid="studio-marketing-angle"
+                      className={`studio-chip${isActive ? " active" : ""}`}
+                      aria-pressed={isActive}
+                      aria-description={getMarketingAngleAriaLabel(angle.label, isActive)}
+                      onClick={() => selectMarketingAngle(angle)}
+                      onKeyDown={(event) => handleMarketingAngleKeyDown(event, angle.id, studioPack.marketingAngles, selectMarketingAngle)}
+                    >
+                      {angle.label}
+                    </button>
+                  );
+                })}
               </div>
               {selectedMarketingAngle && (
-                <div className="studio-copy-card" data-testid="studio-copy-card">
+                <div
+                  className="studio-copy-card"
+                  data-testid="studio-copy-card"
+                  tabIndex={0}
+                  aria-label={getMarketingCopyCardAriaLabel(selectedMarketingAngle)}
+                  title={getMarketingCopyCardAriaLabel(selectedMarketingAngle)}
+                >
                   <strong>{selectedMarketingAngle.label}</strong>
                   <p>{selectedMarketingAngle.copy}</p>
                   <span>{selectedMarketingAngle.cta}</span>
-                  <button type="button" className="share-btn" onClick={copyMarketingCopy}>
-                    Copy launch copy
+                  <button type="button" className="share-btn" data-testid="studio-copy-button" onClick={copyMarketingCopy}>
+                    {marketingCopyButtonLabel()}
                   </button>
+                  {marketingCopyFeedback && (
+                    <div
+                      className={`studio-copy-feedback studio-copy-feedback-${marketingCopyFeedback.tone}`}
+                      data-testid="studio-copy-feedback"
+                      role="status"
+                      aria-live="polite"
+                      tabIndex={0}
+                      aria-label={getMarketingCopyFeedbackAriaLabel(marketingCopyFeedback, selectedMarketingAngle.label)}
+                      title={getMarketingCopyFeedbackAriaLabel(marketingCopyFeedback, selectedMarketingAngle.label)}
+                    >
+                      {marketingCopyFeedback.message}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1696,10 +4013,24 @@ export default function App() {
         {/* VARCO STUDIO EDITOR */}
         <div className="panel" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div className="panel-title">VARCO Studio Editor</div>
-          <div className="editor-tabs">
-            <button className={`editor-tab-btn ${editorTab === "sound" ? "active" : ""}`} onClick={() => setEditorTab("sound")}>🎵 사운드</button>
-            <button className={`editor-tab-btn ${editorTab === "asset" ? "active" : ""}`} onClick={() => setEditorTab("asset")}>🧊 에셋</button>
-            <button className={`editor-tab-btn ${editorTab === "history" ? "active" : ""}`} onClick={() => setEditorTab("history")}>📋 이력</button>
+          <div className="editor-tabs" data-testid="studio-editor-tab-group">
+            {EDITOR_TABS.map((tab) => {
+              const isActive = editorTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`editor-tab-btn ${isActive ? "active" : ""}`}
+                  data-testid="studio-editor-tab"
+                  aria-pressed={isActive}
+                  aria-description={getEditorTabAriaLabel(tab.ariaLabel, isActive)}
+                  onClick={() => setEditorTab(tab.id)}
+                  onKeyDown={(event) => handleEditorTabKeyDown(event, tab.id, setEditorTab)}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
           </div>
           <div className="editor-panel">
             {editorTab === "sound" && (
@@ -1708,6 +4039,8 @@ export default function App() {
                 dispatch={dispatch}
                 studioPack={studioPack}
                 draftPrompts={editorDrafts.sound}
+                selectedKey={editorSelection.sound}
+                onSelectKey={(key) => setEditorSelection((prev) => ({ ...prev, sound: key }))}
                 onDraftChange={(key, value) => updateEditorDraft("sound", key, value)}
               />
             )}
@@ -1717,6 +4050,8 @@ export default function App() {
                 dispatch={dispatch}
                 studioPack={studioPack}
                 draftPrompts={editorDrafts.asset}
+                selectedKey={editorSelection.asset}
+                onSelectKey={(key) => setEditorSelection((prev) => ({ ...prev, asset: key }))}
                 onDraftChange={(key, value) => updateEditorDraft("asset", key, value)}
               />
             )}
@@ -1727,21 +4062,80 @@ export default function App() {
         {/* SNS Share */}
         <div className="panel">
           <div className="panel-title">Share</div>
-          <div className="share-btns">
-            <button type="button" className="share-btn" onClick={() => shareResult("x")}>X</button>
-            <button type="button" className="share-btn" onClick={() => shareResult("facebook")}>FB</button>
-            <button type="button" className="share-btn" onClick={() => shareResult("telegram")}>TG</button>
+          <div className="share-btns" data-testid="share-button-group" role="group" aria-label="Share match recap">
+            <button
+              type="button"
+              className="share-btn"
+              data-testid="share-button-x"
+              data-share-button="true"
+              title={shareButtonLabel("x")}
+              aria-label={`${shareButtonLabel("x")}. Open the X share flow.`}
+              onClick={() => shareResult("x")}
+              onKeyDown={handleShareButtonKeyDown}
+            >
+              {shareButtonLabel("x")}
+            </button>
+            <button
+              type="button"
+              className="share-btn"
+              data-testid="share-button-facebook"
+              data-share-button="true"
+              title={shareButtonLabel("facebook")}
+              aria-label={`${shareButtonLabel("facebook")}. Open the Facebook share flow.`}
+              onClick={() => shareResult("facebook")}
+              onKeyDown={handleShareButtonKeyDown}
+            >
+              {shareButtonLabel("facebook")}
+            </button>
+            <button
+              type="button"
+              className="share-btn"
+              data-testid="share-button-telegram"
+              data-share-button="true"
+              title={shareButtonLabel("telegram")}
+              aria-label={`${shareButtonLabel("telegram")}. Open the Telegram share flow.`}
+              onClick={() => shareResult("telegram")}
+              onKeyDown={handleShareButtonKeyDown}
+            >
+              {shareButtonLabel("telegram")}
+            </button>
           </div>
+          {shareFeedback && (
+            <div
+              className={`share-feedback share-feedback-${shareFeedback.tone}`}
+              data-testid="share-feedback"
+              role="status"
+              aria-live="polite"
+              tabIndex={0}
+              aria-label={getShareFeedbackAriaLabel(shareFeedback)}
+              title={getShareFeedbackAriaLabel(shareFeedback)}
+            >
+              {shareFeedback.message}
+            </div>
+          )}
         </div>
 
         {/* Achievements */}
         <div className="panel">
           <div className="panel-title">Achievements</div>
-          <div className="achievement-list">
+          <div
+            className="achievement-list"
+            data-testid="achievement-list"
+            aria-label={getAchievementListAriaLabel(achievements.length, ACHIEVEMENTS.length)}
+          >
             {ACHIEVEMENTS.map((a) => {
               const unlocked = achievements.includes(a.id);
+              const achievementAriaLabel = getAchievementItemAriaLabel(a, unlocked);
               return (
-                <div key={a.id} className={`achievement-item${unlocked ? " unlocked" : ""}`}>
+                <div
+                  key={a.id}
+                  className={`achievement-item${unlocked ? " unlocked" : ""}`}
+                  data-testid="achievement-item"
+                  tabIndex={0}
+                  aria-label={achievementAriaLabel}
+                  title={achievementAriaLabel}
+                  onKeyDown={handleAchievementItemKeyDown}
+                >
                   <span className="achievement-icon">{unlocked ? "*" : "-"}</span>
                   <span>{a.name}</span>
                 </div>
@@ -1753,15 +4147,229 @@ export default function App() {
         {/* Leaderboard */}
         <div className="panel">
           <div className="panel-title">High Scores</div>
-          <ul className="leaderboard">
+          <div
+            className={`leaderboard-recap leaderboard-recap-${leaderboardRecap.tone}`}
+            data-testid="leaderboard-recap"
+            tabIndex={0}
+            aria-label={getArchiveSummaryAriaLabel(leaderboardRecap.chip, leaderboardRecap.detail)}
+            title={getArchiveSummaryAriaLabel(leaderboardRecap.chip, leaderboardRecap.detail)}
+          >
+            <span className="leaderboard-recap-chip" data-testid="leaderboard-recap-chip">{leaderboardRecap.chip}</span>
+            <span className="leaderboard-recap-detail" data-testid="leaderboard-recap-detail">{leaderboardRecap.detail}</span>
+          </div>
+          <div className="leaderboard-summary-grid" data-testid="leaderboard-summary-grid">
+            <div
+              className="leaderboard-summary-card"
+              data-testid="leaderboard-season-summary"
+              tabIndex={0}
+              aria-label={getArchiveSummaryAriaLabel("SEASON LEAD", leaderboardSeasonSummary.seasonDetail)}
+              title={getArchiveSummaryAriaLabel("SEASON LEAD", leaderboardSeasonSummary.seasonDetail)}
+              onKeyDown={handleLeaderboardSummaryKeyDown}
+            >
+              <span className="leaderboard-summary-label">SEASON LEAD</span>
+              <span className="leaderboard-summary-detail" data-testid="leaderboard-season-detail">{leaderboardSeasonSummary.seasonDetail}</span>
+            </div>
+            <div
+              className="leaderboard-summary-card"
+              data-testid="leaderboard-rival-summary"
+              tabIndex={0}
+              aria-label={getArchiveSummaryAriaLabel("RIVAL TARGET", leaderboardSeasonSummary.rivalDetail)}
+              title={getArchiveSummaryAriaLabel("RIVAL TARGET", leaderboardSeasonSummary.rivalDetail)}
+              onKeyDown={handleLeaderboardSummaryKeyDown}
+            >
+              <span className="leaderboard-summary-label">RIVAL TARGET</span>
+              <span className="leaderboard-summary-detail" data-testid="leaderboard-rival-detail">{leaderboardSeasonSummary.rivalDetail}</span>
+            </div>
+          </div>
+          <div className="leaderboard-control-panel" data-testid="leaderboard-control-panel">
+            <div className="leaderboard-control-label">BOARD CONTROL</div>
+            <div
+              className="leaderboard-control-momentum"
+              data-testid="leaderboard-control-momentum"
+              tabIndex={0}
+              aria-label={getArchiveSummaryAriaLabel(leaderboardMomentum.label, leaderboardMomentum.detail)}
+              title={getArchiveSummaryAriaLabel(leaderboardMomentum.label, leaderboardMomentum.detail)}
+            >
+              <span className="leaderboard-control-momentum-label">{leaderboardMomentum.label}</span>
+              <span className="leaderboard-control-momentum-detail">{leaderboardMomentum.detail}</span>
+            </div>
+            {leaderboardBoardControl.length > 0 ? (
+              <div className="leaderboard-control-list" data-testid="leaderboard-control-list">
+                {leaderboardBoardControl.map((control) => (
+                  <div
+                    key={control.hero}
+                    className="leaderboard-control-card"
+                    data-testid="leaderboard-control-item"
+                    tabIndex={0}
+                    aria-label={getLeaderboardControlAriaLabel(control)}
+                    title={getLeaderboardControlAriaLabel(control)}
+                    onKeyDown={handleLeaderboardControlKeyDown}
+                  >
+                    <div className="leaderboard-control-topline">
+                      <span className="leaderboard-control-hero">{control.hero}</span>
+                      <span className="leaderboard-control-badge">{control.badge}</span>
+                    </div>
+                    <div className="leaderboard-control-detail">{control.detail}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="leaderboard-control-empty" data-testid="leaderboard-control-empty">
+                Post the first clean run to reveal hero control badges.
+              </div>
+            )}
+          </div>
+          <div className="leaderboard-archive-panel" data-testid="leaderboard-archive-panel">
+            <div className="leaderboard-archive-label">{leaderboardSeasonArchive.label}</div>
+            {leaderboardSeasonArchive.filters.length > 1 && (
+              <div className="leaderboard-archive-filters" data-testid="leaderboard-archive-filters">
+                {leaderboardSeasonArchive.filters.map((filter) => {
+                  const isActive = leaderboardSeasonArchive.activeFilter === filter.id;
+                  return (
+                    <button
+                      key={filter.id}
+                      type="button"
+                      className={`leaderboard-archive-filter${isActive ? " active" : ""}`}
+                      data-testid="leaderboard-archive-filter"
+                      aria-pressed={isActive}
+                      aria-description={getArchiveFilterAriaLabel(filter.label, isActive)}
+                      title={getArchiveFilterAriaLabel(filter.label, isActive)}
+                      onClick={() => setSelectedArchiveHero(filter.id)}
+                      onKeyDown={(event) => handleArchiveFilterKeyDown(
+                        event,
+                        filter.id,
+                        leaderboardSeasonArchive.filters,
+                        setSelectedArchiveHero
+                      )}
+                    >
+                      {filter.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <div className="leaderboard-archive-detail" data-testid="leaderboard-archive-detail">{leaderboardSeasonArchive.detail}</div>
+            <div
+              className="leaderboard-archive-story"
+              data-testid="leaderboard-archive-story"
+              tabIndex={0}
+              aria-label={getArchiveSummaryAriaLabel(leaderboardSeasonArchive.storyLabel, leaderboardSeasonArchive.storyDetail)}
+              title={getArchiveSummaryAriaLabel(leaderboardSeasonArchive.storyLabel, leaderboardSeasonArchive.storyDetail)}
+              onKeyDown={handleArchiveSummaryKeyDown}
+            >
+              <span className="leaderboard-archive-story-label">{leaderboardSeasonArchive.storyLabel}</span>
+              <span className="leaderboard-archive-story-detail">{leaderboardSeasonArchive.storyDetail}</span>
+            </div>
+            <div
+              className="leaderboard-archive-delta"
+              data-testid="leaderboard-archive-delta"
+              tabIndex={0}
+              aria-label={getArchiveSummaryAriaLabel(leaderboardSeasonArchive.deltaLabel, leaderboardSeasonArchive.deltaDetail)}
+              title={getArchiveSummaryAriaLabel(leaderboardSeasonArchive.deltaLabel, leaderboardSeasonArchive.deltaDetail)}
+              onKeyDown={handleArchiveSummaryKeyDown}
+            >
+              <span className="leaderboard-archive-delta-label">{leaderboardSeasonArchive.deltaLabel}</span>
+              <span className="leaderboard-archive-delta-detail">{leaderboardSeasonArchive.deltaDetail}</span>
+            </div>
+            <div
+              className="leaderboard-archive-trend"
+              data-testid="leaderboard-archive-trend"
+              tabIndex={0}
+              aria-label={getArchiveSummaryAriaLabel(leaderboardSeasonArchive.trendLabel, leaderboardSeasonArchive.trendDetail)}
+              title={getArchiveSummaryAriaLabel(leaderboardSeasonArchive.trendLabel, leaderboardSeasonArchive.trendDetail)}
+              onKeyDown={handleArchiveSummaryKeyDown}
+            >
+              <span className="leaderboard-archive-trend-label">{leaderboardSeasonArchive.trendLabel}</span>
+              <span className="leaderboard-archive-trend-detail">{leaderboardSeasonArchive.trendDetail}</span>
+            </div>
+            {leaderboardSeasonArchive.entries.length > 0 ? (
+              <div className="leaderboard-archive-list" data-testid="leaderboard-archive-list">
+                {leaderboardSeasonArchive.entries.map((entry) => (
+                  <div
+                    key={`${entry.hero}-${entry.score}-${entry.combo}-${entry.createdAt}`}
+                    className="leaderboard-archive-card"
+                    data-testid="leaderboard-archive-item"
+                    tabIndex={0}
+                    aria-label={getArchiveEntryAriaLabel(entry)}
+                    title={getArchiveEntryAriaLabel(entry)}
+                    onKeyDown={handleArchiveItemKeyDown}
+                  >
+                    <div className="leaderboard-archive-topline">
+                      <span className="leaderboard-archive-hero">{entry.hero}</span>
+                      <span className={`leaderboard-archive-chip${entry.qualified ? "" : " leaderboard-archive-chip-archived"}`}>{entry.chip}</span>
+                    </div>
+                    <div className="leaderboard-archive-meta">{entry.detail}</div>
+                    <div
+                      className={`leaderboard-archive-entry-trend leaderboard-archive-entry-trend-${entry.trendTone}`}
+                      data-testid="leaderboard-archive-entry-trend"
+                      tabIndex={0}
+                      aria-label={getArchiveEntryTrendAriaLabel(entry.hero, entry.trendLabel, entry.trendDetail)}
+                      title={getArchiveEntryTrendAriaLabel(entry.hero, entry.trendLabel, entry.trendDetail)}
+                      onKeyDown={handleArchiveEntryTrendKeyDown}
+                    >
+                      <span className="leaderboard-archive-entry-trend-label">{entry.trendLabel}</span>
+                      <span className="leaderboard-archive-entry-trend-detail">{entry.trendDetail}</span>
+                    </div>
+                    {entry.form.length > 0 && (
+                      <div
+                        className="leaderboard-archive-entry-form"
+                        data-testid="leaderboard-archive-entry-form"
+                        tabIndex={0}
+                        aria-label={getArchiveEntryFormGroupAriaLabel(entry.hero, entry.form)}
+                        title={getArchiveEntryFormGroupAriaLabel(entry.hero, entry.form)}
+                        onKeyDown={handleArchiveFormGroupKeyDown}
+                      >
+                        <span className="leaderboard-archive-entry-form-label">RECENT FORM</span>
+                        <div className="leaderboard-archive-entry-form-chips">
+                          {entry.form.map((formEntry) => (
+                            <span
+                              key={formEntry.id}
+                              className={[
+                                "leaderboard-archive-entry-form-chip",
+                                formEntry.current ? "current" : "",
+                                formEntry.qualified ? "qualified" : "archived"
+                              ].filter(Boolean).join(" ")}
+                              data-testid="leaderboard-archive-entry-form-chip"
+                              title={formEntry.detail}
+                              tabIndex={0}
+                              aria-label={getArchiveFormChipAriaLabel(entry.hero, formEntry)}
+                              onKeyDown={handleArchiveFormChipKeyDown}
+                            >
+                              {formEntry.label}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="leaderboard-archive-empty" data-testid="leaderboard-archive-empty">
+                Archived season history appears after the first completed run.
+              </div>
+            )}
+          </div>
+          <ul className="leaderboard" data-testid="high-scores-list">
             {highScores.length === 0 && <li style={{ color: "#8b949e", fontSize: "11px" }}>No scores yet</li>}
-            {highScores.map((hs, i) => (
-              <li key={`${i}-${hs.score}`}>
-                <span className="rank">#{i + 1}</span>
-                <span>{hs.hero}</span>
-                <span className="lb-score">{hs.score}</span>
-              </li>
-            ))}
+            {highScores.map((hs, i) => {
+              const itemAriaLabel = getHighScoreItemAriaLabel(hs, i + 1);
+              return (
+                <li
+                  key={`${hs.hero}-${hs.score}-${hs.combo}-${hs.createdAt}-${i}`}
+                  data-testid="high-score-item"
+                  tabIndex={0}
+                  aria-label={itemAriaLabel}
+                  title={itemAriaLabel}
+                  onKeyDown={handleHighScoreItemKeyDown}
+                >
+                  <span className="rank">#{i + 1}</span>
+                  <span>{hs.hero}</span>
+                  <span style={{ color: "#8b949e", fontSize: "11px" }}>Combo {hs.combo} · {hs.date}</span>
+                  <span className="lb-score">{hs.score}</span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       </div>
@@ -1774,10 +4382,37 @@ export default function App() {
         </div>
         <div className="panel">
           <div className="panel-title">Agent Log Feed</div>
-          <ul className="log-list server-log">
-            {serverLogs.map((entry) => (
-              <li key={entry.id}>[{entry.level}] {entry.message}</li>
-            ))}
+          {agentLogSummary && (
+            <div
+              className={`share-feedback share-feedback-ready`}
+              data-testid="agent-log-summary"
+              role="status"
+              aria-live="polite"
+              tabIndex={0}
+              aria-label={getAgentLogSummaryAriaLabel(agentLogSummary)}
+              title={getAgentLogSummaryAriaLabel(agentLogSummary)}
+            >
+              {agentLogSummary.message}
+            </div>
+          )}
+          <ul className="log-list server-log" aria-label="Agent log feed" data-testid="agent-log-list">
+            {serverLogs.length > 0 ? serverLogs.map((entry, index) => {
+              const entryAriaLabel = getAgentLogEntryAriaLabel(entry, index);
+              return (
+                <li
+                  key={entry.id}
+                  data-testid="agent-log-item"
+                  tabIndex={0}
+                  aria-label={entryAriaLabel}
+                  title={entryAriaLabel}
+                  onKeyDown={handleAgentLogItemKeyDown}
+                >
+                  [{entry.level}] {entry.message}
+                </li>
+              );
+            }) : (
+              <li className="log-empty" data-testid="agent-log-empty">No agent logs yet.</li>
+            )}
           </ul>
         </div>
       </div>
