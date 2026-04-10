@@ -774,6 +774,97 @@ test.describe("Web UI", () => {
     await expect(assetPromptInput).toHaveValue("Orb");
   });
 
+  test("editing the brief during an in-flight studio pack failure keeps stale errors from restoring cleared pack UI", async ({ page }) => {
+    let releasePendingFailure;
+    const pendingFailure = new Promise((resolve) => {
+      releasePendingFailure = resolve;
+    });
+    let requestCount = 0;
+
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const payload = route.request().postDataJSON();
+      if (requestCount === 2) {
+        await pendingFailure;
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ ok: false, message: `studio pack timeout for ${payload.brief}` })
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(createStudioPackFixture(payload.brief, {
+          heroName: "3D Modeler",
+          suffix: `request-${requestCount}`
+        }))
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const soundPromptInput = page.locator(".sound-editor .prompt-input");
+    const assetPromptInput = page.locator(".asset-editor .prompt-input");
+    const soundTabGroup = page.getByTestId("sound-tab-group");
+    const assetCardGroup = page.getByTestId("asset-card-group");
+    const orbSoundTab = page.getByTestId("sound-tab-orb");
+    const heroShowcaseQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Hero showcase model" });
+    const socialQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Social launch copy" });
+    const copyCard = page.getByTestId("studio-copy-card");
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Fresh studio pack ready for 3D Modeler.");
+
+    await orbSoundTab.click();
+    await heroShowcaseQueueItem.click();
+    await socialQueueItem.click();
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes launch copy");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await briefInput.fill("Midnight remix pack for creator duels");
+    await generateButton.click();
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Generating a reusable promo pack for 3D Modeler.");
+
+    await briefInput.fill("Sunset arcade relaunch for creator heroes");
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for 3D Modeler. Ready for a new campaign brief.");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(page.getByTestId("studio-pack-status")).toHaveCount(0);
+    await expect(copyCard).toHaveCount(0);
+
+    await page.getByRole("button", { name: /^🎵 사운드$/ }).click();
+    await expect(page.getByTestId("sound-tab-bgm")).toHaveClass(/active/);
+    await expect(soundPromptInput).toHaveValue("ambient game background music");
+    await expect(soundTabGroup).toHaveAttribute("aria-label", /Selected BGM\./);
+    await expect(soundTabGroup).not.toHaveAttribute("aria-label", /Selected Orb 수집음\./);
+
+    await page.getByRole("button", { name: /^🧊 에셋$/ }).click();
+    await expect(page.getByTestId("asset-card-orb")).toHaveClass(/selected/);
+    await expect(assetPromptInput).toHaveValue("Orb");
+    await expect(assetCardGroup).toHaveAttribute("aria-label", /Selected Orb\./);
+    await expect(assetCardGroup).not.toHaveAttribute("aria-label", /Selected Player\./);
+
+    releasePendingFailure();
+    await page.waitForTimeout(50);
+
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for 3D Modeler. Ready for a new campaign brief.");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(page.getByTestId("studio-pack-status")).toHaveCount(0);
+    await expect(copyCard).toHaveCount(0);
+    await expect(page.getByText("studio pack timeout for Midnight remix pack for creator duels")).toHaveCount(0);
+
+    await page.getByRole("button", { name: /^🎵 사운드$/ }).click();
+    await expect(page.getByTestId("sound-tab-bgm")).toHaveClass(/active/);
+    await expect(soundPromptInput).toHaveValue("ambient game background music");
+
+    await page.getByRole("button", { name: /^🧊 에셋$/ }).click();
+    await expect(page.getByTestId("asset-card-orb")).toHaveClass(/selected/);
+    await expect(assetPromptInput).toHaveValue("Orb");
+  });
+
   test("switching heroes after loading social queue copy resets the next hero pack to its default copy", async ({ page }) => {
     await page.route("**/api/varco/studio-pack", async (route) => {
       const payload = route.request().postDataJSON();
