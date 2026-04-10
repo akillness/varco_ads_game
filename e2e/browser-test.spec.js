@@ -50,6 +50,33 @@ function createStudioPackFixture(brief, { heroName = "Sound Crafter", suffix = "
   };
 }
 
+function createCachedStudioPackSelectionFixture(brief, { suffix }) {
+  const fixture = createStudioPackFixture(brief, { suffix });
+  fixture.studioPack.packId = `pack-${suffix}`;
+  fixture.studioPack.marketingAngles = [
+    {
+      id: `${suffix}-x`,
+      channel: "x",
+      label: "X",
+      copy: `${brief} X copy`,
+      cta: "Drop into the arena"
+    },
+    {
+      id: `${suffix}-instagram`,
+      channel: "instagram",
+      label: "Instagram Reel",
+      copy: `${brief} Instagram Reel copy`,
+      cta: "Swipe into the spotlight"
+    }
+  ];
+  fixture.studioPack.productionQueue = [
+    { id: `queue-sound-${suffix}`, label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: `${brief} bgm prompt` },
+    { id: `queue-asset-player-${suffix}`, label: "Hero showcase model", lane: "asset", key: "player", prompt: `${brief} player direction` },
+    { id: `queue-social-${suffix}`, label: "Social launch copy", lane: "social", key: "x", prompt: `${brief} X copy` }
+  ];
+  return fixture;
+}
+
 test.describe("API contracts", () => {
   test("GET /api/health exposes cache stats", async ({ request }) => {
     const res = await request.get(`${API}/api/health`);
@@ -675,21 +702,21 @@ test.describe("Web UI", () => {
           id: "cached-launch-x",
           channel: "x",
           label: "X",
-          copy: "Retro arcade launch X copy",
+          copy: "Retro arcade launch for creator heroes X copy",
           cta: "Drop into the arena"
         },
         {
           id: "cached-launch-instagram",
           channel: "instagram",
           label: "Instagram Reel",
-          copy: "Retro arcade launch Instagram Reel copy",
+          copy: "Retro arcade launch for creator heroes Instagram Reel copy",
           cta: "Swipe into the spotlight"
         }
       ];
       fixture.studioPack.productionQueue = [
         { id: "queue-sound-cached", label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: "Retro arcade launch bgm prompt" },
         { id: "queue-asset-player-cached", label: "Hero showcase model", lane: "asset", key: "player", prompt: "Retro arcade launch player direction" },
-        { id: "queue-social-cached", label: "Social launch copy", lane: "social", key: "x", prompt: "Retro arcade launch X copy" }
+        { id: "queue-social-cached", label: "Social launch copy", lane: "social", key: "x", prompt: "Retro arcade launch for creator heroes X copy" }
       ];
       fixture.studioPack.cache_hit = requestCount > 1;
       await route.fulfill({
@@ -711,19 +738,19 @@ test.describe("Web UI", () => {
     await briefInput.fill("Retro arcade launch for creator heroes");
     await generateButton.click();
     await expect(studioStatus).toContainText("Fresh studio pack ready for 3D Modeler.");
-    await expect(copyCard).toContainText("Retro arcade launch X copy");
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
     await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
     await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
 
     await instagramAngleButton.click();
-    await expect(copyCard).toContainText("Retro arcade launch Instagram Reel copy");
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes Instagram Reel copy");
     await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
     await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
 
     await generateButton.click();
     await expect(studioStatus).toContainText("CACHE HIT");
     await expect(studioStatus).toContainText("Reused the latest studio pack for 3D Modeler.");
-    await expect(copyCard).toContainText("Retro arcade launch X copy");
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
     await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
     await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
   });
@@ -919,14 +946,14 @@ test.describe("Web UI", () => {
           id: "launch-x",
           channel: "x",
           label: "X",
-          copy: "Retro arcade launch X copy",
+          copy: "Retro arcade launch for creator heroes X copy",
           cta: "Drop into the arena"
         },
         {
           id: "launch-instagram",
           channel: "instagram",
           label: "Instagram Reel",
-          copy: "Retro arcade launch Instagram Reel copy",
+          copy: "Retro arcade launch for creator heroes Instagram Reel copy",
           cta: "Swipe into the spotlight"
         }
       ];
@@ -1050,31 +1077,9 @@ test.describe("Web UI", () => {
     let requestCount = 0;
     await page.route("**/api/varco/studio-pack", async (route) => {
       requestCount += 1;
-      const fixture = createStudioPackFixture("Retro arcade launch for creator heroes", {
+      const fixture = createCachedStudioPackSelectionFixture("Retro arcade launch for creator heroes", {
         suffix: "cached-copy-feedback"
       });
-      fixture.studioPack.packId = "pack-cached-copy-feedback";
-      fixture.studioPack.marketingAngles = [
-        {
-          id: "cached-feedback-x",
-          channel: "x",
-          label: "X",
-          copy: "Retro arcade launch X copy",
-          cta: "Drop into the arena"
-        },
-        {
-          id: "cached-feedback-instagram",
-          channel: "instagram",
-          label: "Instagram Reel",
-          copy: "Retro arcade launch Instagram Reel copy",
-          cta: "Swipe into the spotlight"
-        }
-      ];
-      fixture.studioPack.productionQueue = [
-        { id: "queue-sound-cached-feedback", label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: "Retro arcade launch bgm prompt" },
-        { id: "queue-asset-player-cached-feedback", label: "Hero showcase model", lane: "asset", key: "player", prompt: "Retro arcade launch player direction" },
-        { id: "queue-social-cached-feedback", label: "Social launch copy", lane: "social", key: "x", prompt: "Retro arcade launch X copy" }
-      ];
       fixture.studioPack.cache_hit = requestCount > 1;
       await route.fulfill({
         status: 200,
@@ -1097,12 +1102,12 @@ test.describe("Web UI", () => {
     await briefInput.fill("Retro arcade launch for creator heroes");
     await generateButton.click();
     await expect(studioStatus).toContainText("Fresh studio pack ready for 3D Modeler.");
-    await expect(copyCard).toContainText("Retro arcade launch X copy");
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
     await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
     await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
 
     await instagramAngleButton.click();
-    await expect(copyCard).toContainText("Retro arcade launch Instagram Reel copy");
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes Instagram Reel copy");
     await expect(copyButton).toHaveText("Copy Instagram Reel copy");
     await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
     await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
@@ -1115,7 +1120,7 @@ test.describe("Web UI", () => {
     await expect(studioStatus).toContainText("CACHE HIT");
     await expect(studioStatus).toContainText("Reused the latest studio pack for 3D Modeler.");
     await expect(copyFeedback).toHaveCount(0);
-    await expect(copyCard).toContainText("Retro arcade launch X copy");
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
     await expect(copyButton).toHaveText("Copy X copy");
     await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
     await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
@@ -1123,7 +1128,7 @@ test.describe("Web UI", () => {
     await page.evaluate(() => window.__resolveClipboardWrite());
     await page.waitForTimeout(50);
     await expect(page.getByTestId("studio-copy-feedback")).toHaveCount(0);
-    await expect(copyCard).toContainText("Retro arcade launch X copy");
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
     await expect(copyButton).toHaveText("Copy X copy");
     await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
     await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
@@ -1149,31 +1154,9 @@ test.describe("Web UI", () => {
     let requestCount = 0;
     await page.route("**/api/varco/studio-pack", async (route) => {
       requestCount += 1;
-      const fixture = createStudioPackFixture("Retro arcade launch for creator heroes", {
+      const fixture = createCachedStudioPackSelectionFixture("Retro arcade launch for creator heroes", {
         suffix: "cached-copy-error"
       });
-      fixture.studioPack.packId = "pack-cached-copy-error";
-      fixture.studioPack.marketingAngles = [
-        {
-          id: "cached-error-x",
-          channel: "x",
-          label: "X",
-          copy: "Retro arcade launch X copy",
-          cta: "Drop into the arena"
-        },
-        {
-          id: "cached-error-instagram",
-          channel: "instagram",
-          label: "Instagram Reel",
-          copy: "Retro arcade launch Instagram Reel copy",
-          cta: "Swipe into the spotlight"
-        }
-      ];
-      fixture.studioPack.productionQueue = [
-        { id: "queue-sound-cached-error", label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: "Retro arcade launch bgm prompt" },
-        { id: "queue-asset-player-cached-error", label: "Hero showcase model", lane: "asset", key: "player", prompt: "Retro arcade launch player direction" },
-        { id: "queue-social-cached-error", label: "Social launch copy", lane: "social", key: "x", prompt: "Retro arcade launch X copy" }
-      ];
       fixture.studioPack.cache_hit = requestCount > 1;
       await route.fulfill({
         status: 200,
@@ -1196,12 +1179,12 @@ test.describe("Web UI", () => {
     await briefInput.fill("Retro arcade launch for creator heroes");
     await generateButton.click();
     await expect(studioStatus).toContainText("Fresh studio pack ready for 3D Modeler.");
-    await expect(copyCard).toContainText("Retro arcade launch X copy");
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
     await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
     await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
 
     await instagramAngleButton.click();
-    await expect(copyCard).toContainText("Retro arcade launch Instagram Reel copy");
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes Instagram Reel copy");
     await expect(copyButton).toHaveText("Copy Instagram Reel copy");
     await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
     await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
@@ -1214,7 +1197,7 @@ test.describe("Web UI", () => {
     await expect(studioStatus).toContainText("CACHE HIT");
     await expect(studioStatus).toContainText("Reused the latest studio pack for 3D Modeler.");
     await expect(copyFeedback).toHaveCount(0);
-    await expect(copyCard).toContainText("Retro arcade launch X copy");
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
     await expect(copyButton).toHaveText("Copy X copy");
     await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
     await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
@@ -1222,7 +1205,68 @@ test.describe("Web UI", () => {
     await page.evaluate(() => window.__rejectClipboardWrite());
     await page.waitForTimeout(50);
     await expect(page.getByTestId("studio-copy-feedback")).toHaveCount(0);
-    await expect(copyCard).toContainText("Retro arcade launch X copy");
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
+    await expect(copyButton).toHaveText("Copy X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("cached pack reload clears clipboard-unavailable errors while restoring the default social selection", async ({ page }) => {
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {},
+      });
+    });
+
+    let requestCount = 0;
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const fixture = createCachedStudioPackSelectionFixture("Retro arcade launch for creator heroes", {
+        suffix: "cached-copy-unavailable"
+      });
+      fixture.studioPack.cache_hit = requestCount > 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(fixture)
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const copyButton = page.getByTestId("studio-copy-button");
+    const copyCard = page.getByTestId("studio-copy-card");
+    const copyFeedback = page.getByTestId("studio-copy-feedback");
+    const studioStatus = page.getByTestId("studio-pack-status");
+    const socialQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Social launch copy" });
+    const xAngleButton = page.getByRole("button", { name: "X", exact: true });
+    const instagramAngleButton = page.getByRole("button", { name: "Instagram Reel", exact: true });
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Fresh studio pack ready for 3D Modeler.");
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await instagramAngleButton.click();
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes Instagram Reel copy");
+    await expect(copyButton).toHaveText("Copy Instagram Reel copy");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
+
+    await copyButton.click();
+    await expect(copyButton).toHaveText("Copy Instagram Reel copy");
+    await expect(copyFeedback).toContainText("Clipboard unavailable in this browser.");
+    await expect(copyFeedback).toHaveAttribute("aria-label", "Marketing copy status. Error. Instagram Reel. Clipboard unavailable in this browser.");
+
+    await generateButton.click();
+    await expect(studioStatus).toContainText("CACHE HIT");
+    await expect(studioStatus).toContainText("Reused the latest studio pack for 3D Modeler.");
+    await expect(copyFeedback).toHaveCount(0);
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
     await expect(copyButton).toHaveText("Copy X copy");
     await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
     await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
