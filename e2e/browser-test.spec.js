@@ -343,6 +343,14 @@ test.describe("Web UI", () => {
     const copyCard = page.getByTestId("studio-copy-card");
     const copyButton = page.getByTestId("studio-copy-button");
 
+    await expect(copyCard).toHaveAttribute("tabindex", "0");
+    await expect(copyCard).toHaveAttribute("aria-label", /Marketing copy card\. X\./);
+    await expect(copyCard).toHaveAttribute("aria-label", /VARCO arena/);
+    await expect(copyCard).toHaveAttribute("aria-label", /Call to action:/);
+    await expect(copyCard).toHaveAttribute("title", /Marketing copy card\. X\./);
+    await copyCard.focus();
+    await expect(copyCard).toBeFocused();
+
     await copyButton.click();
     const copiedText = await page.evaluate(() => window.__copiedText);
     expect(copiedText).toContain("CTA:");

@@ -1529,6 +1529,15 @@ function getMarketingCopyFeedbackAriaLabel(feedback, angleLabel = "marketing cop
   return `Marketing copy status. ${toneLabel}. ${angleLabel}. ${feedback.message}`;
 }
 
+function getMarketingCopyCardAriaLabel(angle) {
+  if (!angle) {
+    return "Marketing copy card unavailable.";
+  }
+
+  const ctaText = angle.cta ? ` Call to action: ${angle.cta}.` : "";
+  return `Marketing copy card. ${angle.label}. ${angle.copy}.${ctaText}`;
+}
+
 function getStudioPackStatusSnapshot(status, studioPack, heroName, errorMessage = "") {
   if (status === "loading") {
     return {
@@ -3611,7 +3620,13 @@ export default function App() {
                 })}
               </div>
               {selectedMarketingAngle && (
-                <div className="studio-copy-card" data-testid="studio-copy-card">
+                <div
+                  className="studio-copy-card"
+                  data-testid="studio-copy-card"
+                  tabIndex={0}
+                  aria-label={getMarketingCopyCardAriaLabel(selectedMarketingAngle)}
+                  title={getMarketingCopyCardAriaLabel(selectedMarketingAngle)}
+                >
                   <strong>{selectedMarketingAngle.label}</strong>
                   <p>{selectedMarketingAngle.copy}</p>
                   <span>{selectedMarketingAngle.cta}</span>
