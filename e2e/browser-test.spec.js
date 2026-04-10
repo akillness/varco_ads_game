@@ -137,6 +137,9 @@ test.describe("Web UI", () => {
   test("renders gameplay HUD and promo director", async ({ page }) => {
     await expect(page.locator(".brand-title")).toContainText("VARCO AGENT SAGA");
 
+    const hpPanel = page.getByTestId("hp-panel");
+    const levelPanel = page.getByTestId("level-panel");
+    const comboPanel = page.getByTestId("combo-panel");
     const missionPanel = page.getByTestId("mission-panel");
     const abilityPanel = page.getByTestId("ability-panel");
     const directorPanel = page.getByTestId("director-panel");
@@ -145,17 +148,29 @@ test.describe("Web UI", () => {
     const studioKpiStrip = page.getByTestId("studio-kpi-strip");
     const arenaStatusStrip = page.getByTestId("arena-status-strip");
 
+    await expect(hpPanel).toBeVisible();
+    await expect(levelPanel).toBeVisible();
+    await expect(comboPanel).toBeVisible();
     await expect(missionPanel).toBeVisible();
     await expect(abilityPanel).toBeVisible();
     await expect(directorPanel).toBeVisible();
     await expect(powerupPanel).toBeVisible();
     await expect(liveWatchPanel).toBeVisible();
     await expect(page.getByTestId("studio-pack-panel")).toBeVisible();
+    await expect(hpPanel).toContainText("HP");
+    await expect(levelPanel).toContainText("Level");
+    await expect(comboPanel).toContainText("Multiplier");
     await expect(powerupPanel).toContainText("Shield");
     await expect(liveWatchPanel).toContainText("Live");
     await expect(studioKpiStrip).toContainText("cache hits");
     await expect(arenaStatusStrip).toContainText("Mission:");
 
+    await expect(hpPanel).toHaveAttribute("tabindex", "0");
+    await expect(hpPanel).toHaveAttribute("aria-label", "Health. 6 of 6 HP. 100 percent. Healthy.");
+    await expect(levelPanel).toHaveAttribute("tabindex", "0");
+    await expect(levelPanel).toHaveAttribute("aria-label", "Level. 1. XP 0 of 80. HP 6 / SPD 1");
+    await expect(comboPanel).toHaveAttribute("tabindex", "0");
+    await expect(comboPanel).toHaveAttribute("aria-label", "Combo. 0x multiplier. 1.0x points.");
     await expect(missionPanel).toHaveAttribute("tabindex", "0");
     await expect(missionPanel).toHaveAttribute("aria-label", /Director Mission\./);
     await expect(abilityPanel).toHaveAttribute("tabindex", "0");
@@ -171,6 +186,12 @@ test.describe("Web UI", () => {
     await expect(arenaStatusStrip).toHaveAttribute("tabindex", "0");
     await expect(arenaStatusStrip).toHaveAttribute("aria-label", /Arena status\. Phase:/);
 
+    await hpPanel.focus();
+    await expect(hpPanel).toBeFocused();
+    await levelPanel.focus();
+    await expect(levelPanel).toBeFocused();
+    await comboPanel.focus();
+    await expect(comboPanel).toBeFocused();
     await directorPanel.focus();
     await expect(directorPanel).toBeFocused();
     await powerupPanel.focus();

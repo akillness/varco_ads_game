@@ -1635,6 +1635,24 @@ function getArenaStatusStripAriaLabel(directorPhase, mission, activeAbility, swi
   return `Arena status. Phase: ${directorPhase?.label || "unknown"}. Mission: ${mission?.title || "unknown"}. Ability: ${activeAbility?.name || "unknown"}. Swing: ${swingTriggered ? "Triggered" : "Pending"}. Assets live: ${liveAssetCount}/3. Sound cues live: ${liveSoundCount}/5.`;
 }
 
+function getHpPanelAriaLabel(hp, maxHp) {
+  const safeHp = Math.max(hp, 0);
+  const safeMaxHp = Math.max(maxHp, 1);
+  const healthPercent = Math.round((safeHp / safeMaxHp) * 100);
+  const healthState = healthPercent <= 30 ? "Critical health." : healthPercent <= 60 ? "Damaged but stable." : "Healthy.";
+  return `Health. ${safeHp} of ${safeMaxHp} HP. ${healthPercent} percent. ${healthState}`;
+}
+
+function getLevelPanelAriaLabel(level, xp, hero) {
+  const nextXp = xpForLevel(level);
+  const heroSummary = hero?.desc || "Hero profile unavailable.";
+  return `Level. ${level}. XP ${xp} of ${nextXp}. ${heroSummary}`;
+}
+
+function getComboPanelAriaLabel(combo) {
+  return `Combo. ${combo}x multiplier. ${comboMultiplier(combo).toFixed(1)}x points.`;
+}
+
 function getPowerupPanelAriaLabel(activePowerups = {}, powerup = null) {
   const now = Date.now();
   const statusSummary = POWERUP_TYPES.map((pt) => {
@@ -3192,7 +3210,13 @@ export default function App() {
       {/* LEFT PANEL */}
       <div className="left-panel">
         {/* HP */}
-        <div className="panel">
+        <div
+          className="panel hp-panel"
+          data-testid="hp-panel"
+          tabIndex={0}
+          aria-label={getHpPanelAriaLabel(hp, hero.hp)}
+          title={getHpPanelAriaLabel(hp, hero.hp)}
+        >
           <div className="panel-title">HP</div>
           <div className="hp-bar-wrap">
             <div className={`hp-bar-fill${hpPercent <= 30 ? " low" : ""}`} style={{ width: `${hpPercent}%` }} />
@@ -3201,7 +3225,13 @@ export default function App() {
         </div>
 
         {/* XP / Level */}
-        <div className="panel">
+        <div
+          className="panel level-panel"
+          data-testid="level-panel"
+          tabIndex={0}
+          aria-label={getLevelPanelAriaLabel(level, xp, hero)}
+          title={getLevelPanelAriaLabel(level, xp, hero)}
+        >
           <div className="panel-title">Level {level}</div>
           <div className="xp-bar-wrap">
             <div className="xp-bar-fill" style={{ width: `${xpPercent}%` }} />
@@ -3213,7 +3243,13 @@ export default function App() {
         </div>
 
         {/* Combo */}
-        <div className="panel">
+        <div
+          className="panel combo-panel"
+          data-testid="combo-panel"
+          tabIndex={0}
+          aria-label={getComboPanelAriaLabel(combo)}
+          title={getComboPanelAriaLabel(combo)}
+        >
           <div className="panel-title">Combo</div>
           <div className="combo-display">
             <div className={`combo-count${combo > 1 ? " bump" : ""}`}>{combo}x</div>
