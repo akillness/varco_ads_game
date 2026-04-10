@@ -596,6 +596,72 @@ test.describe("Web UI", () => {
     await expect(assetCardGroup).not.toHaveAttribute("aria-label", /Retro arcade launch for creator heroes player direction/);
   });
 
+  test("switching heroes after loading social queue copy resets the next hero pack to its default copy", async ({ page }) => {
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      const payload = route.request().postDataJSON();
+      const heroName = payload.heroId === "sounder" ? "Sound Crafter" : "3D Modeler";
+      const brief = payload.heroId === "sounder"
+        ? "Midnight remix pack for creator duels"
+        : "Retro arcade launch for creator heroes";
+      const fixture = createStudioPackFixture(brief, {
+        heroName,
+        suffix: payload.heroId
+      });
+      fixture.studioPack.marketingAngles = [
+        {
+          id: `${payload.heroId}-launch-x`,
+          channel: "x",
+          label: "X",
+          copy: `${brief} X copy`,
+          cta: `${heroName} CTA`
+        },
+        {
+          id: `${payload.heroId}-launch-instagram`,
+          channel: "instagram",
+          label: "Instagram Reel",
+          copy: `${brief} Instagram Reel copy`,
+          cta: `${heroName} Reel CTA`
+        }
+      ];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(fixture)
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const heroGroup = page.getByTestId("hero-select-group");
+    const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
+    const socialQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Social launch copy" });
+    const xAngleButton = page.getByRole("button", { name: "X", exact: true });
+    const copyCard = page.getByTestId("studio-copy-card");
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Fresh studio pack ready for 3D Modeler.");
+
+    await socialQueueItem.click();
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await sounderButton.click();
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for Sound Crafter. Ready for a new campaign brief.");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(page.getByTestId("studio-pack-status")).toHaveCount(0);
+    await expect(copyCard).toHaveCount(0);
+
+    await briefInput.fill("Midnight remix pack for creator duels");
+    await generateButton.click();
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await expect(copyCard).toContainText("Midnight remix pack for creator duels X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+  });
+
   test("studio pack status surfaces backend failures without leaving stale content behind", async ({ page }) => {
     await page.route("**/api/varco/studio-pack", async (route) => {
       await route.fulfill({
