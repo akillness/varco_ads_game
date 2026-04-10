@@ -316,7 +316,7 @@ test.describe("Web UI", () => {
     await expect(page.locator(".studio-pack-card")).toHaveCount(0);
   });
 
-  test("marketing copy card confirms clipboard copies and clears feedback when switching channels", async ({ page }) => {
+  test("marketing copy card exposes pending and ready clipboard feedback, then clears stale feedback when switching channels", async ({ page }) => {
     await page.evaluate(() => {
       window.__copiedText = "";
       window.__clipboardResolves = [];
@@ -347,6 +347,14 @@ test.describe("Web UI", () => {
     const copiedText = await page.evaluate(() => window.__copiedText);
     expect(copiedText).toContain("CTA:");
     expect(copiedText).toContain("VARCO arena");
+    await expect(copyButton).toHaveText("Copying X copy...");
+
+    const copyFeedback = page.getByTestId("studio-copy-feedback");
+    await expect(copyFeedback).toContainText("Copying X copy to the clipboard...");
+    await expect(copyFeedback).toHaveAttribute("role", "status");
+    await expect(copyFeedback).toHaveAttribute("aria-label", "Marketing copy status. Pending. X. Copying X copy to the clipboard...");
+    await copyFeedback.focus();
+    await expect(copyFeedback).toBeFocused();
 
     await studioPanel.getByRole("button", { name: "Instagram Reel", exact: true }).click();
     await expect(copyCard).toContainText("Instagram Reel");
@@ -361,7 +369,38 @@ test.describe("Web UI", () => {
     await copyButton.click();
     await page.evaluate(() => window.__resolveClipboardWrite());
     await expect(copyButton).toHaveText("Copied Instagram Reel copy");
-    await expect(page.getByTestId("studio-copy-feedback")).toContainText(/instagram reel copy copied\./i);
+    await expect(copyFeedback).toContainText(/instagram reel copy copied\./i);
+    await expect(copyFeedback).toHaveAttribute("aria-label", "Marketing copy status. Ready. Instagram Reel. Instagram Reel copy copied.");
+    await copyFeedback.focus();
+    await expect(copyFeedback).toBeFocused();
+  });
+
+  test("marketing copy feedback surfaces clipboard failures with a keyboard-readable status", async ({ page }) => {
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: async () => {
+            throw new Error("clipboard permissions denied");
+          },
+        },
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    await studioPanel.locator("textarea").fill("Retro arcade launch for creator heroes");
+    await studioPanel.getByRole("button", { name: "Generate Studio Pack" }).click();
+
+    const copyButton = page.getByTestId("studio-copy-button");
+    const copyFeedback = page.getByTestId("studio-copy-feedback");
+
+    await copyButton.click();
+    await expect(copyButton).toHaveText("Copy X copy");
+    await expect(copyFeedback).toContainText("Clipboard copy blocked. Try again after granting permissions.");
+    await expect(copyFeedback).toHaveAttribute("role", "status");
+    await expect(copyFeedback).toHaveAttribute("aria-label", "Marketing copy status. Error. X. Clipboard copy blocked. Try again after granting permissions.");
+    await copyFeedback.focus();
+    await expect(copyFeedback).toBeFocused();
   });
 
   test("marketing copy feedback stays cleared when a new pack is generated mid-copy", async ({ page }) => {

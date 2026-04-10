@@ -1516,6 +1516,19 @@ function getBetFeedbackAriaLabel(feedback) {
   return `Bet status. ${toneLabel}. ${feedback.message}`;
 }
 
+function getMarketingCopyFeedbackAriaLabel(feedback, angleLabel = "marketing copy") {
+  if (!feedback?.message) {
+    return "Marketing copy status unavailable.";
+  }
+
+  const toneLabel = {
+    pending: "Pending",
+    ready: "Ready",
+    error: "Error"
+  }[feedback.tone] || "Update";
+  return `Marketing copy status. ${toneLabel}. ${angleLabel}. ${feedback.message}`;
+}
+
 function getStudioPackStatusSnapshot(status, studioPack, heroName, errorMessage = "") {
   if (status === "loading") {
     return {
@@ -2869,6 +2882,9 @@ export default function App() {
 
   function marketingCopyButtonLabel() {
     const angleLabel = selectedMarketingAngle?.label || "launch";
+    if (marketingCopyFeedback?.tone === "pending") {
+      return `Copying ${angleLabel} copy...`;
+    }
     return marketingCopyFeedback?.tone === "ready"
       ? `Copied ${angleLabel} copy`
       : `Copy ${angleLabel} copy`;
@@ -2926,7 +2942,7 @@ export default function App() {
 
     const actionId = marketingCopyActionRef.current + 1;
     marketingCopyActionRef.current = actionId;
-    setMarketingCopyFeedback(null);
+    setMarketingCopyFeedback({ tone: "pending", message: `Copying ${selectedMarketingAngle.label} copy to the clipboard...` });
 
     if (typeof navigator === "undefined" || typeof navigator.clipboard?.writeText !== "function") {
       if (marketingCopyActionRef.current !== actionId) return;
@@ -3606,6 +3622,11 @@ export default function App() {
                     <div
                       className={`studio-copy-feedback studio-copy-feedback-${marketingCopyFeedback.tone}`}
                       data-testid="studio-copy-feedback"
+                      role="status"
+                      aria-live="polite"
+                      tabIndex={0}
+                      aria-label={getMarketingCopyFeedbackAriaLabel(marketingCopyFeedback, selectedMarketingAngle.label)}
+                      title={getMarketingCopyFeedbackAriaLabel(marketingCopyFeedback, selectedMarketingAngle.label)}
                     >
                       {marketingCopyFeedback.message}
                     </div>
