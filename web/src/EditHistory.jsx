@@ -23,11 +23,16 @@ function getHistoryEntryAriaLabel(entry, index, total) {
 
   if (entry.appliedAt) {
     parts.push('Currently applied.');
-  } else {
-    parts.push('Press Enter or Space to apply this version.');
   }
 
   return parts.join(' ');
+}
+
+function getHistoryEntryAriaDescription(entry) {
+  if (entry.appliedAt) {
+    return 'Currently applied.';
+  }
+  return 'Press Enter or Space to apply this version.';
 }
 
 function focusHistoryEntry(entryId) {
@@ -92,6 +97,7 @@ export default function EditHistory({ editHistory = [], dispatch }) {
     <div className="edit-history" data-testid="edit-history-list" role="group" aria-label="Edit history list">
       {displayedHistory.map((entry, index) => {
         const ariaLabel = getHistoryEntryAriaLabel(entry, index, displayedHistory.length);
+        const ariaDescription = getHistoryEntryAriaDescription(entry);
         return (
           <div
             key={entry.id}
@@ -100,7 +106,8 @@ export default function EditHistory({ editHistory = [], dispatch }) {
             data-history-entry-id={entry.id}
             role="group"
             tabIndex={0}
-            aria-description={ariaLabel}
+            aria-label={ariaLabel}
+            aria-description={ariaDescription}
             title={ariaLabel}
             onKeyDown={(event) => handleHistoryEntryKeyDown(event, entry.id, displayedHistory, applyHistoryEntry)}
           >

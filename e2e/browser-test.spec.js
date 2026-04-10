@@ -565,8 +565,11 @@ test.describe("Web UI", () => {
     const historyEntries = page.getByTestId("edit-history-entry");
     await expect(historyList).toHaveAttribute("aria-label", "Edit history list");
     await expect(historyEntries).toHaveCount(2);
-    await expect(historyEntries.nth(0)).toHaveAttribute("aria-description", /Edit history 1 of 2\./);
+    await expect(historyEntries.nth(0)).toHaveAttribute("aria-label", /Edit history 1 of 2\./);
+    await expect(historyEntries.nth(0)).toHaveAttribute("aria-label", /Cache hit\./);
+    await expect(historyEntries.nth(0)).toHaveAttribute("aria-description", "Press Enter or Space to apply this version.");
     await expect(historyEntries.nth(0)).toHaveAttribute("title", /Cache hit\./);
+    await expect(historyEntries.nth(1)).toHaveAttribute("aria-label", /Edit history 2 of 2\./);
     await expect(historyEntries.nth(1)).toHaveAttribute("aria-description", /Press Enter or Space to apply this version\./);
 
     await historyEntries.nth(0).focus();
@@ -585,6 +588,7 @@ test.describe("Web UI", () => {
     await expect(historyEntries.nth(0)).toBeFocused();
 
     await page.keyboard.press("Enter");
+    await expect(historyEntries.nth(0)).toHaveAttribute("aria-label", /Currently applied\./);
     await expect(historyEntries.nth(0)).toHaveAttribute("aria-description", /Currently applied\./);
     await expect(historyEntries.nth(0)).toContainText("적용됨");
 
@@ -601,6 +605,7 @@ test.describe("Web UI", () => {
     await expect(historyEntries.nth(0)).not.toBeFocused();
 
     await page.keyboard.press("Enter");
+    await expect(historyEntries.nth(1)).toHaveAttribute("aria-label", /Currently applied\./);
     await expect(historyEntries.nth(1)).toHaveAttribute("aria-description", /Currently applied\./);
     await expect(historyEntries.nth(1)).toContainText("적용됨");
   });
