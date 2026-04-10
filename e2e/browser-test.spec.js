@@ -691,6 +691,52 @@ test.describe("Web UI", () => {
     await expect(page.locator(".xp-info")).toContainText("HP 4 / SPD 2");
   });
 
+  test("director event cards are keyboard-readable and support vertical focus cycling", async ({ page }) => {
+    await page.evaluate(() => {
+      window.__SAGA_DEBUG__.dispatch({
+        type: "DEBUG_PATCH_STATE",
+        patch: {
+          directorBeat: {
+            id: "director-beat-focus-window",
+            title: "Focus Window",
+            text: "Combo boosts are live for the next beat."
+          },
+          directorBeatEndsAt: Date.now() + 60_000,
+          swingEvent: {
+            id: "swing-event-sponsor-drop",
+            type: "rare-drop-ping",
+            title: "Sponsor Drop",
+            text: "A bonus core just landed near the south lane."
+          },
+          swingEventEndsAt: Date.now() + 60_000
+        }
+      });
+    });
+
+    const directorBeatCard = page.getByTestId("director-beat-card");
+    const swingEventCard = page.getByTestId("swing-event-card");
+
+    await expect(page.getByTestId("director-panel")).toContainText("Focus Window");
+    await expect(page.getByTestId("director-panel")).toContainText("Sponsor Drop");
+    await expect(directorBeatCard).toHaveAttribute("tabindex", "0");
+    await expect(directorBeatCard).toHaveAttribute("aria-label", "Director beat. Focus Window. Combo boosts are live for the next beat.");
+    await expect(directorBeatCard).toHaveAttribute("title", "Director beat. Focus Window. Combo boosts are live for the next beat.");
+    await expect(swingEventCard).toHaveAttribute("tabindex", "0");
+    await expect(swingEventCard).toHaveAttribute("aria-label", "Swing event. Sponsor Drop. A bonus core just landed near the south lane.");
+    await expect(swingEventCard).toHaveAttribute("title", "Swing event. Sponsor Drop. A bonus core just landed near the south lane.");
+
+    await directorBeatCard.focus();
+    await expect(directorBeatCard).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(swingEventCard).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(directorBeatCard).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(swingEventCard).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(directorBeatCard).toBeFocused();
+  });
+
   test("studio editor tabs support keyboard cycling and pressed-state accessibility", async ({ page }) => {
     const tabGroup = page.getByTestId("studio-editor-tab-group");
     const soundTab = tabGroup.getByRole("button", { name: "🎵 사운드", exact: true });

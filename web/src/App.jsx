@@ -1489,6 +1489,10 @@ function handleAchievementItemKeyDown(event) {
   handleFocusableSiblingKeyDown(event, '[data-testid="achievement-item"]', ["ArrowDown", "ArrowUp"]);
 }
 
+function handleDirectorBeatCardKeyDown(event) {
+  handleFocusableSiblingKeyDown(event, '[data-testid="director-beat-card"], [data-testid="swing-event-card"]', ["ArrowDown", "ArrowUp"]);
+}
+
 function handleGameOverCalloutKeyDown(event) {
   handleFocusableSiblingKeyDown(
     event,
@@ -1707,6 +1711,11 @@ function getAchievementItemAriaLabel(achievement, unlocked) {
 
 function getGameOverCalloutAriaLabel(label, message) {
   return `${label}. ${message}`;
+}
+
+function getDirectorBeatCardAriaLabel(kind, event) {
+  if (!event) return `${kind} unavailable.`;
+  return `${kind}. ${event.title}. ${event.text}`;
 }
 
 function getLeaderboardControlAriaLabel(control) {
@@ -2514,6 +2523,7 @@ export default function App() {
     abilityEvent,
     directorBeat,
     swingEvent,
+    swingEventEndsAt,
     bonusOrb,
     editHistory,
     appliedSounds,
@@ -3349,13 +3359,27 @@ export default function App() {
           </div>
           <p className="director-phase-copy">{directorPhase.callout}</p>
           {directorBeat && (
-            <div className="director-beat-card">
+            <div
+              className="director-beat-card"
+              data-testid="director-beat-card"
+              tabIndex={0}
+              aria-label={getDirectorBeatCardAriaLabel("Director beat", directorBeat)}
+              title={getDirectorBeatCardAriaLabel("Director beat", directorBeat)}
+              onKeyDown={handleDirectorBeatCardKeyDown}
+            >
               <strong>{directorBeat.title}</strong>
               <span>{directorBeat.text}</span>
             </div>
           )}
           {swingEvent && (
-            <div className="director-beat-card" data-testid="swing-event-card">
+            <div
+              className="director-beat-card"
+              data-testid="swing-event-card"
+              tabIndex={0}
+              aria-label={getDirectorBeatCardAriaLabel("Swing event", swingEvent)}
+              title={getDirectorBeatCardAriaLabel("Swing event", swingEvent)}
+              onKeyDown={handleDirectorBeatCardKeyDown}
+            >
               <strong>{swingEvent.title}</strong>
               <span>{swingEvent.text}</span>
             </div>

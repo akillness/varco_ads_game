@@ -1099,6 +1099,7 @@ main {
 .mission-panel:focus-visible,
 .ability-panel:focus-visible,
 .director-panel:focus-visible,
+.director-beat-card:focus-visible,
 .powerup-panel:focus-visible,
 .watch-box:focus-visible,
 .arena-status-strip:focus-visible,
