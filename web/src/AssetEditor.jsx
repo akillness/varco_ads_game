@@ -87,6 +87,35 @@ function handleAssetVersionEntryKeyDown(event, currentId, entries, onApply) {
   }
 }
 
+function getLatestAssetResultAriaLabel(result, assetLabel) {
+  const parts = [
+    `Latest ${assetLabel} asset preview.`,
+    `${((result?.latencyMs || 0) / 1000).toFixed(1)} seconds by VARCO3D.`
+  ];
+
+  if (result?.cacheHit) {
+    parts.push('Cache hit.');
+  }
+
+  parts.push('Contains a 3D preview and an apply action.');
+  return parts.join(' ');
+}
+
+function getLatestAssetResultAriaDescription(assetLabel) {
+  return `Press Enter or Space to apply the latest ${assetLabel} asset result.`;
+}
+
+function handleLatestAssetResultKeyDown(event, onApply) {
+  if (event.target !== event.currentTarget) {
+    return;
+  }
+
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    onApply();
+  }
+}
+
 function handleAssetCardArrowKeyDown(event, currentId, onSelect) {
   const navigationKeys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
   if (!navigationKeys.includes(event.key) || ASSET_TYPES.length < 2) {
@@ -320,6 +349,13 @@ export default function AssetEditor({
     dispatch({ type: 'EDIT_APPLY', historyId });
   }
 
+  function applyLatestResult() {
+    const entry = typeHistory.at(-1);
+    if (entry) {
+      handleApply(entry.id);
+    }
+  }
+
   function selectAssetCard(assetId) {
     setSelectedAsset(assetId);
     resetTransientState({ cancelInFlight: true });
@@ -388,12 +424,33 @@ export default function AssetEditor({
       )}
 
       {latestResult && (
-        <div className="generation-result" data-testid="asset-generation-result">
-          <model-viewer src={latestResult.modelUrl} auto-rotate camera-controls
-            style={{ width: '100%', height: '180px', background: '#1a1a2e' }} />
+        <div
+          className="generation-result"
+          data-testid="asset-generation-result"
+          role="group"
+          tabIndex={0}
+          aria-label={getLatestAssetResultAriaLabel(latestResult, currentAsset?.label || selectedAsset)}
+          aria-description={getLatestAssetResultAriaDescription(currentAsset?.label || selectedAsset)}
+          title={getLatestAssetResultAriaLabel(latestResult, currentAsset?.label || selectedAsset)}
+          onKeyDown={(event) => handleLatestAssetResultKeyDown(event, applyLatestResult)}
+        >
+          <model-viewer
+            src={latestResult.modelUrl}
+            auto-rotate
+            camera-controls
+            aria-label={`Latest ${currentAsset?.label || selectedAsset} 3D preview`}
+            title={`Latest ${currentAsset?.label || selectedAsset} 3D preview`}
+            style={{ width: '100%', height: '180px', background: '#1a1a2e' }}
+          />
           <div className="latency-badge">Converted in {(latestResult.latencyMs / 1000).toFixed(1)}s by VARCO3D</div>
           {latestResult.cacheHit && <div className="cache-hit-badge">cache hit</div>}
-          <button className="apply-btn" onClick={() => { const e = typeHistory.at(-1); if (e) handleApply(e.id); }}>
+          <button
+            className="apply-btn"
+            type="button"
+            aria-label={`Apply latest ${currentAsset?.label || selectedAsset} asset result to the game`}
+            title={`Apply latest ${currentAsset?.label || selectedAsset} asset result to the game`}
+            onClick={applyLatestResult}
+          >
             ✓ Apply → 게임에 즉시 반영
           </button>
         </div>

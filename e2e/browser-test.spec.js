@@ -838,14 +838,22 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("bet-amount-input")).toHaveValue("120");
   });
 
-  test("sound editor generates and applies a reusable cue", async ({ page }) => {
+  test("sound editor keeps the latest cue result keyboard-readable and applies it from the result card", async ({ page }) => {
     const soundPrompt = page.locator(".sound-editor .prompt-input");
     await soundPrompt.fill("victory sting for sponsor-ready arcade arena");
     await page.locator(".sound-editor .regenerate-btn").click();
 
     await expect(page.getByTestId("sound-generation-status")).toContainText("Sound ready");
-    await expect(page.getByTestId("sound-generation-result")).toBeVisible();
-    await page.getByTestId("sound-generation-result").getByRole("button", { name: /Apply/ }).click();
+    const soundResult = page.getByTestId("sound-generation-result");
+    await expect(soundResult).toBeVisible();
+    await expect(soundResult).toHaveAttribute("aria-label", /Latest BGM sound result\./);
+    await expect(soundResult).toHaveAttribute("aria-description", "Press Enter or Space to apply the latest BGM sound result.");
+    await expect(soundResult.getByLabel("Latest BGM sound preview")).toBeVisible();
+    await expect(soundResult.getByRole("button", { name: "Apply latest BGM sound result to the game" })).toBeVisible();
+
+    await soundResult.focus();
+    await expect(soundResult).toBeFocused();
+    await page.keyboard.press("Enter");
     await expect(page.getByTestId("sound-version-history")).toContainText("적용됨");
   });
 
@@ -1008,15 +1016,23 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("sound-version-history")).toHaveCount(0);
   });
 
-  test("asset editor converts and applies a 3D variant", async ({ page }) => {
+  test("asset editor keeps the latest 3D result keyboard-readable and applies it from the result card", async ({ page }) => {
     await page.getByRole("button", { name: /에셋/ }).click();
 
     const directionInput = page.locator(".asset-editor .prompt-input");
     await directionInput.fill("hero orb with premium holographic sponsor finish");
     await page.locator(".asset-editor .regenerate-btn").click();
 
-    await expect(page.getByTestId("asset-generation-result")).toBeVisible();
-    await page.getByTestId("asset-generation-result").getByRole("button", { name: /Apply/ }).click();
+    const assetResult = page.getByTestId("asset-generation-result");
+    await expect(assetResult).toBeVisible();
+    await expect(assetResult).toHaveAttribute("aria-label", /Latest Orb asset preview\./);
+    await expect(assetResult).toHaveAttribute("aria-description", "Press Enter or Space to apply the latest Orb asset result.");
+    await expect(assetResult.locator("model-viewer")).toHaveAttribute("aria-label", "Latest Orb 3D preview");
+    await expect(assetResult.getByRole("button", { name: "Apply latest Orb asset result to the game" })).toBeVisible();
+
+    await assetResult.focus();
+    await expect(assetResult).toBeFocused();
+    await page.keyboard.press("Enter");
     await expect(page.getByTestId("asset-version-history")).toContainText("적용됨");
     await expect(page.getByTestId("arena-status-strip")).toContainText("Assets live: 1/3");
   });

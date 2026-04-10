@@ -96,6 +96,35 @@ function handleVersionEntryKeyDown(event, currentId, entries, onApply) {
   }
 }
 
+function getLatestSoundResultAriaLabel(result, soundLabel) {
+  const parts = [
+    `Latest ${soundLabel} sound result.`,
+    `${((result?.latencyMs || 0) / 1000).toFixed(1)} seconds by VARCO3D.`
+  ];
+
+  if (result?.cacheHit) {
+    parts.push('Cache hit.');
+  }
+
+  parts.push('Contains an audio preview and an apply action.');
+  return parts.join(' ');
+}
+
+function getLatestSoundResultAriaDescription(soundLabel) {
+  return `Press Enter or Space to apply the latest ${soundLabel} sound result.`;
+}
+
+function handleLatestSoundResultKeyDown(event, onApply) {
+  if (event.target !== event.currentTarget) {
+    return;
+  }
+
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    onApply();
+  }
+}
+
 function handleSoundTabArrowKeyDown(event, currentId, onSelect) {
   const navigationKeys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
   if (!navigationKeys.includes(event.key) || SOUND_TYPES.length < 2) {
@@ -248,6 +277,13 @@ export default function SoundEditor({
     dispatch({ type: 'EDIT_APPLY', historyId });
   }
 
+  function applyLatestResult() {
+    const entry = editHistory.filter(e => e.type === 'sound' && e.subType === activeTab).at(-1);
+    if (entry) {
+      handleApply(entry.id);
+    }
+  }
+
   function selectSoundTab(tabId) {
     setActiveTab(tabId);
     setPrompt(draftPrompts?.[tabId] || '');
@@ -315,14 +351,32 @@ export default function SoundEditor({
       )}
 
       {latestResult && (
-        <div className="generation-result" data-testid="sound-generation-result">
-          <audio controls src={latestResult.audioUrl} style={{ width: '100%' }} />
+        <div
+          className="generation-result"
+          data-testid="sound-generation-result"
+          role="group"
+          tabIndex={0}
+          aria-label={getLatestSoundResultAriaLabel(latestResult, currentType?.label || activeTab)}
+          aria-description={getLatestSoundResultAriaDescription(currentType?.label || activeTab)}
+          title={getLatestSoundResultAriaLabel(latestResult, currentType?.label || activeTab)}
+          onKeyDown={(event) => handleLatestSoundResultKeyDown(event, applyLatestResult)}
+        >
+          <audio
+            controls
+            src={latestResult.audioUrl}
+            aria-label={`Latest ${currentType?.label || activeTab} sound preview`}
+            title={`Latest ${currentType?.label || activeTab} sound preview`}
+            style={{ width: '100%' }}
+          />
           <div className="latency-badge">Generated in {(latestResult.latencyMs / 1000).toFixed(1)}s by VARCO3D</div>
           {latestResult.cacheHit && <div className="cache-hit-badge">cache hit</div>}
-          <button className="apply-btn" onClick={() => {
-            const entry = editHistory.filter(e => e.type === 'sound' && e.subType === activeTab).at(-1);
-            if (entry) handleApply(entry.id);
-          }}>
+          <button
+            className="apply-btn"
+            type="button"
+            aria-label={`Apply latest ${currentType?.label || activeTab} sound result to the game`}
+            title={`Apply latest ${currentType?.label || activeTab} sound result to the game`}
+            onClick={applyLatestResult}
+          >
             ✓ Apply → 게임에 즉시 반영
           </button>
         </div>
