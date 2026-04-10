@@ -1623,6 +1623,14 @@ function getStudioPackStatusSnapshot(status, studioPack, heroName, errorMessage 
     };
   }
 
+  if (status === "blocked") {
+    return {
+      tone: "error",
+      chip: "BRIEF REQUIRED",
+      detail: errorMessage || "Enter a campaign brief before generating a studio pack."
+    };
+  }
+
   if (status === "cached") {
     return {
       tone: "ready",
@@ -3061,6 +3069,13 @@ export default function App() {
     return null;
   }
 
+  function validateStudioBrief(brief) {
+    if (!brief.trim()) {
+      return "Enter a campaign brief before generating a studio pack.";
+    }
+    return null;
+  }
+
   async function copyMarketingCopy() {
     if (!selectedMarketingAngle?.copy) return;
 
@@ -3088,9 +3103,18 @@ export default function App() {
   }
 
   async function generateStudioPack() {
+    const briefAtStart = studioBrief;
+    const validationMessage = validateStudioBrief(briefAtStart);
+    if (validationMessage) {
+      studioPackRequestRef.current += 1;
+      resetStudioPackState({ nextStatus: "blocked" });
+      setStudioStatusMessage(validationMessage);
+      setLog((prev) => [`Studio pack blocked: ${validationMessage}`, ...prev].slice(0, 8));
+      return;
+    }
+
     const requestToken = studioPackRequestRef.current + 1;
     studioPackRequestRef.current = requestToken;
-    const briefAtStart = studioBrief;
     const heroIdAtStart = hero.id;
     const applyIfActive = (callback) => {
       if (studioPackRequestRef.current !== requestToken) return;
@@ -3698,7 +3722,7 @@ export default function App() {
             value={studioBrief}
             onChange={(e) => {
               setStudioBrief(e.target.value);
-              if (studioStatus === "loading" || studioPack) {
+              if (studioStatus !== "idle" || studioPack) {
                 resetStudioPackState({ cancelInFlight: studioStatus === "loading" });
               }
             }}

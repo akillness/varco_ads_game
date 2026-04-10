@@ -398,6 +398,42 @@ test.describe("Web UI", () => {
     await expect(page.locator(".studio-pack-card")).toHaveCount(0);
   });
 
+  test("studio pack blocks blank briefs before making a request", async ({ page }) => {
+    let requestCount = 0;
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(createStudioPackFixture("Unexpected request", { suffix: "unexpected" }))
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+
+    await briefInput.fill("   ");
+    await generateButton.click();
+
+    const studioStatus = page.getByTestId("studio-pack-status");
+    await expect(studioStatus).toContainText("BRIEF REQUIRED");
+    await expect(studioStatus).toContainText("Enter a campaign brief before generating a studio pack.");
+    await expect(studioStatus).toHaveAttribute(
+      "aria-label",
+      "Studio pack status. Error. BRIEF REQUIRED. Enter a campaign brief before generating a studio pack."
+    );
+    await studioStatus.focus();
+    await expect(studioStatus).toBeFocused();
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    expect(requestCount).toBe(0);
+
+    await briefInput.fill("Creator soundtrack launch brief");
+    await expect(studioStatus).toHaveCount(0);
+    await generateButton.click();
+    expect(requestCount).toBe(1);
+  });
+
   test("studio pack card exposes a focusable summary label for the latest generated pack", async ({ page }) => {
     await page.route("**/api/varco/studio-pack", async (route) => {
       await route.fulfill({
