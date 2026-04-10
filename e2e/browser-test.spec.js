@@ -316,6 +316,31 @@ test.describe("Web UI", () => {
     await expect(page.locator(".studio-pack-card")).toHaveCount(0);
   });
 
+  test("studio pack card exposes a focusable summary label for the latest generated pack", async ({ page }) => {
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(createStudioPackFixture("Retro arcade launch for creator heroes", { suffix: "retro" }))
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    await studioPanel.locator("textarea").fill("Retro arcade launch for creator heroes");
+    await studioPanel.getByRole("button", { name: "Generate Studio Pack" }).click();
+
+    const studioPackCard = page.getByTestId("studio-pack-card");
+    const expectedLabel = "Studio pack. Retro arcade launch for creator heroes headline Retro arcade launch for creator heroes tagline fresh pack. 2 calls saved. 3/5 planned. 2 production queue items. 1 marketing angle.";
+
+    await expect(studioPackCard).toContainText("Retro arcade launch for creator heroes headline");
+    await expect(studioPackCard).toContainText("Retro arcade launch for creator heroes tagline");
+    await expect(studioPackCard).toHaveAttribute("tabindex", "0");
+    await expect(studioPackCard).toHaveAttribute("aria-label", expectedLabel);
+    await expect(studioPackCard).toHaveAttribute("title", expectedLabel);
+    await studioPackCard.focus();
+    await expect(studioPackCard).toBeFocused();
+  });
+
   test("marketing copy card exposes pending and ready clipboard feedback, then clears stale feedback when switching channels", async ({ page }) => {
     await page.evaluate(() => {
       window.__copiedText = "";

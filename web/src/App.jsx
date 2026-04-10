@@ -1538,6 +1538,26 @@ function getMarketingCopyCardAriaLabel(angle) {
   return `Marketing copy card. ${angle.label}. ${angle.copy}.${ctaText}`;
 }
 
+function getStudioPackCardAriaLabel(studioPack) {
+  if (!studioPack?.campaign) {
+    return "Studio pack unavailable.";
+  }
+
+  const freshnessLabel = studioPack.cache_hit ? "cached pack" : "fresh pack";
+  const queueCount = Array.isArray(studioPack.productionQueue) ? studioPack.productionQueue.length : 0;
+  const marketingAngleCount = Array.isArray(studioPack.marketingAngles) ? studioPack.marketingAngles.length : 0;
+  return [
+    "Studio pack.",
+    studioPack.campaign.headline,
+    studioPack.campaign.tagline,
+    `${freshnessLabel}.`,
+    `${studioPack.savings?.estimatedCallsSaved ?? 0} calls saved.`,
+    `${studioPack.savings?.estimatedCallsWithPack ?? 0}/${studioPack.savings?.estimatedCallsWithoutPack ?? 0} planned.`,
+    `${queueCount} production queue item${queueCount === 1 ? "" : "s"}.`,
+    `${marketingAngleCount} marketing angle${marketingAngleCount === 1 ? "" : "s"}.`
+  ].join(" ");
+}
+
 function getStudioPackStatusSnapshot(status, studioPack, heroName, errorMessage = "") {
   if (status === "loading") {
     return {
@@ -3551,7 +3571,13 @@ export default function App() {
             <span>studio hits {studioCache?.studioPackHits ?? 0}</span>
           </div>
           {studioPack && (
-            <div className="studio-pack-card">
+            <div
+              className="studio-pack-card"
+              data-testid="studio-pack-card"
+              tabIndex={0}
+              aria-label={getStudioPackCardAriaLabel(studioPack)}
+              title={getStudioPackCardAriaLabel(studioPack)}
+            >
               <div className="studio-pack-header">
                 <strong>{studioPack.campaign.headline}</strong>
                 <span>{studioPack.cache_hit ? "cached" : "fresh"}</span>
