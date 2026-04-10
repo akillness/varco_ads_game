@@ -136,12 +136,37 @@ test.describe("Web UI", () => {
 
   test("renders gameplay HUD and promo director", async ({ page }) => {
     await expect(page.locator(".brand-title")).toContainText("VARCO AGENT SAGA");
-    await expect(page.getByTestId("mission-panel")).toBeVisible();
-    await expect(page.getByTestId("ability-panel")).toBeVisible();
-    await expect(page.getByTestId("director-panel")).toBeVisible();
+
+    const missionPanel = page.getByTestId("mission-panel");
+    const abilityPanel = page.getByTestId("ability-panel");
+    const directorPanel = page.getByTestId("director-panel");
+    const studioKpiStrip = page.getByTestId("studio-kpi-strip");
+    const arenaStatusStrip = page.getByTestId("arena-status-strip");
+
+    await expect(missionPanel).toBeVisible();
+    await expect(abilityPanel).toBeVisible();
+    await expect(directorPanel).toBeVisible();
     await expect(page.getByTestId("studio-pack-panel")).toBeVisible();
-    await expect(page.getByTestId("studio-kpi-strip")).toContainText("cache hits");
-    await expect(page.getByTestId("arena-status-strip")).toContainText("Mission:");
+    await expect(studioKpiStrip).toContainText("cache hits");
+    await expect(arenaStatusStrip).toContainText("Mission:");
+
+    await expect(missionPanel).toHaveAttribute("tabindex", "0");
+    await expect(missionPanel).toHaveAttribute("aria-label", /Director Mission\./);
+    await expect(abilityPanel).toHaveAttribute("tabindex", "0");
+    await expect(abilityPanel).toHaveAttribute("aria-label", /Hero Ability\./);
+    await expect(directorPanel).toHaveAttribute("tabindex", "0");
+    await expect(directorPanel).toHaveAttribute("aria-label", /Arena Director\./);
+    await expect(studioKpiStrip).toHaveAttribute("tabindex", "0");
+    await expect(studioKpiStrip).toHaveAttribute("aria-label", /Studio cache\. cache hits \d+\./);
+    await expect(arenaStatusStrip).toHaveAttribute("tabindex", "0");
+    await expect(arenaStatusStrip).toHaveAttribute("aria-label", /Arena status\. Phase:/);
+
+    await directorPanel.focus();
+    await expect(directorPanel).toBeFocused();
+    await studioKpiStrip.focus();
+    await expect(studioKpiStrip).toBeFocused();
+    await arenaStatusStrip.focus();
+    await expect(arenaStatusStrip).toBeFocused();
   });
 
   test("agent log feed shows an empty state and focusable server log rows", async ({ page }) => {

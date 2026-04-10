@@ -1552,6 +1552,38 @@ function getStudioPackStatusAriaLabel(snapshot) {
   return `Studio pack status. ${toneLabel}. ${snapshot.chip}. ${snapshot.detail}`;
 }
 
+function getMissionPanelAriaLabel(mission, missionSecondsLeft) {
+  if (!mission) {
+    return "Director Mission unavailable.";
+  }
+  return `Director Mission. ${mission.title}. ${missionProgressText(mission)}. ${mission.rewardLabel}. ${Math.max(missionSecondsLeft, 0)} seconds left.`;
+}
+
+function getAbilityPanelAriaLabel(activeAbility, abilityPercent, abilityReady, abilityCooldown) {
+  if (!activeAbility) {
+    return "Hero Ability unavailable.";
+  }
+  const readiness = abilityReady ? "Ready now." : `${abilityCooldown}s cooldown remaining.`;
+  return `Hero Ability. ${activeAbility.name}. ${activeAbility.summary}. ${Math.round(abilityPercent)} percent charged. ${readiness}`;
+}
+
+function getDirectorPanelAriaLabel(directorPhase, directorBeat, swingEvent, bonusOrb, liveAssetCount, liveSoundCount) {
+  if (!directorPhase) {
+    return "Arena Director unavailable.";
+  }
+  const beatLabel = directorBeat ? `${directorBeat.title}. ${directorBeat.text}` : "No active director beat.";
+  const swingLabel = swingEvent ? `${swingEvent.title}. ${swingEvent.text}` : "No active swing event.";
+  return `Arena Director. ${directorPhase.label}. ${directorPhase.threat} threat. ${directorPhase.callout}. ${beatLabel} ${swingLabel} Bonus core ${bonusOrb ? "live" : "offline"}. Live assets ${liveAssetCount} of 3. Live cues ${liveSoundCount} of 5.`;
+}
+
+function getArenaStatusStripAriaLabel(directorPhase, mission, activeAbility, swingTriggered, liveAssetCount, liveSoundCount) {
+  return `Arena status. Phase: ${directorPhase?.label || "unknown"}. Mission: ${mission?.title || "unknown"}. Ability: ${activeAbility?.name || "unknown"}. Swing: ${swingTriggered ? "Triggered" : "Pending"}. Assets live: ${liveAssetCount}/3. Sound cues live: ${liveSoundCount}/5.`;
+}
+
+function getStudioKpiStripAriaLabel(studioCache) {
+  return `Studio cache. cache hits ${studioCache?.hits ?? 0}. saved calls ${studioCache?.savedCalls ?? 0}. studio hits ${studioCache?.studioPackHits ?? 0}.`;
+}
+
 function getAgentLogEntryAriaLabel(entry, index) {
   const levelLabel = String(entry?.level || "info").toUpperCase();
   const message = entry?.message || "Log entry unavailable.";
@@ -3111,7 +3143,13 @@ export default function App() {
           </div>
         </div>
 
-        <div className="panel mission-panel" data-testid="mission-panel">
+        <div
+          className="panel mission-panel"
+          data-testid="mission-panel"
+          tabIndex={0}
+          aria-label={getMissionPanelAriaLabel(mission, missionSecondsLeft)}
+          title={getMissionPanelAriaLabel(mission, missionSecondsLeft)}
+        >
           <div className="panel-title">Director Mission</div>
           <div className="mission-header">
             <strong>{mission.title}</strong>
@@ -3129,7 +3167,13 @@ export default function App() {
           </div>
         </div>
 
-        <div className="panel ability-panel" data-testid="ability-panel">
+        <div
+          className="panel ability-panel"
+          data-testid="ability-panel"
+          tabIndex={0}
+          aria-label={getAbilityPanelAriaLabel(activeAbility, abilityPercent, abilityReady, abilityCooldown)}
+          title={getAbilityPanelAriaLabel(activeAbility, abilityPercent, abilityReady, abilityCooldown)}
+        >
           <div className="panel-title">Hero Ability</div>
           <div className="ability-header">
             <strong>{activeAbility.name}</strong>
@@ -3153,7 +3197,13 @@ export default function App() {
           </button>
         </div>
 
-        <div className="panel director-panel" data-testid="director-panel">
+        <div
+          className="panel director-panel"
+          data-testid="director-panel"
+          tabIndex={0}
+          aria-label={getDirectorPanelAriaLabel(directorPhase, directorBeat, swingEvent, bonusOrb, liveAssetCount, liveSoundCount)}
+          title={getDirectorPanelAriaLabel(directorPhase, directorBeat, swingEvent, bonusOrb, liveAssetCount, liveSoundCount)}
+        >
           <div className="panel-title">Arena Director</div>
           <div className="director-phase-row">
             <strong>{directorPhase.label}</strong>
@@ -3239,7 +3289,13 @@ export default function App() {
 
       {/* ARENA */}
       <div className="arena-wrap">
-        <div className="arena-status-strip" data-testid="arena-status-strip">
+        <div
+          className="arena-status-strip"
+          data-testid="arena-status-strip"
+          tabIndex={0}
+          aria-label={getArenaStatusStripAriaLabel(directorPhase, mission, activeAbility, state.swingEventTriggered, liveAssetCount, liveSoundCount)}
+          title={getArenaStatusStripAriaLabel(directorPhase, mission, activeAbility, state.swingEventTriggered, liveAssetCount, liveSoundCount)}
+        >
           <span>Phase: {directorPhase.label}</span>
           <span>Mission: {mission.title}</span>
           <span>Ability: {activeAbility.name}</span>
@@ -3404,7 +3460,13 @@ export default function App() {
               <span className="studio-pack-status-detail" data-testid="studio-pack-status-detail">{studioPackStatus.detail}</span>
             </div>
           )}
-          <div className="studio-kpi-strip" data-testid="studio-kpi-strip">
+          <div
+            className="studio-kpi-strip"
+            data-testid="studio-kpi-strip"
+            tabIndex={0}
+            aria-label={getStudioKpiStripAriaLabel(studioCache)}
+            title={getStudioKpiStripAriaLabel(studioCache)}
+          >
             <span>cache hits {studioCache?.hits ?? 0}</span>
             <span>saved calls {studioCache?.savedCalls ?? 0}</span>
             <span>studio hits {studioCache?.studioPackHits ?? 0}</span>
