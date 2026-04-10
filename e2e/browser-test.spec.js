@@ -150,6 +150,7 @@ test.describe("Web UI", () => {
     const studioKpiStrip = page.getByTestId("studio-kpi-strip");
     const arenaStatusStrip = page.getByTestId("arena-status-strip");
     const controlLegend = page.getByTestId("control-legend");
+    const runBriefing = page.getByTestId("run-briefing");
     const achievementList = page.getByTestId("achievement-list");
     const achievementItems = page.getByTestId("achievement-item");
     const betNameInput = page.getByTestId("bet-name-input");
@@ -176,6 +177,9 @@ test.describe("Web UI", () => {
     await expect(arenaStatusStrip).toContainText("Mission:");
     await expect(controlLegend).toContainText("Arrow keys / WASD");
     await expect(controlLegend).toContainText("Space · Hard-Light Shield");
+    await expect(runBriefing).toContainText("UGC cores = 10 pts");
+    await expect(runBriefing).toContainText("1.5x / 2x / 3x");
+    await expect(runBriefing).toContainText("Hard-Light Shield");
     await expect(achievementList).toBeVisible();
     await expect(achievementItems).toHaveCount(8);
 
@@ -211,6 +215,9 @@ test.describe("Web UI", () => {
     await expect(arenaStatusStrip).toHaveAttribute("aria-label", /Arena status\. Phase:/);
     await expect(controlLegend).toHaveAttribute("tabindex", "0");
     await expect(controlLegend).toHaveAttribute("aria-label", "Controls legend. Move with Arrow keys or WASD. Press Space to activate Hard-Light Shield. Use Start or Pause to control the match timer. Reset opens a fresh live match.");
+    await expect(runBriefing).toHaveAttribute("tabindex", "0");
+    await expect(runBriefing).toHaveAttribute("aria-label", /Run briefing\. Collect UGC cores for 10 points each\./);
+    await expect(runBriefing).toHaveAttribute("aria-label", /Hard-Light Shield: Shield \+ heal \+ scatter enemies\./);
     await expect(achievementList).toHaveAttribute("aria-label", "Achievements. 0 unlocked of 8.");
     await expect(achievementItems.nth(0)).toHaveAttribute("tabindex", "0");
     await expect(achievementItems.nth(0)).toHaveAttribute("aria-label", "First Blood. Collect 1 orb. Locked.");
@@ -240,6 +247,8 @@ test.describe("Web UI", () => {
     await expect(arenaStatusStrip).toBeFocused();
     await controlLegend.focus();
     await expect(controlLegend).toBeFocused();
+    await runBriefing.focus();
+    await expect(runBriefing).toBeFocused();
     await achievementItems.nth(0).focus();
     await expect(achievementItems.nth(0)).toBeFocused();
   });
@@ -726,12 +735,14 @@ test.describe("Web UI", () => {
     const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
     const faceweaverButton = heroGroup.getByRole("button", { name: "SyncFace Weaver", exact: true });
     const controlLegend = page.getByTestId("control-legend");
+    const runBriefing = page.getByTestId("run-briefing");
 
     await expect(modelerButton).toHaveAttribute("aria-pressed", "true");
     await expect(modelerButton).toHaveAttribute("aria-description", "Select 3D Modeler; currently selected.");
     await expect(sounderButton).toHaveAttribute("aria-pressed", "false");
     await expect(sounderButton).toHaveAttribute("aria-description", "Select Sound Crafter.");
     await expect(controlLegend).toHaveAttribute("aria-label", "Controls legend. Move with Arrow keys or WASD. Press Space to activate Hard-Light Shield. Use Start or Pause to control the match timer. Reset opens a fresh live match.");
+    await expect(runBriefing).toHaveAttribute("aria-label", /Hard-Light Shield: Shield \+ heal \+ scatter enemies\./);
     await expect(page.locator(".xp-info")).toContainText("HP 6 / SPD 1");
 
     await modelerButton.focus();
@@ -741,12 +752,14 @@ test.describe("Web UI", () => {
     await expect(sounderButton).toHaveAttribute("aria-pressed", "true");
     await expect(modelerButton).toHaveAttribute("aria-pressed", "false");
     await expect(controlLegend).toHaveAttribute("aria-label", "Controls legend. Move with Arrow keys or WASD. Press Space to activate Bass Drop. Use Start or Pause to control the match timer. Reset opens a fresh live match.");
+    await expect(runBriefing).toHaveAttribute("aria-label", /Bass Drop: Freeze enemies \+ protect your combo\./);
     await expect(page.locator(".xp-info")).toContainText("HP 5 / SPD 1");
 
     await page.keyboard.press("End");
     await expect(faceweaverButton).toBeFocused();
     await expect(faceweaverButton).toHaveAttribute("aria-pressed", "true");
     await expect(controlLegend).toHaveAttribute("aria-label", "Controls legend. Move with Arrow keys or WASD. Press Space to activate Phase Rush. Use Start or Pause to control the match timer. Reset opens a fresh live match.");
+    await expect(runBriefing).toHaveAttribute("aria-label", /Phase Rush: Speed \+ magnet burst for orb routing\./);
     await expect(page.locator(".xp-info")).toContainText("HP 4 / SPD 2");
 
     await page.keyboard.press("Home");
@@ -754,12 +767,14 @@ test.describe("Web UI", () => {
     await expect(modelerButton).toHaveAttribute("aria-pressed", "true");
     await expect(faceweaverButton).toHaveAttribute("aria-pressed", "false");
     await expect(controlLegend).toHaveAttribute("aria-label", "Controls legend. Move with Arrow keys or WASD. Press Space to activate Hard-Light Shield. Use Start or Pause to control the match timer. Reset opens a fresh live match.");
+    await expect(runBriefing).toHaveAttribute("aria-label", /Hard-Light Shield: Shield \+ heal \+ scatter enemies\./);
     await expect(page.locator(".xp-info")).toContainText("HP 6 / SPD 1");
 
     await page.keyboard.press("ArrowLeft");
     await expect(faceweaverButton).toBeFocused();
     await expect(faceweaverButton).toHaveAttribute("aria-pressed", "true");
     await expect(controlLegend).toHaveAttribute("aria-label", "Controls legend. Move with Arrow keys or WASD. Press Space to activate Phase Rush. Use Start or Pause to control the match timer. Reset opens a fresh live match.");
+    await expect(runBriefing).toHaveAttribute("aria-label", /Phase Rush: Speed \+ magnet burst for orb routing\./);
     await expect(page.locator(".xp-info")).toContainText("HP 4 / SPD 2");
   });
 

@@ -1704,6 +1704,14 @@ function getControlLegendAriaLabel(activeAbility) {
   return `Controls legend. Move with Arrow keys or WASD. Press Space to activate ${abilityName}. Use Start or Pause to control the match timer. Reset opens a fresh live match.`;
 }
 
+function getRunBriefingAriaLabel(mission, activeAbility) {
+  const missionTitle = mission?.title || "Director Mission";
+  const missionReward = mission?.rewardLabel || "Mission reward unavailable.";
+  const abilityName = activeAbility?.name || "Hero ability";
+  const abilitySummary = activeAbility?.summary || "Use your hero ability when the charge meter is full.";
+  return `Run briefing. Collect UGC cores for 10 points each. Keep the combo alive within ${Math.round(COMBO_WINDOW / 1000)} seconds to climb from 1.5x at 2, to 2.0x at 3, and 3.0x at 5. Current mission: ${missionTitle}. Reward: ${missionReward}. ${abilityName}: ${abilitySummary}.`;
+}
+
 function getHpPanelAriaLabel(hp, maxHp) {
   const safeHp = Math.max(hp, 0);
   const safeMaxHp = Math.max(maxHp, 1);
@@ -3560,6 +3568,29 @@ export default function App() {
             <div className="control-legend-row">
               <span className="control-legend-label">Ability</span>
               <strong>Space · {activeAbility.name}</strong>
+            </div>
+          </div>
+          <div
+            className="run-briefing"
+            data-testid="run-briefing"
+            tabIndex={0}
+            aria-label={getRunBriefingAriaLabel(mission, activeAbility)}
+            title={getRunBriefingAriaLabel(mission, activeAbility)}
+          >
+            <div className="run-briefing-row">
+              <span className="control-legend-label">Score Loop</span>
+              <strong>UGC cores = 10 pts</strong>
+              <span>Chain inside 2s to climb 1.5x / 2x / 3x.</span>
+            </div>
+            <div className="run-briefing-row">
+              <span className="control-legend-label">Mission Reward</span>
+              <strong>{mission.title}</strong>
+              <span>{mission.rewardLabel}</span>
+            </div>
+            <div className="run-briefing-row">
+              <span className="control-legend-label">Hero Edge</span>
+              <strong>{activeAbility.name}</strong>
+              <span>{activeAbility.summary}</span>
             </div>
           </div>
           <div className="game-controls">

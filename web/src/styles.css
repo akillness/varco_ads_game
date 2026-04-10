@@ -812,6 +812,32 @@ main {
   font-weight: 700;
 }
 
+.run-briefing {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(88, 166, 255, 0.08);
+  border: 1px solid rgba(88, 166, 255, 0.2);
+}
+
+.run-briefing-row {
+  display: grid;
+  gap: 3px;
+  font-size: 11px;
+}
+
+.run-briefing-row strong {
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.run-briefing-row span:last-child {
+  color: #c9d1d9;
+  line-height: 1.35;
+}
+
 .game-controls {
   display: flex;
   gap: 6px;
@@ -1134,6 +1160,7 @@ main {
 .powerup-panel:focus-visible,
 .watch-box:focus-visible,
 .control-legend:focus-visible,
+.run-briefing:focus-visible,
 .arena-status-strip:focus-visible,
 .studio-kpi-strip:focus-visible,
 .achievement-item:focus-visible,
