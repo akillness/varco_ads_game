@@ -1763,6 +1763,37 @@ function getAgentLogEntryAriaLabel(entry, index) {
   return `Agent log ${index + 1}. ${levelLabel}. ${message}`;
 }
 
+function getAgentLogUpdateSummary(prevLogs = [], nextLogs = []) {
+  if (!Array.isArray(nextLogs) || nextLogs.length === 0) {
+    return null;
+  }
+
+  const previousTopId = prevLogs[0]?.id || null;
+  const nextTopEntry = nextLogs[0] || null;
+  if (!nextTopEntry) {
+    return null;
+  }
+
+  const hasFreshTopEntry = previousTopId !== nextTopEntry.id;
+  if (!hasFreshTopEntry) {
+    return null;
+  }
+
+  const levelLabel = String(nextTopEntry.level || "info").toUpperCase();
+  const countLabel = `${nextLogs.length} log${nextLogs.length === 1 ? "" : "s"} synced.`;
+  const latestLabel = `Latest ${levelLabel}. ${nextTopEntry.message || "Log entry unavailable."}`;
+  return {
+    message: `${countLabel} ${latestLabel}`
+  };
+}
+
+function getAgentLogSummaryAriaLabel(summary) {
+  if (!summary?.message) {
+    return "Agent log update unavailable.";
+  }
+  return `Agent log update. ${summary.message}`;
+}
+
 function getAchievementListAriaLabel(unlockedCount, totalCount) {
   return `Achievements. ${unlockedCount} unlocked of ${totalCount}.`;
 }
@@ -2536,6 +2567,7 @@ export default function App() {
   const [betSide, setBetSide] = useState("player");
   const [betAmount, setBetAmount] = useState(100);
   const [serverLogs, setServerLogs] = useState([]);
+  const [agentLogSummary, setAgentLogSummary] = useState(null);
   const [highScores, setHighScores] = useState(loadHighScores());
   const [leaderboardUpdate, setLeaderboardUpdate] = useState(null);
   const [leaderboardMomentumUpdate, setLeaderboardMomentumUpdate] = useState(null);
@@ -2555,6 +2587,8 @@ export default function App() {
   const [editorDrafts, setEditorDrafts] = useState({ sound: {}, asset: {} });
   const [editorSelection, setEditorSelection] = useState({ sound: "bgm", asset: "orb" });
   const latestStateRef = useRef(state);
+  const latestServerLogsRef = useRef(serverLogs);
+  const serverLogsHydratedRef = useRef(false);
   const marketingCopyActionRef = useRef(0);
   const studioPackRequestRef = useRef(0);
   const betActionRef = useRef(0);
@@ -2602,6 +2636,10 @@ export default function App() {
   useEffect(() => {
     latestStateRef.current = state;
   }, [state]);
+
+  useEffect(() => {
+    latestServerLogsRef.current = serverLogs;
+  }, [serverLogs]);
 
   useEffect(() => {
     if (!gameOver) {
@@ -2776,7 +2814,18 @@ export default function App() {
         setSpectators(match.match.spectators);
         setOdds(match.match.odds);
         setBetPools(match.match.pools);
-        setServerLogs(logsRes.logs);
+        const nextLogs = Array.isArray(logsRes.logs) ? logsRes.logs : [];
+        const isFirstLogSync = !serverLogsHydratedRef.current;
+        const logSummary = isFirstLogSync
+          ? null
+          : getAgentLogUpdateSummary(latestServerLogsRef.current, nextLogs);
+        serverLogsHydratedRef.current = true;
+        setServerLogs(nextLogs);
+        if (nextLogs.length === 0) {
+          setAgentLogSummary(null);
+        } else {
+          setAgentLogSummary(logSummary);
+        }
       } catch { /* polling non-fatal */ }
     }, 2500);
     const cachePoll = setInterval(() => {
@@ -4303,6 +4352,19 @@ export default function App() {
         </div>
         <div className="panel">
           <div className="panel-title">Agent Log Feed</div>
+          {agentLogSummary && (
+            <div
+              className={`share-feedback share-feedback-ready`}
+              data-testid="agent-log-summary"
+              role="status"
+              aria-live="polite"
+              tabIndex={0}
+              aria-label={getAgentLogSummaryAriaLabel(agentLogSummary)}
+              title={getAgentLogSummaryAriaLabel(agentLogSummary)}
+            >
+              {agentLogSummary.message}
+            </div>
+          )}
           <ul className="log-list server-log" aria-label="Agent log feed" data-testid="agent-log-list">
             {serverLogs.length > 0 ? serverLogs.map((entry, index) => {
               const entryAriaLabel = getAgentLogEntryAriaLabel(entry, index);

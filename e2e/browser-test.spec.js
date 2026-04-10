@@ -320,6 +320,55 @@ test.describe("Web UI", () => {
     await expect(agentLogRows.nth(0)).toBeFocused();
   });
 
+  test("agent log feed announces fresh server updates with a compact status summary", async ({ page }) => {
+    let logsPayload = [];
+    await page.route("**/api/agent/logs", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, logs: logsPayload })
+      });
+    });
+
+    await page.reload();
+    await expect(page.getByTestId("agent-log-empty")).toContainText("No agent logs yet.");
+    await expect(page.getByTestId("agent-log-summary")).toHaveCount(0);
+    await page.waitForTimeout(2600);
+    await expect(page.getByTestId("agent-log-summary")).toHaveCount(0);
+
+    logsPayload = [
+      { id: "log-alert", level: "warn", message: "director swing locked in" },
+      { id: "log-info", level: "info", message: "studio cache warmed" }
+    ];
+
+    const agentLogSummary = page.getByTestId("agent-log-summary");
+    await expect(agentLogSummary).toContainText("2 logs synced. Latest WARN. director swing locked in");
+    await expect(agentLogSummary).toHaveAttribute("role", "status");
+    await expect(agentLogSummary).toHaveAttribute("aria-label", "Agent log update. 2 logs synced. Latest WARN. director swing locked in");
+    await agentLogSummary.focus();
+    await expect(agentLogSummary).toBeFocused();
+    await expect(page.getByTestId("agent-log-item").nth(0)).toHaveAttribute("aria-label", "Agent log 1. WARN. director swing locked in");
+
+    logsPayload = [
+      { id: "log-bonus", level: "info", message: "bonus core routed to main lane" },
+      { id: "log-alert", level: "warn", message: "director swing locked in" },
+      { id: "log-info", level: "info", message: "studio cache warmed" }
+    ];
+
+    await expect(agentLogSummary).toContainText("3 logs synced. Latest INFO. bonus core routed to main lane");
+    await expect(agentLogSummary).toHaveAttribute("title", "Agent log update. 3 logs synced. Latest INFO. bonus core routed to main lane");
+
+    logsPayload = [
+      { id: "log-bonus", level: "info", message: "bonus core routed to main lane" },
+      { id: "log-alert", level: "warn", message: "director swing locked in" },
+      { id: "log-info", level: "info", message: "studio cache warmed" },
+      { id: "log-older", level: "info", message: "older archive note synced" }
+    ];
+
+    await page.waitForTimeout(2600);
+    await expect(page.getByTestId("agent-log-summary")).toHaveCount(0);
+  });
+
   test("generates a studio pack and routes prompt chips into the matching editor slot", async ({ page }) => {
     const studioPanel = page.getByTestId("studio-pack-panel");
     await studioPanel.locator("textarea").fill("Retro arcade launch for creator heroes");
