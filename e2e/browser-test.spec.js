@@ -632,6 +632,64 @@ test.describe("Web UI", () => {
     await expect(assetCardGroup).not.toHaveAttribute("aria-label", /Selected Player\./);
   });
 
+  test("editing the brief after a ready studio pack clears stale sound and asset selections", async ({ page }) => {
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      const payload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(createStudioPackFixture(payload.brief, {
+          heroName: "3D Modeler",
+          suffix: payload.heroId
+        }))
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const soundPromptInput = page.locator(".sound-editor .prompt-input");
+    const assetPromptInput = page.locator(".asset-editor .prompt-input");
+    const soundTabGroup = page.getByTestId("sound-tab-group");
+    const assetCardGroup = page.getByTestId("asset-card-group");
+    const orbSoundTab = page.getByTestId("sound-tab-orb");
+    const heroShowcaseQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Hero showcase model" });
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Fresh studio pack ready for 3D Modeler.");
+
+    await orbSoundTab.click();
+    await expect(orbSoundTab).toHaveClass(/active/);
+    await expect(soundPromptInput).toHaveValue("Retro arcade launch for creator heroes orb prompt");
+    await expect(soundTabGroup).toHaveAttribute("aria-label", /Selected Orb 수집음\./);
+    await expect(soundTabGroup).toHaveAttribute("aria-label", /Current prompt Retro arcade launch for creator heroes orb prompt\./);
+
+    await heroShowcaseQueueItem.click();
+    await expect(page.getByRole("button", { name: /^🧊 에셋$/ })).toHaveClass(/active/);
+    await expect(page.getByTestId("asset-card-player")).toHaveClass(/selected/);
+    await expect(assetPromptInput).toHaveValue("Retro arcade launch for creator heroes player direction");
+    await expect(assetCardGroup).toHaveAttribute("aria-label", /Selected Player\./);
+    await expect(assetCardGroup).toHaveAttribute("aria-label", /Current direction Retro arcade launch for creator heroes player direction\./);
+
+    await briefInput.fill("Midnight remix pack for creator duels");
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for 3D Modeler. Ready for a new campaign brief.");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(page.getByTestId("studio-pack-status")).toHaveCount(0);
+    await expect(page.getByTestId("studio-copy-card")).toHaveCount(0);
+    await page.getByRole("button", { name: /^🎵 사운드$/ }).click();
+    await expect(page.getByTestId("sound-tab-bgm")).toHaveClass(/active/);
+    await expect(soundPromptInput).toHaveValue("ambient game background music");
+    await expect(soundTabGroup).toHaveAttribute("aria-label", /Selected BGM\./);
+    await expect(soundTabGroup).not.toHaveAttribute("aria-label", /Selected Orb 수집음\./);
+    await page.getByRole("button", { name: /^🧊 에셋$/ }).click();
+    await expect(page.getByTestId("asset-card-orb")).toHaveClass(/selected/);
+    await expect(assetPromptInput).toHaveValue("Orb");
+    await expect(assetCardGroup).toHaveAttribute("aria-label", /Selected Orb\./);
+    await expect(assetCardGroup).not.toHaveAttribute("aria-label", /Selected Player\./);
+    await expect(assetCardGroup).not.toHaveAttribute("aria-label", /Retro arcade launch for creator heroes player direction/);
+  });
+
   test("switching heroes after loading social queue copy resets the next hero pack to its default copy", async ({ page }) => {
     await page.route("**/api/varco/studio-pack", async (route) => {
       const payload = route.request().postDataJSON();
