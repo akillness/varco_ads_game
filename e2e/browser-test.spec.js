@@ -27,18 +27,20 @@ function createStudioPackFixture(brief, { heroName = "Sound Crafter", suffix = "
         player: `${brief} player direction`
       },
       savings: {
-        estimatedCallsSaved: 2,
+        estimatedCallsSaved: 5,
         estimatedCallsWithPack: 3,
-        estimatedCallsWithoutPack: 5
+        estimatedCallsWithoutPack: 8
       },
       productionQueue: [
-        { id: `queue-sound-${suffix}`, label: "Queue sound", lane: "sound", key: "bgm", prompt: `${brief} bgm prompt` },
-        { id: `queue-copy-${suffix}`, label: "Queue copy", lane: "social", key: "launch", prompt: `${brief} launch copy` }
+        { id: `queue-sound-${suffix}`, label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: `${brief} bgm prompt` },
+        { id: `queue-asset-player-${suffix}`, label: "Hero showcase model", lane: "asset", key: "player", prompt: `${brief} player direction` },
+        { id: `queue-asset-enemy-${suffix}`, label: "Rival silhouette", lane: "asset", key: "enemy", prompt: `${brief} enemy direction` },
+        { id: `queue-copy-${suffix}`, label: "Social launch copy", lane: "social", key: "x", prompt: `${brief} launch copy` }
       ],
       marketingAngles: [
         {
           id: `launch-${suffix}`,
-          channel: "launch",
+          channel: "x",
           label: `Launch ${suffix}`,
           copy: `${brief} launch copy`,
           cta: `${brief} CTA`
@@ -551,6 +553,47 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("studio-copy-card")).toHaveCount(0);
     await expect(soundPromptInput).toHaveValue("ambient game background music");
     await expect(page.getByTestId("sound-tab-group")).not.toHaveAttribute("aria-label", /Retro arcade launch for creator heroes bgm prompt/);
+  });
+
+  test("switching heroes after a ready studio pack clears stale loaded asset directions", async ({ page }) => {
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      const payload = route.request().postDataJSON();
+      const heroName = payload.heroId === "sounder" ? "Sound Crafter" : "3D Modeler";
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(createStudioPackFixture("Retro arcade launch for creator heroes", {
+          heroName,
+          suffix: payload.heroId
+        }))
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const heroGroup = page.getByTestId("hero-select-group");
+    const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
+    const assetPromptInput = page.locator(".asset-editor .prompt-input");
+    const assetCardGroup = page.getByTestId("asset-card-group");
+    const heroShowcaseQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Hero showcase model" });
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Fresh studio pack ready for 3D Modeler.");
+
+    await heroShowcaseQueueItem.click();
+    await expect(page.getByRole("button", { name: /^🧊 에셋$/ })).toHaveClass(/active/);
+    await expect(page.getByTestId("asset-card-player")).toHaveClass(/selected/);
+    await expect(assetPromptInput).toHaveValue("Retro arcade launch for creator heroes player direction");
+    await expect(assetCardGroup).toHaveAttribute("aria-label", /Retro arcade launch for creator heroes player direction/);
+
+    await sounderButton.click();
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for Sound Crafter. Ready for a new campaign brief.");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(page.getByTestId("studio-pack-status")).toHaveCount(0);
+    await expect(assetPromptInput).toHaveValue("Player");
+    await expect(assetCardGroup).not.toHaveAttribute("aria-label", /Retro arcade launch for creator heroes player direction/);
   });
 
   test("studio pack status surfaces backend failures without leaving stale content behind", async ({ page }) => {
