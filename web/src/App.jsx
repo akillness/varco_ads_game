@@ -68,6 +68,8 @@ const EDITOR_TABS = [
   { id: "history", label: "📋 이력", ariaLabel: "history editor" }
 ];
 
+const DEFAULT_EDITOR_SELECTION = { sound: "bgm", asset: "orb" };
+
 const MISSION_TEMPLATES = [
   {
     kind: "collect",
@@ -2594,7 +2596,7 @@ export default function App() {
   const [shareFeedback, setShareFeedback] = useState(null);
   const [sharePendingChannel, setSharePendingChannel] = useState(null);
   const [editorDrafts, setEditorDrafts] = useState({ sound: {}, asset: {} });
-  const [editorSelection, setEditorSelection] = useState({ sound: "bgm", asset: "orb" });
+  const [editorSelection, setEditorSelection] = useState(DEFAULT_EDITOR_SELECTION);
   const latestStateRef = useRef(state);
   const latestServerLogsRef = useRef(serverLogs);
   const serverLogsHydratedRef = useRef(false);
@@ -3086,6 +3088,7 @@ export default function App() {
     setStudioStatus(nextStatus);
     setStudioStatusMessage("");
     setEditorDrafts({ sound: {}, asset: {} });
+    setEditorSelection(DEFAULT_EDITOR_SELECTION);
     setSelectedMarketingAngle(null);
     setSelectedQueueItemId(null);
     clearMarketingCopyFeedback();
