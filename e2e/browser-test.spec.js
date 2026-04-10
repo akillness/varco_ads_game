@@ -849,6 +849,46 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("sound-version-history")).toContainText("적용됨");
   });
 
+  test("sound version history supports keyboard review and apply", async ({ page }) => {
+    const soundPrompt = page.locator(".sound-editor .prompt-input");
+
+    await soundPrompt.fill("victory sting for sponsor-ready arcade arena");
+    await page.locator(".sound-editor .regenerate-btn").click();
+    await expect(page.getByTestId("sound-generation-result")).toBeVisible();
+    await page.getByTestId("sound-generation-result").getByRole("button", { name: /Apply/ }).click();
+
+    await soundPrompt.fill("midnight sponsor countdown sting");
+    await page.locator(".sound-editor .regenerate-btn").click();
+    await expect(page.getByTestId("sound-generation-result")).toBeVisible();
+
+    const versionHistory = page.getByTestId("sound-version-history");
+    const versionEntries = page.getByTestId("sound-version-entry");
+    await expect(versionHistory).toHaveAttribute("aria-label", "Sound version history list");
+    await expect(versionEntries).toHaveCount(2);
+    await expect(versionEntries.nth(0)).toHaveAttribute("aria-label", /Sound version 1 of 2\./);
+    await expect(versionEntries.nth(0)).toHaveAttribute("aria-description", "Press Enter or Space to apply this sound version.");
+    await expect(versionEntries.nth(1)).toHaveAttribute("aria-description", "Currently applied.");
+
+    await versionEntries.nth(0).focus();
+    await expect(versionEntries.nth(0)).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(versionEntries.nth(1)).toBeFocused();
+
+    await page.keyboard.press("Home");
+    await expect(versionEntries.nth(0)).toBeFocused();
+
+    await page.keyboard.press("End");
+    await expect(versionEntries.nth(1)).toBeFocused();
+
+    await page.keyboard.press("Home");
+    await expect(versionEntries.nth(0)).toBeFocused();
+
+    await page.keyboard.press("Enter");
+    await expect(versionEntries.nth(0)).toHaveAttribute("aria-label", /Currently applied\./);
+    await expect(versionEntries.nth(0)).toHaveAttribute("aria-description", "Currently applied.");
+    await expect(versionEntries.nth(0)).toContainText("적용됨");
+  });
+
   test("sound editor surfaces upstream failure details without creating a stale version", async ({ page }) => {
     await page.route("**/api/varco/text2sound", async (route) => {
       await route.fulfill({
@@ -979,6 +1019,47 @@ test.describe("Web UI", () => {
     await page.getByTestId("asset-generation-result").getByRole("button", { name: /Apply/ }).click();
     await expect(page.getByTestId("asset-version-history")).toContainText("적용됨");
     await expect(page.getByTestId("arena-status-strip")).toContainText("Assets live: 1/3");
+  });
+
+  test("asset version history supports keyboard review and apply", async ({ page }) => {
+    await page.getByRole("button", { name: /에셋/ }).click();
+
+    const directionInput = page.locator(".asset-editor .prompt-input");
+    await directionInput.fill("hero orb with premium holographic sponsor finish");
+    await page.locator(".asset-editor .regenerate-btn").click();
+    await expect(page.getByTestId("asset-generation-result")).toBeVisible();
+    await page.getByTestId("asset-generation-result").getByRole("button", { name: /Apply/ }).click();
+
+    await directionInput.fill("hero orb with molten sponsor trim");
+    await page.locator(".asset-editor .regenerate-btn").click();
+    await expect(page.getByTestId("asset-generation-result")).toBeVisible();
+
+    const versionHistory = page.getByTestId("asset-version-history");
+    const versionEntries = page.getByTestId("asset-version-entry");
+    await expect(versionHistory).toHaveAttribute("aria-label", "Asset version history list");
+    await expect(versionEntries).toHaveCount(2);
+    await expect(versionEntries.nth(0)).toHaveAttribute("aria-label", /Asset version 1 of 2\./);
+    await expect(versionEntries.nth(0)).toHaveAttribute("aria-description", "Press Enter or Space to apply this asset version.");
+    await expect(versionEntries.nth(1)).toHaveAttribute("aria-description", "Currently applied.");
+
+    await versionEntries.nth(0).focus();
+    await expect(versionEntries.nth(0)).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(versionEntries.nth(1)).toBeFocused();
+
+    await page.keyboard.press("Home");
+    await expect(versionEntries.nth(0)).toBeFocused();
+
+    await page.keyboard.press("End");
+    await expect(versionEntries.nth(1)).toBeFocused();
+
+    await page.keyboard.press("Home");
+    await expect(versionEntries.nth(0)).toBeFocused();
+
+    await page.keyboard.press("Enter");
+    await expect(versionEntries.nth(0)).toHaveAttribute("aria-label", /Currently applied\./);
+    await expect(versionEntries.nth(0)).toHaveAttribute("aria-description", "Currently applied.");
+    await expect(versionEntries.nth(0)).toContainText("적용됨");
   });
 
   test("asset editor shows accepted and ready states for requestId-based conversions", async ({ page }) => {

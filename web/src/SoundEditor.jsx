@@ -27,6 +27,75 @@ function focusSoundTabButton(tabId) {
   });
 }
 
+function truncatePrompt(prompt = '') {
+  return `${prompt.slice(0, 30)}${prompt.length > 30 ? '...' : ''}`;
+}
+
+function getVersionEntryAriaLabel(entry, index, total) {
+  const parts = [
+    `Sound version ${index + 1} of ${total}.`,
+    `Prompt ${truncatePrompt(entry.prompt || '')}.`,
+    `${((entry.latencyMs || 0) / 1000).toFixed(1)} seconds by VARCO3D.`
+  ];
+
+  if (entry.cacheHit) {
+    parts.push('Cache hit.');
+  }
+
+  if (entry.appliedAt) {
+    parts.push('Currently applied.');
+  }
+
+  return parts.join(' ');
+}
+
+function getVersionEntryAriaDescription(entry) {
+  if (entry.appliedAt) {
+    return 'Currently applied.';
+  }
+  return 'Press Enter or Space to apply this sound version.';
+}
+
+function focusVersionEntry(entryId) {
+  if (typeof document === 'undefined') return;
+  window.requestAnimationFrame(() => {
+    document.querySelector(`[data-sound-version-id="${entryId}"]`)?.focus();
+  });
+}
+
+function handleVersionEntryKeyDown(event, currentId, entries, onApply) {
+  if (event.target !== event.currentTarget) {
+    return;
+  }
+
+  const navigationKeys = ['ArrowUp', 'ArrowDown', 'Home', 'End'];
+  if (navigationKeys.includes(event.key) && entries.length > 1) {
+    const currentIndex = entries.findIndex((entry) => entry.id === currentId);
+    if (currentIndex < 0) return;
+
+    event.preventDefault();
+
+    let nextIndex = currentIndex;
+    if (event.key === 'ArrowDown') {
+      nextIndex = (currentIndex + 1) % entries.length;
+    } else if (event.key === 'ArrowUp') {
+      nextIndex = (currentIndex - 1 + entries.length) % entries.length;
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = entries.length - 1;
+    }
+
+    focusVersionEntry(entries[nextIndex].id);
+    return;
+  }
+
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    onApply(currentId);
+  }
+}
+
 function handleSoundTabArrowKeyDown(event, currentId, onSelect) {
   const navigationKeys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
   if (!navigationKeys.includes(event.key) || SOUND_TYPES.length < 2) {
@@ -260,12 +329,23 @@ export default function SoundEditor({
       )}
 
       {typeHistory.length > 0 && (
-        <div className="version-history" data-testid="sound-version-history">
+        <div className="version-history" data-testid="sound-version-history" role="group" aria-label="Sound version history list">
           <div className="version-history-title">버전 이력</div>
-          {[...typeHistory].reverse().map(entry => (
-            <div key={entry.id} className={`version-item ${entry.appliedAt ? 'active' : ''}`}>
-              <span className="version-prompt">{entry.prompt.slice(0, 30)}{entry.prompt.length > 30 ? '...' : ''}</span>
-              <span className="version-latency">{(entry.latencyMs / 1000).toFixed(1)}s</span>
+          {[...typeHistory].reverse().map((entry, index, entries) => (
+            <div
+              key={entry.id}
+              className={`version-item ${entry.appliedAt ? 'active' : ''}`}
+              data-testid="sound-version-entry"
+              data-sound-version-id={entry.id}
+              role="group"
+              tabIndex={0}
+              aria-label={getVersionEntryAriaLabel(entry, index, entries.length)}
+              aria-description={getVersionEntryAriaDescription(entry)}
+              title={getVersionEntryAriaLabel(entry, index, entries.length)}
+              onKeyDown={(event) => handleVersionEntryKeyDown(event, entry.id, entries, handleApply)}
+            >
+              <span className="version-prompt">{truncatePrompt(entry.prompt || '')}</span>
+              <span className="version-latency">{((entry.latencyMs || 0) / 1000).toFixed(1)}s</span>
               {entry.cacheHit && <span className="cache-hit-badge">cache</span>}
               {entry.appliedAt && <span className="applied-badge">적용됨</span>}
               {entry.result?.audioUrl && <audio controls src={entry.result.audioUrl} style={{ width: '80px', height: '24px' }} />}

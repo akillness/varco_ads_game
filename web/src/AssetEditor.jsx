@@ -22,6 +22,71 @@ function focusAssetCard(assetId) {
   });
 }
 
+function getAssetVersionEntryAriaLabel(entry, index, total) {
+  const parts = [
+    `Asset version ${index + 1} of ${total}.`,
+    `${entry.subType || 'asset'} asset.`,
+    `${((entry.latencyMs || 0) / 1000).toFixed(1)} seconds by VARCO3D.`
+  ];
+
+  if (entry.cacheHit) {
+    parts.push('Cache hit.');
+  }
+
+  if (entry.appliedAt) {
+    parts.push('Currently applied.');
+  }
+
+  return parts.join(' ');
+}
+
+function getAssetVersionEntryAriaDescription(entry) {
+  if (entry.appliedAt) {
+    return 'Currently applied.';
+  }
+  return 'Press Enter or Space to apply this asset version.';
+}
+
+function focusAssetVersionEntry(entryId) {
+  if (typeof document === 'undefined') return;
+  window.requestAnimationFrame(() => {
+    document.querySelector(`[data-asset-version-id="${entryId}"]`)?.focus();
+  });
+}
+
+function handleAssetVersionEntryKeyDown(event, currentId, entries, onApply) {
+  if (event.target !== event.currentTarget) {
+    return;
+  }
+
+  const navigationKeys = ['ArrowUp', 'ArrowDown', 'Home', 'End'];
+  if (navigationKeys.includes(event.key) && entries.length > 1) {
+    const currentIndex = entries.findIndex((entry) => entry.id === currentId);
+    if (currentIndex < 0) return;
+
+    event.preventDefault();
+
+    let nextIndex = currentIndex;
+    if (event.key === 'ArrowDown') {
+      nextIndex = (currentIndex + 1) % entries.length;
+    } else if (event.key === 'ArrowUp') {
+      nextIndex = (currentIndex - 1 + entries.length) % entries.length;
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = entries.length - 1;
+    }
+
+    focusAssetVersionEntry(entries[nextIndex].id);
+    return;
+  }
+
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    onApply(currentId);
+  }
+}
+
 function handleAssetCardArrowKeyDown(event, currentId, onSelect) {
   const navigationKeys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
   if (!navigationKeys.includes(event.key) || ASSET_TYPES.length < 2) {
@@ -335,12 +400,23 @@ export default function AssetEditor({
       )}
 
       {typeHistory.length > 0 && (
-        <div className="version-history" data-testid="asset-version-history">
+        <div className="version-history" data-testid="asset-version-history" role="group" aria-label="Asset version history list">
           <div className="version-history-title">버전 이력</div>
-          {[...typeHistory].reverse().map(entry => (
-            <div key={entry.id} className={`version-item ${entry.appliedAt ? 'active' : ''}`}>
+          {[...typeHistory].reverse().map((entry, index, entries) => (
+            <div
+              key={entry.id}
+              className={`version-item ${entry.appliedAt ? 'active' : ''}`}
+              data-testid="asset-version-entry"
+              data-asset-version-id={entry.id}
+              role="group"
+              tabIndex={0}
+              aria-label={getAssetVersionEntryAriaLabel(entry, index, entries.length)}
+              aria-description={getAssetVersionEntryAriaDescription(entry)}
+              title={getAssetVersionEntryAriaLabel(entry, index, entries.length)}
+              onKeyDown={(event) => handleAssetVersionEntryKeyDown(event, entry.id, entries, handleApply)}
+            >
               <span className="version-prompt">{entry.subType}</span>
-              <span className="version-latency">{(entry.latencyMs / 1000).toFixed(1)}s</span>
+              <span className="version-latency">{((entry.latencyMs || 0) / 1000).toFixed(1)}s</span>
               {entry.cacheHit && <span className="cache-hit-badge">cache</span>}
               {entry.appliedAt && <span className="applied-badge">적용됨</span>}
               <button className="apply-btn small" onClick={() => handleApply(entry.id)}>Apply</button>
