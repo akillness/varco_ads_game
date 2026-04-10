@@ -1525,6 +1525,10 @@ function handleAchievementItemKeyDown(event) {
   handleFocusableSiblingKeyDown(event, '[data-testid="achievement-item"]', ["ArrowDown", "ArrowUp"]);
 }
 
+function handleAgentLogItemKeyDown(event) {
+  handleFocusableSiblingKeyDown(event, '[data-testid="agent-log-item"]', ["ArrowDown", "ArrowUp"]);
+}
+
 function handleDirectorBeatCardKeyDown(event) {
   handleFocusableSiblingKeyDown(event, '[data-testid="director-beat-card"], [data-testid="swing-event-card"]', ["ArrowDown", "ArrowUp"]);
 }
@@ -4309,6 +4313,7 @@ export default function App() {
                   tabIndex={0}
                   aria-label={entryAriaLabel}
                   title={entryAriaLabel}
+                  onKeyDown={handleAgentLogItemKeyDown}
                 >
                   [{entry.level}] {entry.message}
                 </li>

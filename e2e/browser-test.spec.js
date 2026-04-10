@@ -310,6 +310,14 @@ test.describe("Web UI", () => {
     await expect(agentLogRows.nth(1)).toHaveAttribute("title", "Agent log 2. INFO. orb collected");
     await agentLogRows.nth(0).focus();
     await expect(agentLogRows.nth(0)).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(agentLogRows.nth(1)).toBeFocused();
+    await page.keyboard.press("ArrowUp");
+    await expect(agentLogRows.nth(0)).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(agentLogRows.nth(1)).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(agentLogRows.nth(0)).toBeFocused();
   });
 
   test("generates a studio pack and routes prompt chips into the matching editor slot", async ({ page }) => {
