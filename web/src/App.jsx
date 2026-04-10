@@ -3371,6 +3371,17 @@ export default function App() {
                 </button>
               );
             })}
+            {heroSelectionLocked && (
+              <span
+                className="hero-lock-hint"
+                data-testid="hero-lock-hint"
+                role="status"
+                aria-label="Hero lock active. Reset to switch agents."
+                title="Reset to switch agents"
+              >
+                Locked • Reset to switch agents
+              </span>
+            )}
           </div>
         </div>
         <div className="header-stats">

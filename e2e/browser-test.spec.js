@@ -839,6 +839,7 @@ test.describe("Web UI", () => {
     const heroGroup = page.getByTestId("hero-select-group");
     const modelerButton = heroGroup.getByRole("button", { name: "3D Modeler", exact: true });
     const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
+    const heroLockHint = page.getByTestId("hero-lock-hint");
     const controlLegend = page.getByTestId("control-legend");
     const runBriefing = page.getByTestId("run-briefing");
     const timer = page.locator(".timer");
@@ -861,6 +862,8 @@ test.describe("Web UI", () => {
     await expect(sounderButton).toHaveAttribute("aria-disabled", "true");
     await expect(modelerButton).toHaveAttribute("aria-description", "Select 3D Modeler; currently selected. Reset to change hero after a run starts.");
     await expect(sounderButton).toHaveAttribute("aria-description", "Select Sound Crafter. Reset to change hero after a run starts.");
+    await expect(heroLockHint).toContainText("Locked • Reset to switch agents");
+    await expect(heroLockHint).toHaveAttribute("aria-label", "Hero lock active. Reset to switch agents.");
     await expect(timer).toHaveText("45s");
     await expect(score).toHaveText("12");
     await expect(modelerButton).toHaveAttribute("aria-pressed", "true");
@@ -872,6 +875,7 @@ test.describe("Web UI", () => {
     await page.getByRole("button", { name: "Reset" }).click();
     await expect(modelerButton).toHaveAttribute("aria-disabled", "false");
     await expect(sounderButton).toHaveAttribute("aria-disabled", "false");
+    await expect(heroLockHint).toHaveCount(0);
     await expect(timer).toHaveText("60s");
     await expect(score).toHaveText("0");
 
