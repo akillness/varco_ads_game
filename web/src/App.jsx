@@ -3223,6 +3223,11 @@ export default function App() {
         body: JSON.stringify({ brief: briefAtStart, heroId: heroIdAtStart })
       });
       applyIfActive(() => {
+        const initialMarketingAngle = json.studioPack.marketingAngles?.[0] || null;
+        const initialQueueItem = initialMarketingAngle
+          ? json.studioPack.productionQueue?.find((item) => item.lane === "social" && item.key === initialMarketingAngle.channel) || null
+          : null;
+
         setStudioPack(json.studioPack);
         setStudioStatus(json.studioPack.cache_hit ? "cached" : "ready");
         setStudioStatusMessage("");
@@ -3230,7 +3235,8 @@ export default function App() {
           sound: json.studioPack.sounds,
           asset: json.studioPack.assets
         });
-        setSelectedMarketingAngle(json.studioPack.marketingAngles?.[0] || null);
+        setSelectedMarketingAngle(initialMarketingAngle);
+        setSelectedQueueItemId(initialQueueItem?.id || null);
         clearMarketingCopyFeedback();
         refreshCacheStats().catch(() => null);
         setLog((prev) => [`Studio pack ${json.studioPack.cache_hit ? "cached" : "ready"}`, ...prev].slice(0, 8));

@@ -662,6 +662,72 @@ test.describe("Web UI", () => {
     await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
   });
 
+  test("regenerating a cached pack restores the default social queue highlight for the active copy", async ({ page }) => {
+    let requestCount = 0;
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const fixture = createStudioPackFixture("Retro arcade launch for creator heroes", {
+        suffix: "cached-social-reset"
+      });
+      fixture.studioPack.packId = "pack-cached-social-reset";
+      fixture.studioPack.marketingAngles = [
+        {
+          id: "cached-launch-x",
+          channel: "x",
+          label: "X",
+          copy: "Retro arcade launch X copy",
+          cta: "Drop into the arena"
+        },
+        {
+          id: "cached-launch-instagram",
+          channel: "instagram",
+          label: "Instagram Reel",
+          copy: "Retro arcade launch Instagram Reel copy",
+          cta: "Swipe into the spotlight"
+        }
+      ];
+      fixture.studioPack.productionQueue = [
+        { id: "queue-sound-cached", label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: "Retro arcade launch bgm prompt" },
+        { id: "queue-asset-player-cached", label: "Hero showcase model", lane: "asset", key: "player", prompt: "Retro arcade launch player direction" },
+        { id: "queue-social-cached", label: "Social launch copy", lane: "social", key: "x", prompt: "Retro arcade launch X copy" }
+      ];
+      fixture.studioPack.cache_hit = requestCount > 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(fixture)
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const socialQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Social launch copy" });
+    const xAngleButton = page.getByRole("button", { name: "X", exact: true });
+    const instagramAngleButton = page.getByRole("button", { name: "Instagram Reel", exact: true });
+    const copyCard = page.getByTestId("studio-copy-card");
+    const studioStatus = page.getByTestId("studio-pack-status");
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Fresh studio pack ready for 3D Modeler.");
+    await expect(copyCard).toContainText("Retro arcade launch X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await instagramAngleButton.click();
+    await expect(copyCard).toContainText("Retro arcade launch Instagram Reel copy");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
+
+    await generateButton.click();
+    await expect(studioStatus).toContainText("CACHE HIT");
+    await expect(studioStatus).toContainText("Reused the latest studio pack for 3D Modeler.");
+    await expect(copyCard).toContainText("Retro arcade launch X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+  });
+
   test("studio pack status surfaces backend failures without leaving stale content behind", async ({ page }) => {
     await page.route("**/api/varco/studio-pack", async (route) => {
       await route.fulfill({
