@@ -587,6 +587,22 @@ test.describe("Web UI", () => {
     await page.keyboard.press("Enter");
     await expect(historyEntries.nth(0)).toHaveAttribute("aria-description", /Currently applied\./);
     await expect(historyEntries.nth(0)).toContainText("적용됨");
+
+    const secondApplyButton = historyEntries.nth(1).getByRole("button", { name: "Apply", exact: true });
+    await secondApplyButton.focus();
+    await expect(secondApplyButton).toBeFocused();
+
+    await page.keyboard.press("ArrowUp");
+    await expect(secondApplyButton).toBeFocused();
+    await expect(historyEntries.nth(1)).not.toBeFocused();
+
+    await page.keyboard.press("Home");
+    await expect(secondApplyButton).toBeFocused();
+    await expect(historyEntries.nth(0)).not.toBeFocused();
+
+    await page.keyboard.press("Enter");
+    await expect(historyEntries.nth(1)).toHaveAttribute("aria-description", /Currently applied\./);
+    await expect(historyEntries.nth(1)).toContainText("적용됨");
   });
 
   test("asset editor cards support keyboard cycling and pressed-state accessibility", async ({ page }) => {

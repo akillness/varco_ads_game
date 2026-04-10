@@ -38,6 +38,10 @@ function focusHistoryEntry(entryId) {
 }
 
 function handleHistoryEntryKeyDown(event, currentId, entries, onApply) {
+  if (event.target !== event.currentTarget) {
+    return;
+  }
+
   const navigationKeys = ['ArrowUp', 'ArrowDown', 'Home', 'End'];
   if (navigationKeys.includes(event.key) && entries.length > 1) {
     const currentIndex = entries.findIndex((entry) => entry.id === currentId);
