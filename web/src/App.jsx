@@ -1500,6 +1500,18 @@ function handleArchiveEntryTrendKeyDown(event) {
   );
 }
 
+function handleArchiveFormGroupKeyDown(event) {
+  if (event.target !== event.currentTarget) {
+    return;
+  }
+  handleFocusableSiblingKeyDown(
+    event,
+    '[data-testid="leaderboard-archive-entry-form"]',
+    ["ArrowDown", "ArrowUp"],
+    '[data-testid="leaderboard-archive-list"]'
+  );
+}
+
 function handleArchiveFormChipKeyDown(event) {
   handleFocusableSiblingKeyDown(event, '[data-testid="leaderboard-archive-entry-form-chip"]', ["ArrowRight", "ArrowLeft"]);
 }
@@ -3811,6 +3823,7 @@ export default function App() {
                         tabIndex={0}
                         aria-label={getArchiveEntryFormGroupAriaLabel(entry.hero, entry.form)}
                         title={getArchiveEntryFormGroupAriaLabel(entry.hero, entry.form)}
+                        onKeyDown={handleArchiveFormGroupKeyDown}
                       >
                         <span className="leaderboard-archive-entry-form-label">RECENT FORM</span>
                         <div className="leaderboard-archive-entry-form-chips">
