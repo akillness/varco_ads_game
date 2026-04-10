@@ -1360,43 +1360,8 @@ function handleArchiveFilterKeyDown(event, currentFilterId, filters, onSelect) {
   );
 }
 
-function handleShareButtonKeyDown(event, currentChannel, onSelect) {
-  const navigationKeys = ["ArrowLeft", "ArrowRight", "Home", "End"];
-  if (!navigationKeys.includes(event.key) || SHARE_CHANNELS.length < 2) {
-    return;
-  }
-
-  const currentIndex = SHARE_CHANNELS.findIndex((channel) => channel.id === currentChannel);
-  if (currentIndex === -1) {
-    return;
-  }
-
-  let nextIndex = currentIndex;
-  if (event.key === "ArrowRight") {
-    nextIndex = (currentIndex + 1) % SHARE_CHANNELS.length;
-  } else if (event.key === "ArrowLeft") {
-    nextIndex = (currentIndex - 1 + SHARE_CHANNELS.length) % SHARE_CHANNELS.length;
-  } else if (event.key === "Home") {
-    nextIndex = 0;
-  } else if (event.key === "End") {
-    nextIndex = SHARE_CHANNELS.length - 1;
-  }
-
-  if (nextIndex === currentIndex) {
-    return;
-  }
-
-  event.preventDefault();
-  const nextChannel = SHARE_CHANNELS[nextIndex];
-  onSelect(nextChannel.id);
-
-  const buttonGroup = event.currentTarget?.parentElement;
-  if (!buttonGroup) {
-    return;
-  }
-
-  const buttons = Array.from(buttonGroup.querySelectorAll('button[data-share-button="true"]'));
-  buttons[nextIndex]?.focus();
+function handleShareButtonKeyDown(event) {
+  handleFocusableSiblingKeyDown(event, 'button[data-share-button="true"]', ["ArrowRight", "ArrowLeft"]);
 }
 
 function handleHeroSelectKeyDown(event, currentHeroId, onSelect) {
@@ -3587,14 +3552,16 @@ export default function App() {
         {/* SNS Share */}
         <div className="panel">
           <div className="panel-title">Share</div>
-          <div className="share-btns">
+          <div className="share-btns" data-testid="share-button-group" role="group" aria-label="Share match recap">
             <button
               type="button"
               className="share-btn"
               data-testid="share-button-x"
               data-share-button="true"
+              title={shareButtonLabel("x")}
+              aria-label={`${shareButtonLabel("x")}. Open the X share flow.`}
               onClick={() => shareResult("x")}
-              onKeyDown={(event) => handleShareButtonKeyDown(event, "x", shareResult)}
+              onKeyDown={handleShareButtonKeyDown}
             >
               {shareButtonLabel("x")}
             </button>
@@ -3603,8 +3570,10 @@ export default function App() {
               className="share-btn"
               data-testid="share-button-facebook"
               data-share-button="true"
+              title={shareButtonLabel("facebook")}
+              aria-label={`${shareButtonLabel("facebook")}. Open the Facebook share flow.`}
               onClick={() => shareResult("facebook")}
-              onKeyDown={(event) => handleShareButtonKeyDown(event, "facebook", shareResult)}
+              onKeyDown={handleShareButtonKeyDown}
             >
               {shareButtonLabel("facebook")}
             </button>
@@ -3613,8 +3582,10 @@ export default function App() {
               className="share-btn"
               data-testid="share-button-telegram"
               data-share-button="true"
+              title={shareButtonLabel("telegram")}
+              aria-label={`${shareButtonLabel("telegram")}. Open the Telegram share flow.`}
               onClick={() => shareResult("telegram")}
-              onKeyDown={(event) => handleShareButtonKeyDown(event, "telegram", shareResult)}
+              onKeyDown={handleShareButtonKeyDown}
             >
               {shareButtonLabel("telegram")}
             </button>

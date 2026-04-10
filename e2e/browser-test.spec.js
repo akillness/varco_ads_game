@@ -1278,7 +1278,7 @@ test.describe("Web UI", () => {
     expect(openedUrls).toEqual(["https://share.example/telegram-second"]);
   });
 
-  test("share panel exposes keyboard cycling across channels", async ({ page }) => {
+  test("share panel keyboard navigation moves focus without triggering share requests", async ({ page }) => {
     await page.evaluate(() => {
       window.__openedUrls = [];
       window.open = (url) => {
@@ -1287,7 +1287,9 @@ test.describe("Web UI", () => {
       };
     });
 
+    let shareRequestCount = 0;
     await page.route("**/api/share/sns", async (route) => {
+      shareRequestCount += 1;
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -1302,40 +1304,49 @@ test.describe("Web UI", () => {
       });
     });
 
+    const shareButtonGroup = page.getByTestId("share-button-group");
     const shareButtonX = page.getByTestId("share-button-x");
     const shareButtonFacebook = page.getByTestId("share-button-facebook");
     const shareButtonTelegram = page.getByTestId("share-button-telegram");
-    const shareFeedback = page.getByTestId("share-feedback");
+
+    await expect(shareButtonGroup).toHaveAttribute("role", "group");
+    await expect(shareButtonGroup).toHaveAttribute("aria-label", "Share match recap");
+    await expect(shareButtonX).toHaveAttribute("aria-label", "Share X. Open the X share flow.");
+    await expect(shareButtonFacebook).toHaveAttribute("title", "Share Facebook");
+    await expect(shareButtonTelegram).toHaveAttribute("title", "Share Telegram");
 
     await shareButtonX.focus();
     await expect(shareButtonX).toBeFocused();
 
     await shareButtonX.press("ArrowRight");
     await expect(shareButtonFacebook).toBeFocused();
-    await expect(shareFeedback).toContainText("Opened Facebook share link.");
-    await expect(shareButtonFacebook).toHaveText("Shared Facebook");
+    await expect(page.getByTestId("share-feedback")).toHaveCount(0);
 
     await shareButtonFacebook.press("End");
     await expect(shareButtonTelegram).toBeFocused();
-    await expect(shareFeedback).toContainText("Opened Telegram share link.");
-    await expect(shareButtonTelegram).toHaveText("Shared Telegram");
+    await expect(page.getByTestId("share-feedback")).toHaveCount(0);
 
     await shareButtonTelegram.press("Home");
     await expect(shareButtonX).toBeFocused();
-    await expect(shareFeedback).toContainText("Opened X share link.");
-    await expect(shareButtonX).toHaveText("Shared X");
 
     await shareButtonX.press("ArrowLeft");
     await expect(shareButtonTelegram).toBeFocused();
-    await expect(shareFeedback).toContainText("Opened Telegram share link.");
+    await expect(page.getByTestId("share-feedback")).toHaveCount(0);
 
-    const openedUrls = await page.evaluate(() => window.__openedUrls.slice());
-    expect(openedUrls).toEqual([
-      "https://share.example/facebook",
-      "https://share.example/telegram",
-      "https://share.example/x",
-      "https://share.example/telegram"
-    ]);
+    let openedUrls = await page.evaluate(() => window.__openedUrls.slice());
+    expect(openedUrls).toEqual([]);
+    expect(shareRequestCount).toBe(0);
+
+    await shareButtonTelegram.press("Enter");
+    const shareFeedback = page.getByTestId("share-feedback");
+    await expect(shareFeedback).toContainText("Opened Telegram share link.");
+    await expect(shareButtonTelegram).toHaveText("Shared Telegram");
+    await expect(shareButtonTelegram).toHaveAttribute("title", "Shared Telegram");
+    await expect(shareButtonTelegram).toHaveAttribute("aria-label", "Shared Telegram. Open the Telegram share flow.");
+
+    openedUrls = await page.evaluate(() => window.__openedUrls.slice());
+    expect(openedUrls).toEqual(["https://share.example/telegram"]);
+    expect(shareRequestCount).toBe(1);
   });
 
   test("share panel surfaces backend failures without opening a share window", async ({ page }) => {
