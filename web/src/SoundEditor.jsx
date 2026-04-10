@@ -114,6 +114,32 @@ function getLatestSoundResultAriaDescription(soundLabel) {
   return `Press Enter or Space to apply the latest ${soundLabel} sound result.`;
 }
 
+function getSoundGenerationStatusAriaLabel(status, soundLabel) {
+  if (!status) {
+    return 'Sound generation status unavailable.';
+  }
+
+  const toneLabel = {
+    pending: 'Pending',
+    ready: 'Ready',
+    error: 'Error'
+  }[status.tone] || 'Update';
+
+  const parts = [
+    'Sound generation status.',
+    toneLabel + '.',
+    `${soundLabel} cue.`,
+    `${status.label}.`,
+    status.detail
+  ];
+
+  if (status.resultId) {
+    parts.push(`Result ID ${status.resultId}.`);
+  }
+
+  return parts.join(' ');
+}
+
 function handleLatestSoundResultKeyDown(event, onApply) {
   if (event.target !== event.currentTarget) {
     return;
@@ -343,6 +369,11 @@ export default function SoundEditor({
         <div
           className={`conversion-status conversion-status-${generationStatus.tone}`}
           data-testid="sound-generation-status"
+          role="status"
+          aria-live="polite"
+          tabIndex={0}
+          aria-label={getSoundGenerationStatusAriaLabel(generationStatus, currentType?.label || activeTab)}
+          title={getSoundGenerationStatusAriaLabel(generationStatus, currentType?.label || activeTab)}
         >
           <strong>{generationStatus.label}</strong>
           <span>{generationStatus.detail}</span>

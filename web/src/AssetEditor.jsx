@@ -105,6 +105,32 @@ function getLatestAssetResultAriaDescription(assetLabel) {
   return `Press Enter or Space to apply the latest ${assetLabel} asset result.`;
 }
 
+function getAssetConversionStatusAriaLabel(status, assetLabel) {
+  if (!status) {
+    return 'Asset conversion status unavailable.';
+  }
+
+  const toneLabel = {
+    pending: 'Pending',
+    ready: 'Ready',
+    error: 'Error'
+  }[status.tone] || 'Update';
+
+  const parts = [
+    'Asset conversion status.',
+    toneLabel + '.',
+    `${assetLabel} asset.`,
+    `${status.label}.`,
+    status.detail
+  ];
+
+  if (status.requestId) {
+    parts.push(`Request ID ${status.requestId}.`);
+  }
+
+  return parts.join(' ');
+}
+
 function handleLatestAssetResultKeyDown(event, onApply) {
   if (event.target !== event.currentTarget) {
     return;
@@ -322,12 +348,12 @@ export default function AssetEditor({
       applyIfActive(() => {
         dispatch({ type: 'EDIT_GENERATE', editType: 'asset', subType: assetAtStart, prompt: promptAtStart, result: { modelUrl }, latencyMs, cacheHit });
         setLatestResult({ modelUrl, latencyMs, cacheHit });
-        setConversionStatus(requestId ? {
+        setConversionStatus({
           tone: 'ready',
           label: 'Preview ready',
           detail: 'The 3D preview is ready to inspect and apply.',
-          requestId
-        } : null);
+          requestId: requestId || null
+        });
       });
     } catch (e) {
       console.error('3D conversion failed:', e);
@@ -416,6 +442,11 @@ export default function AssetEditor({
         <div
           className={`conversion-status conversion-status-${conversionStatus.tone}`}
           data-testid="asset-conversion-status"
+          role="status"
+          aria-live="polite"
+          tabIndex={0}
+          aria-label={getAssetConversionStatusAriaLabel(conversionStatus, currentAsset?.label || selectedAsset)}
+          title={getAssetConversionStatusAriaLabel(conversionStatus, currentAsset?.label || selectedAsset)}
         >
           <strong>{conversionStatus.label}</strong>
           <span>{conversionStatus.detail}</span>

@@ -947,7 +947,13 @@ test.describe("Web UI", () => {
     await soundPrompt.fill("victory sting for sponsor-ready arcade arena");
     await page.locator(".sound-editor .regenerate-btn").click();
 
-    await expect(page.getByTestId("sound-generation-status")).toContainText("Sound ready");
+    const soundStatus = page.getByTestId("sound-generation-status");
+    await expect(soundStatus).toContainText("Sound ready");
+    await expect(soundStatus).toHaveAttribute("role", "status");
+    await expect(soundStatus).toHaveAttribute("aria-label", /Sound generation status\. Ready\. BGM cue\. Sound ready\./);
+    await soundStatus.focus();
+    await expect(soundStatus).toBeFocused();
+
     const soundResult = page.getByTestId("sound-generation-result");
     await expect(soundResult).toBeVisible();
     await expect(soundResult).toHaveAttribute("aria-label", /Latest BGM sound result\./);
@@ -1023,6 +1029,13 @@ test.describe("Web UI", () => {
     await expect(status).toContainText("Sound generation failed");
     await expect(status).toContainText("Upstream sound render timed out");
     await expect(status).toContainText("mock-sound-fail");
+    await expect(status).toHaveAttribute("role", "status");
+    await expect(status).toHaveAttribute(
+      "aria-label",
+      "Sound generation status. Error. BGM cue. Sound generation failed. Upstream sound render timed out Result ID mock-sound-fail."
+    );
+    await status.focus();
+    await expect(status).toBeFocused();
     await expect(page.getByTestId("sound-generation-result")).toHaveCount(0);
     await expect(page.getByTestId("sound-version-history")).toHaveCount(0);
   });
@@ -1126,6 +1139,13 @@ test.describe("Web UI", () => {
     const directionInput = page.locator(".asset-editor .prompt-input");
     await directionInput.fill("hero orb with premium holographic sponsor finish");
     await page.locator(".asset-editor .regenerate-btn").click();
+
+    const assetStatus = page.getByTestId("asset-conversion-status");
+    await expect(assetStatus).toContainText("Preview ready");
+    await expect(assetStatus).toHaveAttribute("role", "status");
+    await expect(assetStatus).toHaveAttribute("aria-label", /Asset conversion status\. Ready\. Orb asset\. Preview ready\./);
+    await assetStatus.focus();
+    await expect(assetStatus).toBeFocused();
 
     const assetResult = page.getByTestId("asset-generation-result");
     await expect(assetResult).toBeVisible();
@@ -1231,6 +1251,10 @@ test.describe("Web UI", () => {
     await expect(status).toContainText("mock-request-123");
     await expect(status).toContainText("Waiting for 3D preview");
     await expect(status).toContainText("Preview ready");
+    await expect(status).toHaveAttribute("role", "status");
+    await expect(status).toHaveAttribute("aria-label", /Asset conversion status\. Ready\. Orb asset\. Preview ready\./);
+    await status.focus();
+    await expect(status).toBeFocused();
     await expect(page.getByTestId("asset-generation-result")).toBeVisible();
   });
 
@@ -1267,6 +1291,15 @@ test.describe("Web UI", () => {
     await expect(status).toContainText("Conversion failed");
     await expect(status).toContainText("Upstream render timed out");
     await expect(status).toContainText("mock-request-fail");
+    await expect(status).toHaveAttribute("role", "status");
+    await expect(
+      status
+    ).toHaveAttribute(
+      "aria-label",
+      "Asset conversion status. Error. Orb asset. Conversion failed. Upstream render timed out Request ID mock-request-fail."
+    );
+    await status.focus();
+    await expect(status).toBeFocused();
     await expect(page.getByTestId("asset-generation-result")).toHaveCount(0);
   });
 
