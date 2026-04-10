@@ -341,6 +341,39 @@ test.describe("Web UI", () => {
     await expect(studioPackCard).toBeFocused();
   });
 
+  test("sound and asset prompt collections expose focusable studio-pack summaries", async ({ page }) => {
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(createStudioPackFixture("Retro arcade launch for creator heroes", { suffix: "retro" }))
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    await studioPanel.locator("textarea").fill("Retro arcade launch for creator heroes");
+    await studioPanel.getByRole("button", { name: "Generate Studio Pack" }).click();
+
+    const soundGroup = page.getByTestId("sound-tab-group");
+    const soundSummary = "Sound prompt collection. 5 cues. Selected BGM. Current prompt Retro arcade launch for creator heroes bgm prompt. Available cues: BGM — Retro arcade launch for creator heroes bgm prompt. Orb 수집음 — Retro arcade launch for creator heroes orb prompt. 적 충돌음 — Retro arcade launch for creator heroes hit prompt. 승리음 — Retro arcade launch for creator heroes win prompt. 패배음 — Retro arcade launch for creator heroes lose prompt.";
+    await expect(soundGroup).toHaveAttribute("role", "group");
+    await expect(soundGroup).toHaveAttribute("tabindex", "0");
+    await expect(soundGroup).toHaveAttribute("aria-label", soundSummary);
+    await expect(soundGroup).toHaveAttribute("title", soundSummary);
+    await soundGroup.focus();
+    await expect(soundGroup).toBeFocused();
+
+    await page.getByRole("button", { name: /^🧊 에셋$/ }).click();
+    const assetGroup = page.getByTestId("asset-card-group");
+    const assetSummary = "Asset direction collection. 3 assets. Selected Orb. Current direction Retro arcade launch for creator heroes orb direction. Available assets: Orb — Retro arcade launch for creator heroes orb direction. Enemy — Retro arcade launch for creator heroes enemy direction. Player — Retro arcade launch for creator heroes player direction.";
+    await expect(assetGroup).toHaveAttribute("role", "group");
+    await expect(assetGroup).toHaveAttribute("tabindex", "0");
+    await expect(assetGroup).toHaveAttribute("aria-label", assetSummary);
+    await expect(assetGroup).toHaveAttribute("title", assetSummary);
+    await assetGroup.focus();
+    await expect(assetGroup).toBeFocused();
+  });
+
   test("marketing copy card exposes pending and ready clipboard feedback, then clears stale feedback when switching channels", async ({ page }) => {
     await page.evaluate(() => {
       window.__copiedText = "";

@@ -169,6 +169,23 @@ function handleAssetCardArrowKeyDown(event, currentId, onSelect) {
   focusAssetCard(nextAsset.id);
 }
 
+function getAssetDirectionCollectionAriaLabel(draftPrompts, selectedAsset) {
+  const activeAsset = ASSET_TYPES.find((asset) => asset.id === selectedAsset);
+  const currentDirection = draftPrompts?.[selectedAsset] || activeAsset?.label || '';
+  const availableAssetSummaries = ASSET_TYPES.map((asset) => {
+    const direction = draftPrompts?.[asset.id] || asset.label;
+    return `${asset.label} — ${direction}.`;
+  }).join(' ');
+
+  return [
+    'Asset direction collection.',
+    `${ASSET_TYPES.length} assets.`,
+    `Selected ${activeAsset?.label || selectedAsset}.`,
+    `Current direction ${currentDirection}.`,
+    `Available assets: ${availableAssetSummaries}`
+  ].join(' ');
+}
+
 function rasterizeAssetToPngDataUrl(imageUrl) {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -390,7 +407,14 @@ export default function AssetEditor({
 
   return (
     <div className="asset-editor">
-      <div className="card-grid" data-testid="asset-card-group">
+      <div
+        className="card-grid"
+        data-testid="asset-card-group"
+        role="group"
+        tabIndex={0}
+        aria-label={getAssetDirectionCollectionAriaLabel(draftPrompts, selectedAsset)}
+        title={getAssetDirectionCollectionAriaLabel(draftPrompts, selectedAsset)}
+      >
         {ASSET_TYPES.map(asset => {
           const isSelected = selectedAsset === asset.id;
           const ariaLabel = getAssetCardAriaLabel(asset.label, isSelected);

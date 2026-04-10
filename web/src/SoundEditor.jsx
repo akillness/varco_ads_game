@@ -178,6 +178,23 @@ function handleSoundTabArrowKeyDown(event, currentId, onSelect) {
   focusSoundTabButton(nextType.id);
 }
 
+function getSoundPromptCollectionAriaLabel(draftPrompts, activeTab) {
+  const selectedType = SOUND_TYPES.find((type) => type.id === activeTab);
+  const currentPrompt = draftPrompts?.[activeTab] || selectedType?.prompt || '';
+  const availableCueSummaries = SOUND_TYPES.map((type) => {
+    const prompt = draftPrompts?.[type.id] || type.prompt || '';
+    return `${type.label} — ${prompt}.`;
+  }).join(' ');
+
+  return [
+    'Sound prompt collection.',
+    `${SOUND_TYPES.length} cues.`,
+    `Selected ${selectedType?.label || activeTab}.`,
+    `Current prompt ${currentPrompt}.`,
+    `Available cues: ${availableCueSummaries}`
+  ].join(' ');
+}
+
 export default function SoundEditor({
   editHistory = [],
   dispatch,
@@ -319,7 +336,14 @@ export default function SoundEditor({
 
   return (
     <div className="sound-editor">
-      <div className="sound-type-tabs" data-testid="sound-tab-group">
+      <div
+        className="sound-type-tabs"
+        data-testid="sound-tab-group"
+        role="group"
+        tabIndex={0}
+        aria-label={getSoundPromptCollectionAriaLabel(draftPrompts, activeTab)}
+        title={getSoundPromptCollectionAriaLabel(draftPrompts, activeTab)}
+      >
         {SOUND_TYPES.map(t => {
           const isActive = activeTab === t.id;
           return (
