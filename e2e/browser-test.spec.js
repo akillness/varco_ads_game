@@ -1030,6 +1030,105 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("studio-copy-button")).toHaveText("Copy X copy");
   });
 
+  test("cached pack reload clears stale clipboard feedback and restores the default social selection", async ({ page }) => {
+    await page.evaluate(() => {
+      window.__clipboardResolves = [];
+      window.__resolveClipboardWrite = () => {
+        const resolve = window.__clipboardResolves.shift();
+        if (resolve) resolve();
+      };
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: () => new Promise((resolve) => {
+            window.__clipboardResolves.push(resolve);
+          }),
+        },
+      });
+    });
+
+    let requestCount = 0;
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const fixture = createStudioPackFixture("Retro arcade launch for creator heroes", {
+        suffix: "cached-copy-feedback"
+      });
+      fixture.studioPack.packId = "pack-cached-copy-feedback";
+      fixture.studioPack.marketingAngles = [
+        {
+          id: "cached-feedback-x",
+          channel: "x",
+          label: "X",
+          copy: "Retro arcade launch X copy",
+          cta: "Drop into the arena"
+        },
+        {
+          id: "cached-feedback-instagram",
+          channel: "instagram",
+          label: "Instagram Reel",
+          copy: "Retro arcade launch Instagram Reel copy",
+          cta: "Swipe into the spotlight"
+        }
+      ];
+      fixture.studioPack.productionQueue = [
+        { id: "queue-sound-cached-feedback", label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: "Retro arcade launch bgm prompt" },
+        { id: "queue-asset-player-cached-feedback", label: "Hero showcase model", lane: "asset", key: "player", prompt: "Retro arcade launch player direction" },
+        { id: "queue-social-cached-feedback", label: "Social launch copy", lane: "social", key: "x", prompt: "Retro arcade launch X copy" }
+      ];
+      fixture.studioPack.cache_hit = requestCount > 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(fixture)
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const copyButton = page.getByTestId("studio-copy-button");
+    const copyCard = page.getByTestId("studio-copy-card");
+    const copyFeedback = page.getByTestId("studio-copy-feedback");
+    const studioStatus = page.getByTestId("studio-pack-status");
+    const socialQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Social launch copy" });
+    const xAngleButton = page.getByRole("button", { name: "X", exact: true });
+    const instagramAngleButton = page.getByRole("button", { name: "Instagram Reel", exact: true });
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Fresh studio pack ready for 3D Modeler.");
+    await expect(copyCard).toContainText("Retro arcade launch X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await instagramAngleButton.click();
+    await expect(copyCard).toContainText("Retro arcade launch Instagram Reel copy");
+    await expect(copyButton).toHaveText("Copy Instagram Reel copy");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
+
+    await copyButton.click();
+    await expect(copyButton).toHaveText("Copying Instagram Reel copy...");
+    await expect(copyFeedback).toContainText("Copying Instagram Reel copy to the clipboard...");
+
+    await generateButton.click();
+    await expect(studioStatus).toContainText("CACHE HIT");
+    await expect(studioStatus).toContainText("Reused the latest studio pack for 3D Modeler.");
+    await expect(copyFeedback).toHaveCount(0);
+    await expect(copyCard).toContainText("Retro arcade launch X copy");
+    await expect(copyButton).toHaveText("Copy X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await page.evaluate(() => window.__resolveClipboardWrite());
+    await page.waitForTimeout(50);
+    await expect(page.getByTestId("studio-copy-feedback")).toHaveCount(0);
+    await expect(copyCard).toContainText("Retro arcade launch X copy");
+    await expect(copyButton).toHaveText("Copy X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+  });
+
   test("marketing copy channels support keyboard cycling and pressed-state accessibility", async ({ page }) => {
     const studioPanel = page.getByTestId("studio-pack-panel");
     await studioPanel.locator("textarea").fill("Retro arcade launch for creator heroes");
