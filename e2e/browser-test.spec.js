@@ -745,16 +745,21 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("director-panel")).toContainText(/Launch Window|Broadcast Rush|Overdrive|Final Push/);
   });
 
-  test("betting panel confirms accepted bets and clears feedback when the draft changes", async ({ page }) => {
+  test("places a bet and keeps betting feedback keyboard-readable from pending to ready", async ({ page }) => {
+    let releaseBetResponse;
+    const betResponsePending = new Promise((resolve) => {
+      releaseBetResponse = resolve;
+    });
+
     await page.route("**/api/match/bet", async (route) => {
       const payload = route.request().postDataJSON();
+      await betResponsePending;
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
           ok: true,
           bet: {
-            id: "bet-mock-1",
             userName: payload.userName,
             side: payload.side,
             amount: payload.amount,
@@ -778,7 +783,18 @@ test.describe("Web UI", () => {
     await page.getByTestId("bet-amount-input").fill("150");
     await page.getByTestId("bet-submit-button").click();
 
-    await expect(page.getByTestId("bet-feedback")).toContainText("arena_fan backed Enemy Win for 150.");
+    const betFeedback = page.getByTestId("bet-feedback");
+    await expect(betFeedback).toContainText("Submitting Enemy Win for 150.");
+    await expect(betFeedback).toHaveAttribute("role", "status");
+    await expect(betFeedback).toHaveAttribute("aria-label", "Bet status. Pending. Submitting Enemy Win for 150.");
+    await betFeedback.focus();
+    await expect(betFeedback).toBeFocused();
+    await expect(page.getByTestId("bet-submit-button")).toHaveText("Placing Bet...");
+
+    releaseBetResponse();
+
+    await expect(betFeedback).toContainText("arena_fan backed Enemy Win for 150.");
+    await expect(betFeedback).toHaveAttribute("aria-label", "Bet status. Ready. arena_fan backed Enemy Win for 150.");
     await expect(page.getByTestId("bet-submit-button")).toHaveText("Place Bet");
     await expect(page.locator(".pool-bar-e")).toHaveAttribute("style", /width:\s*100%/);
 
@@ -820,7 +836,11 @@ test.describe("Web UI", () => {
     await page.getByTestId("bet-amount-input").fill("100");
     await page.getByTestId("bet-submit-button").click();
 
-    await expect(page.getByTestId("bet-feedback")).toContainText("Enter a bettor name before placing a bet.");
+    const betFeedback = page.getByTestId("bet-feedback");
+    await expect(betFeedback).toContainText("Enter a bettor name before placing a bet.");
+    await expect(betFeedback).toHaveAttribute("aria-label", "Bet status. Error. Enter a bettor name before placing a bet.");
+    await betFeedback.focus();
+    await expect(betFeedback).toBeFocused();
     expect(requestCount).toBe(0);
   });
 
@@ -846,7 +866,9 @@ test.describe("Web UI", () => {
     await expect(betStatusStrip).toBeFocused();
 
     await page.getByTestId("bet-submit-button").click();
-    await expect(page.getByTestId("bet-feedback")).toContainText("Betting is closed until the next match starts.");
+    const betFeedback = page.getByTestId("bet-feedback");
+    await expect(betFeedback).toContainText("Betting is closed until the next match starts.");
+    await expect(betFeedback).toHaveAttribute("aria-label", "Bet status. Error. Betting is closed until the next match starts.");
   });
 
   test("betting panel surfaces server-side match closures without clearing the draft", async ({ page }) => {
@@ -870,7 +892,11 @@ test.describe("Web UI", () => {
     await page.getByTestId("bet-amount-input").fill("120");
     await page.getByTestId("bet-submit-button").click();
 
-    await expect(page.getByTestId("bet-feedback")).toContainText("betting is closed while match status is finished");
+    const betFeedback = page.getByTestId("bet-feedback");
+    await expect(betFeedback).toContainText("betting is closed while match status is finished");
+    await expect(betFeedback).toHaveAttribute("aria-label", "Bet status. Error. betting is closed while match status is finished");
+    await betFeedback.focus();
+    await expect(betFeedback).toBeFocused();
     await expect(page.getByTestId("bet-status-chip")).toHaveText("CLOSED");
     await expect(page.getByTestId("bet-status-note")).toContainText("Betting closed");
     await expect(page.getByTestId("bet-name-input")).toHaveValue("arena_fan");

@@ -1503,6 +1503,19 @@ function getShareFeedbackAriaLabel(feedback) {
   return `Share status. ${toneLabel}${channelLabel ? ` ${channelLabel}` : ""}. ${feedback.message}`;
 }
 
+function getBetFeedbackAriaLabel(feedback) {
+  if (!feedback?.message) {
+    return "Bet status unavailable.";
+  }
+
+  const toneLabel = {
+    pending: "Pending",
+    ready: "Ready",
+    error: "Error"
+  }[feedback.tone] || "Update";
+  return `Bet status. ${toneLabel}. ${feedback.message}`;
+}
+
 function getStudioPackStatusSnapshot(status, studioPack, heroName, errorMessage = "") {
   if (status === "loading") {
     return {
@@ -3455,7 +3468,15 @@ export default function App() {
             <span className="bet-status-note" data-testid="bet-status-note">{bettingStatus.detail}</span>
           </div>
           {betFeedback && (
-            <div className={`bet-feedback share-feedback share-feedback-${betFeedback.tone}`} data-testid="bet-feedback">
+            <div
+              className={`bet-feedback share-feedback share-feedback-${betFeedback.tone}`}
+              data-testid="bet-feedback"
+              role="status"
+              aria-live="polite"
+              tabIndex={0}
+              aria-label={getBetFeedbackAriaLabel(betFeedback)}
+              title={getBetFeedbackAriaLabel(betFeedback)}
+            >
               {betFeedback.message}
             </div>
           )}
