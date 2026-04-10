@@ -449,6 +449,72 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("studio-copy-card")).toContainText("Midnight remix pack for creator duels launch copy");
   });
 
+  test("studio pack resets stale hero-specific state when switching heroes before the run starts", async ({ page }) => {
+    let releaseFirstPack;
+    const firstPackPending = new Promise((resolve) => {
+      releaseFirstPack = resolve;
+    });
+    const requestedHeroIds = [];
+    let requestCount = 0;
+
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const payload = route.request().postDataJSON();
+      requestedHeroIds.push(payload.heroId);
+
+      if (requestCount === 1) {
+        await firstPackPending;
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(createStudioPackFixture("Retro arcade launch for creator heroes", {
+            heroName: "3D Modeler",
+            suffix: "modeler"
+          }))
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(createStudioPackFixture("Retro arcade launch for creator heroes", {
+          heroName: "Sound Crafter",
+          suffix: "sounder"
+        }))
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const heroGroup = page.getByTestId("hero-select-group");
+    const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Generating a reusable promo pack for 3D Modeler.");
+
+    await sounderButton.click();
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for Sound Crafter. Ready for a new campaign brief.");
+    await expect(briefInput).toHaveValue("Retro arcade launch for creator heroes");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(page.getByTestId("studio-pack-status")).toHaveCount(0);
+    await expect(page.getByTestId("studio-copy-card")).toHaveCount(0);
+
+    await generateButton.click();
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await expect(page.locator(".studio-pack-card")).toContainText("Retro arcade launch for creator heroes headline");
+    await expect(page.getByTestId("studio-copy-card")).toContainText("Retro arcade launch for creator heroes launch copy");
+    expect(requestedHeroIds).toEqual(["modeler", "sounder"]);
+
+    releaseFirstPack();
+    await page.waitForTimeout(50);
+
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await expect(page.getByTestId("studio-pack-panel")).not.toContainText("3D Modeler");
+  });
+
   test("studio pack status surfaces backend failures without leaving stale content behind", async ({ page }) => {
     await page.route("**/api/varco/studio-pack", async (route) => {
       await route.fulfill({

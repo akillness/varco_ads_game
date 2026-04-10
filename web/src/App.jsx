@@ -2600,6 +2600,7 @@ export default function App() {
   const serverLogsHydratedRef = useRef(false);
   const marketingCopyActionRef = useRef(0);
   const studioPackRequestRef = useRef(0);
+  const previousHeroIdRef = useRef(state.hero.id);
   const betActionRef = useRef(0);
   const shareActionRef = useRef(0);
   const gameOverHandledRef = useRef(false);
@@ -3088,6 +3089,18 @@ export default function App() {
     setSelectedQueueItemId(null);
     clearMarketingCopyFeedback();
   }
+
+  useEffect(() => {
+    if (previousHeroIdRef.current === hero.id) {
+      return;
+    }
+
+    previousHeroIdRef.current = hero.id;
+    const hasStudioPackState = studioStatus !== "idle" || studioPack || selectedMarketingAngle || selectedQueueItemId || marketingCopyFeedback;
+    if (hasStudioPackState) {
+      resetStudioPackState({ cancelInFlight: studioStatus === "loading" });
+    }
+  }, [hero.id, studioStatus, studioPack, selectedMarketingAngle, selectedQueueItemId, marketingCopyFeedback]);
 
   function marketingCopyButtonLabel() {
     const angleLabel = selectedMarketingAngle?.label || "launch";
