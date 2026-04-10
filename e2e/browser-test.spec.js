@@ -146,10 +146,15 @@ test.describe("Web UI", () => {
     const powerupPanel = page.getByTestId("powerup-panel");
     const liveWatchPanel = page.getByTestId("live-watch-panel");
     const directorKpiCards = page.getByTestId("director-kpi-card");
+    const studioPackPanel = page.getByTestId("studio-pack-panel");
     const studioKpiStrip = page.getByTestId("studio-kpi-strip");
     const arenaStatusStrip = page.getByTestId("arena-status-strip");
     const achievementList = page.getByTestId("achievement-list");
     const achievementItems = page.getByTestId("achievement-item");
+    const betNameInput = page.getByTestId("bet-name-input");
+    const betSideSelect = page.getByTestId("bet-side-select");
+    const betAmountInput = page.getByTestId("bet-amount-input");
+    const betSubmitButton = page.getByTestId("bet-submit-button");
 
     await expect(hpPanel).toBeVisible();
     await expect(levelPanel).toBeVisible();
@@ -191,6 +196,12 @@ test.describe("Web UI", () => {
     await expect(directorKpiCards.nth(0)).toHaveAttribute("aria-label", "Bonus core. Offline.");
     await expect(directorKpiCards.nth(1)).toHaveAttribute("aria-label", "Live assets. 0/3.");
     await expect(directorKpiCards.nth(2)).toHaveAttribute("aria-label", "Live cues. 0/5.");
+    await expect(studioPackPanel).toHaveAttribute("tabindex", "0");
+    await expect(studioPackPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for 3D Modeler. Ready for a new campaign brief.");
+    await expect(betNameInput).toHaveAttribute("aria-label", "Betting user name. Enter the bettor name before placing a wager.");
+    await expect(betSideSelect).toHaveAttribute("aria-label", "Betting side. Choose whether the player or enemy wins.");
+    await expect(betAmountInput).toHaveAttribute("aria-label", "Betting amount. Enter the wager amount in credits.");
+    await expect(betSubmitButton).toHaveAttribute("aria-label", "Place bet. Submit the current wager.");
     await expect(studioKpiStrip).toHaveAttribute("tabindex", "0");
     await expect(studioKpiStrip).toHaveAttribute("aria-label", /Studio cache\. cache hits \d+\./);
     await expect(arenaStatusStrip).toHaveAttribute("tabindex", "0");
@@ -214,6 +225,10 @@ test.describe("Web UI", () => {
     await expect(liveWatchPanel).toBeFocused();
     await directorKpiCards.nth(0).focus();
     await expect(directorKpiCards.nth(0)).toBeFocused();
+    await studioPackPanel.focus();
+    await expect(studioPackPanel).toBeFocused();
+    await betNameInput.focus();
+    await expect(betNameInput).toBeFocused();
     await studioKpiStrip.focus();
     await expect(studioKpiStrip).toBeFocused();
     await arenaStatusStrip.focus();
@@ -697,6 +712,84 @@ test.describe("Web UI", () => {
     await expect(faceweaverButton).toBeFocused();
     await expect(faceweaverButton).toHaveAttribute("aria-pressed", "true");
     await expect(page.locator(".xp-info")).toContainText("HP 4 / SPD 2");
+  });
+
+  test("betting and promo director controls expose stable labels through pending states", async ({ page }) => {
+    let releaseBetResponse;
+    const betResponsePending = new Promise((resolve) => {
+      releaseBetResponse = resolve;
+    });
+
+    let releaseStudioResponse;
+    const studioResponsePending = new Promise((resolve) => {
+      releaseStudioResponse = resolve;
+    });
+
+    await page.route("**/api/match/bet", async (route) => {
+      await betResponsePending;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          bet: {
+            userName: "arena_fan",
+            side: "player",
+            amount: 120
+          },
+          odds: {
+            player: 1.4,
+            enemy: 2.1
+          },
+          pools: {
+            player: 120,
+            enemy: 0
+          }
+        })
+      });
+    });
+
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      await studioResponsePending;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(createStudioPackFixture("Retro arcade launch for creator heroes", { heroName: "3D Modeler", suffix: "accessibility" }))
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const betNameInput = page.getByTestId("bet-name-input");
+    const betSideSelect = page.getByTestId("bet-side-select");
+    const betAmountInput = page.getByTestId("bet-amount-input");
+    const betSubmitButton = page.getByTestId("bet-submit-button");
+
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for 3D Modeler. Ready for a new campaign brief.");
+    await expect(briefInput).toHaveAttribute("aria-label", "Studio brief. Describe one campaign brief for 3D Modeler and reuse it across sounds, assets, and social copy.");
+    await expect(generateButton).toHaveAttribute("aria-label", "Generate Studio Pack. Build a reusable promo pack for 3D Modeler.");
+    await expect(betNameInput).toHaveAttribute("title", "Betting user name. Enter the bettor name before placing a wager.");
+    await expect(betSideSelect).toHaveAttribute("title", "Betting side. Choose whether the player or enemy wins.");
+    await expect(betAmountInput).toHaveAttribute("title", "Betting amount. Enter the wager amount in credits.");
+    await expect(betSubmitButton).toHaveAttribute("title", "Place bet. Submit the current wager.");
+
+    await betNameInput.fill("arena_fan");
+    await betAmountInput.fill("120");
+    await betSubmitButton.click();
+    await expect(betSubmitButton).toHaveAttribute("aria-label", "Place bet. Submitting the current wager.");
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for 3D Modeler. Building a studio pack for 3D Modeler.");
+    await expect(generateButton).toHaveAttribute("aria-label", "Generate Studio Pack. Building a reusable promo pack for 3D Modeler.");
+
+    releaseBetResponse();
+    releaseStudioResponse();
+
+    await expect(betSubmitButton).toHaveAttribute("aria-label", "Place bet. Submit the current wager.");
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for 3D Modeler. Studio pack ready for 3D Modeler.");
+    await expect(generateButton).toHaveAttribute("aria-label", "Generate Studio Pack. Build a reusable promo pack for 3D Modeler.");
   });
 
   test("director event cards are keyboard-readable and support vertical focus cycling", async ({ page }) => {

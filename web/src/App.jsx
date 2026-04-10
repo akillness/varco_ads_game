@@ -1312,6 +1312,42 @@ function getStudioQueueItemAriaLabel(item, isActive) {
   return `Load ${item.label} into ${laneLabel}${isActive ? "; currently selected" : ""}.`;
 }
 
+function getBetFieldAriaLabel(field) {
+  const labels = {
+    userName: "Betting user name. Enter the bettor name before placing a wager.",
+    side: "Betting side. Choose whether the player or enemy wins.",
+    amount: "Betting amount. Enter the wager amount in credits."
+  };
+  return labels[field] || "Betting field.";
+}
+
+function getBetSubmitButtonAriaLabel(isPending) {
+  return isPending
+    ? "Place bet. Submitting the current wager."
+    : "Place bet. Submit the current wager.";
+}
+
+function getStudioPackPanelAriaLabel(heroName, studioStatus) {
+  const statusLabel = {
+    idle: "Ready for a new campaign brief.",
+    loading: `Building a studio pack for ${heroName}.`,
+    ready: `Studio pack ready for ${heroName}.`,
+    cached: `Cached studio pack ready for ${heroName}.`,
+    error: "Studio pack request needs another pass."
+  }[studioStatus] || "Ready for a new campaign brief.";
+  return `Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for ${heroName}. ${statusLabel}`;
+}
+
+function getStudioBriefAriaLabel(heroName) {
+  return `Studio brief. Describe one campaign brief for ${heroName} and reuse it across sounds, assets, and social copy.`;
+}
+
+function getStudioGenerateButtonAriaLabel(heroName, isPending) {
+  return isPending
+    ? `Generate Studio Pack. Building a reusable promo pack for ${heroName}.`
+    : `Generate Studio Pack. Build a reusable promo pack for ${heroName}.`;
+}
+
 function handleSegmentedArrowKeyDown(event, currentId, items, onSelect, buttonTestId) {
   const navigationKeys = ["ArrowLeft", "ArrowRight", "Home", "End"];
   if (!navigationKeys.includes(event.key) || !Array.isArray(items) || items.length < 2) {
@@ -3581,6 +3617,8 @@ export default function App() {
                 setBetName(e.target.value);
               }}
               placeholder="user name"
+              aria-label={getBetFieldAriaLabel("userName")}
+              title={getBetFieldAriaLabel("userName")}
             />
             <select
               data-testid="bet-side-select"
@@ -3589,6 +3627,8 @@ export default function App() {
                 clearBetFeedback();
                 setBetSide(e.target.value);
               }}
+              aria-label={getBetFieldAriaLabel("side")}
+              title={getBetFieldAriaLabel("side")}
             >
               <option value="player">Player Win</option>
               <option value="enemy">Enemy Win</option>
@@ -3603,6 +3643,8 @@ export default function App() {
                 clearBetFeedback();
                 setBetAmount(e.target.value);
               }}
+              aria-label={getBetFieldAriaLabel("amount")}
+              title={getBetFieldAriaLabel("amount")}
             />
           </div>
           <button
@@ -3611,6 +3653,8 @@ export default function App() {
             data-testid="bet-submit-button"
             onClick={placeBet}
             disabled={betPending}
+            aria-label={getBetSubmitButtonAriaLabel(betPending)}
+            title={getBetSubmitButtonAriaLabel(betPending)}
           >
             {betPending ? "Placing Bet..." : "Place Bet"}
           </button>
@@ -3641,7 +3685,13 @@ export default function App() {
           )}
         </div>
 
-        <div className="panel promo-director" data-testid="studio-pack-panel">
+        <div
+          className="panel promo-director"
+          data-testid="studio-pack-panel"
+          tabIndex={0}
+          aria-label={getStudioPackPanelAriaLabel(hero.name, studioStatus)}
+          title={getStudioPackPanelAriaLabel(hero.name, studioStatus)}
+        >
           <div className="panel-title">Promo Director</div>
           <textarea
             className="studio-brief-input"
@@ -3653,8 +3703,17 @@ export default function App() {
               }
             }}
             placeholder="Describe the campaign brief once, then reuse it across sounds, assets, and social copy."
+            aria-label={getStudioBriefAriaLabel(hero.name)}
+            title={getStudioBriefAriaLabel(hero.name)}
           />
-          <button type="button" className="bet-btn" onClick={generateStudioPack} disabled={studioStatus === "loading"}>
+          <button
+            type="button"
+            className="bet-btn"
+            onClick={generateStudioPack}
+            disabled={studioStatus === "loading"}
+            aria-label={getStudioGenerateButtonAriaLabel(hero.name, studioStatus === "loading")}
+            title={getStudioGenerateButtonAriaLabel(hero.name, studioStatus === "loading")}
+          >
             {studioStatus === "loading" ? "Building Pack..." : "Generate Studio Pack"}
           </button>
           {studioPackStatus && (
