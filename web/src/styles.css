@@ -1096,6 +1096,8 @@ main {
 .mission-panel:focus-visible,
 .ability-panel:focus-visible,
 .director-panel:focus-visible,
+.powerup-panel:focus-visible,
+.watch-box:focus-visible,
 .arena-status-strip:focus-visible,
 .studio-kpi-strip:focus-visible,
 .leaderboard-archive-filter:focus-visible,

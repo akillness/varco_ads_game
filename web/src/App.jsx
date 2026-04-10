@@ -1580,6 +1580,25 @@ function getArenaStatusStripAriaLabel(directorPhase, mission, activeAbility, swi
   return `Arena status. Phase: ${directorPhase?.label || "unknown"}. Mission: ${mission?.title || "unknown"}. Ability: ${activeAbility?.name || "unknown"}. Swing: ${swingTriggered ? "Triggered" : "Pending"}. Assets live: ${liveAssetCount}/3. Sound cues live: ${liveSoundCount}/5.`;
 }
 
+function getPowerupPanelAriaLabel(activePowerups = {}, powerup = null) {
+  const now = Date.now();
+  const statusSummary = POWERUP_TYPES.map((pt) => {
+    const activeUntil = activePowerups[pt.id];
+    const isActive = activeUntil && now < activeUntil;
+    return isActive
+      ? `${pt.label} active for ${Math.max(1, Math.ceil((activeUntil - now) / 1000))} seconds`
+      : `${pt.label} inactive`;
+  }).join(". ");
+  const pickupSummary = powerup ? `${powerup.type.label} pickup is on the arena floor.` : "No pickup is currently spawned.";
+  return `Power-ups. ${statusSummary}. ${pickupSummary}`;
+}
+
+function getLiveWatchPanelAriaLabel(spectators, odds, enemyFrozen, liveAssetCount, betPools, totalPool) {
+  const playerPoolPercent = Math.round((betPools.player / totalPool) * 100);
+  const enemyPoolPercent = Math.round((betPools.enemy / totalPool) * 100);
+  return `Live board. ${spectators} spectators watching. Player odds ${odds.player}x. Enemy odds ${odds.enemy}x. ${enemyFrozen ? "Enemies frozen" : "Arena hot"}. ${liveAssetCount} skins live. Player pool ${betPools.player} at ${playerPoolPercent} percent. Enemy pool ${betPools.enemy} at ${enemyPoolPercent} percent.`;
+}
+
 function getStudioKpiStripAriaLabel(studioCache) {
   return `Studio cache. cache hits ${studioCache?.hits ?? 0}. saved calls ${studioCache?.savedCalls ?? 0}. studio hits ${studioCache?.studioPackHits ?? 0}.`;
 }
@@ -2748,6 +2767,7 @@ export default function App() {
   const abilityCooldown = Math.max(0, Math.ceil((abilityCooldownUntil - Date.now()) / 1000));
   const abilityReady = abilityCharge >= ABILITY_MAX && abilityCooldown <= 0;
   const enemyFrozen = enemyFreezeUntil && Date.now() < enemyFreezeUntil;
+  const powerupPanelAriaLabel = getPowerupPanelAriaLabel(activePowerups, powerup);
 
   // Build tile data
   const tiles = useMemo(() => {
@@ -2797,6 +2817,7 @@ export default function App() {
   const xpPercent = (xp / xpForLevel(level)) * 100;
   const liveAssetCount = Object.values(appliedAssets).filter(Boolean).length;
   const liveSoundCount = Object.values(appliedSounds).filter(Boolean).length;
+  const liveWatchPanelAriaLabel = getLiveWatchPanelAriaLabel(spectators, odds, enemyFrozen, liveAssetCount, betPools, totalPool);
 
   function updateEditorDraft(kind, key, value) {
     setEditorDrafts((prev) => ({
@@ -3239,7 +3260,13 @@ export default function App() {
         </div>
 
         {/* Power-ups */}
-        <div className="panel">
+        <div
+          className="panel powerup-panel"
+          data-testid="powerup-panel"
+          tabIndex={0}
+          aria-label={powerupPanelAriaLabel}
+          title={powerupPanelAriaLabel}
+        >
           <div className="panel-title">Power-ups</div>
           <div className="powerup-list">
             {POWERUP_TYPES.map((pt) => {
@@ -3258,7 +3285,13 @@ export default function App() {
         </div>
 
         {/* Watch / Spectators */}
-        <div className="panel watch-box">
+        <div
+          className="panel watch-box"
+          data-testid="live-watch-panel"
+          tabIndex={0}
+          aria-label={liveWatchPanelAriaLabel}
+          title={liveWatchPanelAriaLabel}
+        >
           <div className="panel-title">Live</div>
           <div className="watch-live">{spectators}</div>
           <div className="odds-row">

@@ -140,13 +140,19 @@ test.describe("Web UI", () => {
     const missionPanel = page.getByTestId("mission-panel");
     const abilityPanel = page.getByTestId("ability-panel");
     const directorPanel = page.getByTestId("director-panel");
+    const powerupPanel = page.getByTestId("powerup-panel");
+    const liveWatchPanel = page.getByTestId("live-watch-panel");
     const studioKpiStrip = page.getByTestId("studio-kpi-strip");
     const arenaStatusStrip = page.getByTestId("arena-status-strip");
 
     await expect(missionPanel).toBeVisible();
     await expect(abilityPanel).toBeVisible();
     await expect(directorPanel).toBeVisible();
+    await expect(powerupPanel).toBeVisible();
+    await expect(liveWatchPanel).toBeVisible();
     await expect(page.getByTestId("studio-pack-panel")).toBeVisible();
+    await expect(powerupPanel).toContainText("Shield");
+    await expect(liveWatchPanel).toContainText("Live");
     await expect(studioKpiStrip).toContainText("cache hits");
     await expect(arenaStatusStrip).toContainText("Mission:");
 
@@ -156,6 +162,10 @@ test.describe("Web UI", () => {
     await expect(abilityPanel).toHaveAttribute("aria-label", /Hero Ability\./);
     await expect(directorPanel).toHaveAttribute("tabindex", "0");
     await expect(directorPanel).toHaveAttribute("aria-label", /Arena Director\./);
+    await expect(powerupPanel).toHaveAttribute("tabindex", "0");
+    await expect(powerupPanel).toHaveAttribute("aria-label", /Power-ups\. Shield inactive\./);
+    await expect(liveWatchPanel).toHaveAttribute("tabindex", "0");
+    await expect(liveWatchPanel).toHaveAttribute("aria-label", /Live board\. \d+ spectators watching\./);
     await expect(studioKpiStrip).toHaveAttribute("tabindex", "0");
     await expect(studioKpiStrip).toHaveAttribute("aria-label", /Studio cache\. cache hits \d+\./);
     await expect(arenaStatusStrip).toHaveAttribute("tabindex", "0");
@@ -163,6 +173,10 @@ test.describe("Web UI", () => {
 
     await directorPanel.focus();
     await expect(directorPanel).toBeFocused();
+    await powerupPanel.focus();
+    await expect(powerupPanel).toBeFocused();
+    await liveWatchPanel.focus();
+    await expect(liveWatchPanel).toBeFocused();
     await studioKpiStrip.focus();
     await expect(studioKpiStrip).toBeFocused();
     await arenaStatusStrip.focus();
