@@ -815,7 +815,7 @@ test.describe("Web UI", () => {
     const copyCard = page.getByTestId("studio-copy-card");
 
     await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
-    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
 
     await socialQueueItem.click();
     await expect(copyCard).toContainText("X");
@@ -956,18 +956,18 @@ test.describe("Web UI", () => {
 
     const queueGroup = page.getByTestId("studio-queue-group");
     const queueItems = queueGroup.locator('button[data-testid="studio-queue-item"]');
-    const queueSound = queueGroup.getByRole("button", { name: /Queue sound/i });
-    const queueCopy = queueGroup.getByRole("button", { name: /Queue copy/i });
+    const queueSound = queueGroup.getByRole("button", { name: /Launch soundtrack/i });
+    const queueCopy = queueGroup.getByRole("button", { name: /Social launch copy/i });
 
-    await expect(queueItems).toHaveCount(2);
+    await expect(queueItems).toHaveCount(4);
     await expect(queueSound).toHaveAttribute("aria-pressed", "false");
-    await expect(queueSound).toHaveAttribute("aria-description", "Load Queue sound into sound prompt for bgm.");
-    await expect(queueCopy).toHaveAttribute("aria-pressed", "false");
-    await expect(queueCopy).toHaveAttribute("aria-description", "Load Queue copy into marketing copy for launch.");
+    await expect(queueSound).toHaveAttribute("aria-description", "Load Launch soundtrack into sound prompt for bgm.");
+    await expect(queueCopy).toHaveAttribute("aria-pressed", "true");
+    await expect(queueCopy).toHaveAttribute("aria-description", "Load Social launch copy into marketing copy for x; currently selected.");
 
     await queueSound.focus();
     await expect(queueSound).toBeFocused();
-    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("End");
     await expect(queueCopy).toBeFocused();
     await expect(queueCopy).toHaveAttribute("aria-pressed", "true");
     await expect(queueSound).toHaveAttribute("aria-pressed", "false");

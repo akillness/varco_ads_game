@@ -2989,12 +2989,13 @@ export default function App() {
   }, [gameOver, score, appliedSounds.win, appliedSounds.lose]);
 
   useEffect(() => {
-    if (studioPack?.marketingAngles?.length) {
-      setSelectedMarketingAngle(studioPack.marketingAngles[0]);
-    } else {
-      setSelectedMarketingAngle(null);
-    }
-    setSelectedQueueItemId(null);
+    const initialMarketingAngle = studioPack?.marketingAngles?.[0] || null;
+    const initialQueueItem = initialMarketingAngle
+      ? studioPack?.productionQueue?.find((item) => item.lane === "social" && item.key === initialMarketingAngle.channel) || null
+      : null;
+
+    setSelectedMarketingAngle(initialMarketingAngle);
+    setSelectedQueueItemId(initialQueueItem?.id || null);
     clearMarketingCopyFeedback();
   }, [studioPack?.packId]);
 
