@@ -77,6 +77,17 @@ function createCachedStudioPackSelectionFixture(brief, { suffix }) {
   return fixture;
 }
 
+function waitForStudioPackResponse(page, matcher) {
+  return page.waitForResponse((response) => {
+    if (!response.url().includes("/api/varco/studio-pack")) return false;
+    try {
+      return matcher(response.request().postDataJSON());
+    } catch {
+      return false;
+    }
+  });
+}
+
 test.describe("API contracts", () => {
   test("GET /api/health exposes cache stats", async ({ request }) => {
     const res = await request.get(`${API}/api/health`);
@@ -421,6 +432,7 @@ test.describe("Web UI", () => {
     const firstPackPending = new Promise((resolve) => {
       releaseFirstPack = resolve;
     });
+    const staleRetroPackResponse = waitForStudioPackResponse(page, ({ brief }) => brief === "Retro arcade launch for creator heroes");
     let requestCount = 0;
 
     await page.route("**/api/varco/studio-pack", async (route) => {
@@ -469,7 +481,7 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("studio-copy-card")).toContainText("Midnight remix pack for creator duels launch copy");
 
     releaseFirstPack();
-    await page.waitForTimeout(50);
+    await staleRetroPackResponse;
 
     await expect(studioStatus).toContainText("PACK READY");
     await expect(studioStatus).toContainText("Midnight remix pack for creator duels headline");
@@ -483,6 +495,7 @@ test.describe("Web UI", () => {
     const firstPackPending = new Promise((resolve) => {
       releaseFirstPack = resolve;
     });
+    const staleModelerPackResponse = waitForStudioPackResponse(page, ({ heroId }) => heroId === "modeler");
     const requestedHeroIds = [];
     let requestCount = 0;
 
@@ -538,7 +551,7 @@ test.describe("Web UI", () => {
     expect(requestedHeroIds).toEqual(["modeler", "sounder"]);
 
     releaseFirstPack();
-    await page.waitForTimeout(50);
+    await staleModelerPackResponse;
 
     await expect(page.getByTestId("studio-pack-status")).toContainText("Fresh studio pack ready for Sound Crafter.");
     await expect(page.getByTestId("studio-pack-panel")).not.toContainText("3D Modeler");
@@ -549,6 +562,7 @@ test.describe("Web UI", () => {
     const firstFailurePending = new Promise((resolve) => {
       releaseFirstFailure = resolve;
     });
+    const staleModelerFailureResponse = waitForStudioPackResponse(page, ({ heroId }) => heroId === "modeler");
     const requestedHeroIds = [];
     let requestCount = 0;
 
@@ -611,7 +625,7 @@ test.describe("Web UI", () => {
     await expect(assetCardGroup).not.toHaveAttribute("aria-label", /Selected Player\./);
 
     releaseFirstFailure();
-    await page.waitForTimeout(50);
+    await staleModelerFailureResponse;
 
     await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for Sound Crafter. Ready for a new campaign brief.");
     await expect(page.locator(".studio-pack-card")).toHaveCount(0);
@@ -634,6 +648,7 @@ test.describe("Web UI", () => {
     const firstPackPending = new Promise((resolve) => {
       releaseFirstPack = resolve;
     });
+    const staleModelerPackResponse = waitForStudioPackResponse(page, ({ heroId }) => heroId === "modeler");
     const requestedHeroIds = [];
     let requestCount = 0;
 
@@ -699,7 +714,7 @@ test.describe("Web UI", () => {
     await expect(assetPromptInput).toHaveValue("Sounder fresh pack orb direction");
 
     releaseFirstPack();
-    await page.waitForTimeout(50);
+    await staleModelerPackResponse;
 
     await expect(studioStatus).toContainText("Fresh studio pack ready for Sound Crafter.");
     await expect(studioStatus).toContainText("Sounder fresh pack headline");
@@ -715,6 +730,7 @@ test.describe("Web UI", () => {
     const firstPackPending = new Promise((resolve) => {
       releaseFirstPack = resolve;
     });
+    const staleModelerPackResponse = waitForStudioPackResponse(page, ({ heroId }) => heroId === "modeler");
     const requestedHeroIds = [];
     let requestCount = 0;
 
@@ -822,7 +838,7 @@ test.describe("Web UI", () => {
     await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
 
     releaseFirstPack();
-    await page.waitForTimeout(50);
+    await staleModelerPackResponse;
 
     await expect(studioStatus).toContainText("Fresh studio pack ready for Sound Crafter.");
     await expect(page.locator(".studio-pack-card")).toContainText("Sounder fresh pack headline");
@@ -837,6 +853,8 @@ test.describe("Web UI", () => {
   });
 
   test("switching heroes during a stale delayed success keeps pending clipboard feedback on the fresh marketing selection", async ({ page }) => {
+    const staleModelerPackResponse = waitForStudioPackResponse(page, ({ heroId }) => heroId === "modeler");
+
     await page.evaluate(() => {
       window.__copiedText = "";
       window.__clipboardResolves = [];
@@ -973,7 +991,7 @@ test.describe("Web UI", () => {
     );
 
     releaseFirstPack();
-    await page.waitForTimeout(50);
+    await staleModelerPackResponse;
 
     await expect(studioStatus).toContainText("Fresh studio pack ready for Sound Crafter.");
     await expect(page.locator(".studio-pack-card")).toContainText("Sounder fresh pack headline");
@@ -1952,6 +1970,7 @@ test.describe("Web UI", () => {
     const pendingPack = new Promise((resolve) => {
       releasePendingPack = resolve;
     });
+    const staleMidnightPackResponse = waitForStudioPackResponse(page, ({ brief }) => brief === "Midnight remix pack for creator duels");
     let requestCount = 0;
 
     await page.route("**/api/varco/studio-pack", async (route) => {
@@ -2015,7 +2034,7 @@ test.describe("Web UI", () => {
     await expect(assetCardGroup).not.toHaveAttribute("aria-label", /Selected Player\./);
 
     releasePendingPack();
-    await page.waitForTimeout(50);
+    await staleMidnightPackResponse;
 
     await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for 3D Modeler. Ready for a new campaign brief.");
     await expect(page.locator(".studio-pack-card")).toHaveCount(0);
@@ -2036,6 +2055,7 @@ test.describe("Web UI", () => {
     const pendingFailure = new Promise((resolve) => {
       releasePendingFailure = resolve;
     });
+    const staleMidnightFailureResponse = waitForStudioPackResponse(page, ({ brief }) => brief === "Midnight remix pack for creator duels");
     let requestCount = 0;
 
     await page.route("**/api/varco/studio-pack", async (route) => {
@@ -2105,7 +2125,7 @@ test.describe("Web UI", () => {
     await expect(assetCardGroup).not.toHaveAttribute("aria-label", /Selected Player\./);
 
     releasePendingFailure();
-    await page.waitForTimeout(50);
+    await staleMidnightFailureResponse;
 
     await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for 3D Modeler. Ready for a new campaign brief.");
     await expect(page.locator(".studio-pack-card")).toHaveCount(0);
