@@ -88,6 +88,10 @@ function waitForStudioPackResponse(page, matcher) {
   });
 }
 
+function waitForClipboardSettlement(page, expectedCount = 1) {
+  return page.waitForFunction((count) => (window.__clipboardSettled || 0) >= count, expectedCount);
+}
+
 test.describe("API contracts", () => {
   test("GET /api/health exposes cache stats", async ({ request }) => {
     const res = await request.get(`${API}/api/health`);
@@ -2394,6 +2398,7 @@ test.describe("Web UI", () => {
     await page.evaluate(() => {
       window.__copiedText = "";
       window.__clipboardResolves = [];
+      window.__clipboardSettled = 0;
       window.__resolveClipboardWrite = () => {
         const resolve = window.__clipboardResolves.shift();
         if (resolve) resolve();
@@ -2403,7 +2408,10 @@ test.describe("Web UI", () => {
         value: {
           writeText: (text) => new Promise((resolve) => {
             window.__copiedText = text;
-            window.__clipboardResolves.push(resolve);
+            window.__clipboardResolves.push(() => {
+              resolve();
+              window.__clipboardSettled += 1;
+            });
           }),
           readText: async () => window.__copiedText,
         },
@@ -2444,7 +2452,7 @@ test.describe("Web UI", () => {
     await expect(copyButton).toHaveText("Copy Instagram Reel copy");
 
     await page.evaluate(() => window.__resolveClipboardWrite());
-    await page.waitForTimeout(50);
+    await waitForClipboardSettlement(page);
     await expect(page.getByTestId("studio-copy-feedback")).toHaveCount(0);
     await expect(copyButton).toHaveText("Copy Instagram Reel copy");
 
@@ -2542,6 +2550,7 @@ test.describe("Web UI", () => {
   test("marketing copy feedback stays cleared when a new pack is generated mid-copy", async ({ page }) => {
     await page.evaluate(() => {
       window.__clipboardResolves = [];
+      window.__clipboardSettled = 0;
       window.__resolveClipboardWrite = () => {
         const resolve = window.__clipboardResolves.shift();
         if (resolve) resolve();
@@ -2550,7 +2559,10 @@ test.describe("Web UI", () => {
         configurable: true,
         value: {
           writeText: (text) => new Promise((resolve) => {
-            window.__clipboardResolves.push(resolve);
+            window.__clipboardResolves.push(() => {
+              resolve();
+              window.__clipboardSettled += 1;
+            });
           }),
         },
       });
@@ -2571,7 +2583,7 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("studio-copy-feedback")).toHaveCount(0);
 
     await page.evaluate(() => window.__resolveClipboardWrite());
-    await page.waitForTimeout(50);
+    await waitForClipboardSettlement(page);
     await expect(page.getByTestId("studio-copy-feedback")).toHaveCount(0);
     await expect(page.getByTestId("studio-copy-button")).toHaveText("Copy X copy");
   });
@@ -2579,6 +2591,7 @@ test.describe("Web UI", () => {
   test("cached pack reload clears stale clipboard feedback and restores the default social selection", async ({ page }) => {
     await page.evaluate(() => {
       window.__clipboardResolves = [];
+      window.__clipboardSettled = 0;
       window.__resolveClipboardWrite = () => {
         const resolve = window.__clipboardResolves.shift();
         if (resolve) resolve();
@@ -2587,7 +2600,10 @@ test.describe("Web UI", () => {
         configurable: true,
         value: {
           writeText: () => new Promise((resolve) => {
-            window.__clipboardResolves.push(resolve);
+            window.__clipboardResolves.push(() => {
+              resolve();
+              window.__clipboardSettled += 1;
+            });
           }),
         },
       });
@@ -2645,7 +2661,7 @@ test.describe("Web UI", () => {
     await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
 
     await page.evaluate(() => window.__resolveClipboardWrite());
-    await page.waitForTimeout(50);
+    await waitForClipboardSettlement(page);
     await expect(page.getByTestId("studio-copy-feedback")).toHaveCount(0);
     await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
     await expect(copyButton).toHaveText("Copy X copy");
@@ -2656,6 +2672,7 @@ test.describe("Web UI", () => {
   test("cached pack reload keeps stale clipboard failures cleared while restoring the default social selection", async ({ page }) => {
     await page.evaluate(() => {
       window.__clipboardRejects = [];
+      window.__clipboardSettled = 0;
       window.__rejectClipboardWrite = () => {
         const reject = window.__clipboardRejects.shift();
         if (reject) reject(new Error("clipboard permissions denied"));
@@ -2664,7 +2681,10 @@ test.describe("Web UI", () => {
         configurable: true,
         value: {
           writeText: () => new Promise((resolve, reject) => {
-            window.__clipboardRejects.push(reject);
+            window.__clipboardRejects.push((error) => {
+              reject(error);
+              window.__clipboardSettled += 1;
+            });
           }),
         },
       });
@@ -2722,7 +2742,7 @@ test.describe("Web UI", () => {
     await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
 
     await page.evaluate(() => window.__rejectClipboardWrite());
-    await page.waitForTimeout(50);
+    await waitForClipboardSettlement(page);
     await expect(page.getByTestId("studio-copy-feedback")).toHaveCount(0);
     await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
     await expect(copyButton).toHaveText("Copy X copy");
@@ -4030,6 +4050,10 @@ test.describe("Web UI", () => {
     const firstSharePending = new Promise((resolve) => {
       releaseFirstShare = resolve;
     });
+    let resolveFirstShareSettled;
+    const firstShareSettled = new Promise((resolve) => {
+      resolveFirstShareSettled = resolve;
+    });
     let shareRequestCount = 0;
 
     await page.route("**/api/share/sns", async (route) => {
@@ -4048,6 +4072,7 @@ test.describe("Web UI", () => {
             }
           })
         });
+        resolveFirstShareSettled();
         return;
       }
 
@@ -4087,7 +4112,7 @@ test.describe("Web UI", () => {
     expect(openedUrls).toEqual(["https://share.example/telegram-second"]);
 
     releaseFirstShare();
-    await page.waitForTimeout(50);
+    await firstShareSettled;
 
     await expect(page.getByTestId("share-feedback")).toContainText("Opened Telegram share link.");
     openedUrls = await page.evaluate(() => window.__openedUrls.slice());
