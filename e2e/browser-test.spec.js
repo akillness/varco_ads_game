@@ -30,18 +30,20 @@ function createStudioPackFixture(brief, { heroName = "Sound Crafter", suffix = "
         player: `${brief} player direction`
       },
       savings: {
-        estimatedCallsSaved: 2,
+        estimatedCallsSaved: 5,
         estimatedCallsWithPack: 3,
-        estimatedCallsWithoutPack: 5
+        estimatedCallsWithoutPack: 8
       },
       productionQueue: [
-        { id: `queue-sound-${suffix}`, label: "Queue sound", lane: "sound", key: "bgm", prompt: `${brief} bgm prompt` },
-        { id: `queue-copy-${suffix}`, label: "Queue copy", lane: "social", key: "launch", prompt: `${brief} launch copy` }
+        { id: `queue-sound-${suffix}`, label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: `${brief} bgm prompt` },
+        { id: `queue-asset-player-${suffix}`, label: "Hero showcase model", lane: "asset", key: "player", prompt: `${brief} player direction` },
+        { id: `queue-asset-enemy-${suffix}`, label: "Rival silhouette", lane: "asset", key: "enemy", prompt: `${brief} enemy direction` },
+        { id: `queue-copy-${suffix}`, label: "Social launch copy", lane: "social", key: "x", prompt: `${brief} launch copy` }
       ],
       marketingAngles: [
         {
           id: `launch-${suffix}`,
-          channel: "launch",
+          channel: "x",
           label: `Launch ${suffix}`,
           copy: `${brief} launch copy`,
           cta: `${brief} CTA`
@@ -49,6 +51,52 @@ function createStudioPackFixture(brief, { heroName = "Sound Crafter", suffix = "
       ]
     }
   };
+}
+
+function createCachedStudioPackSelectionFixture(brief, { suffix }) {
+  const fixture = createStudioPackFixture(brief, { suffix });
+  fixture.studioPack.packId = `pack-${suffix}`;
+  fixture.studioPack.marketingAngles = [
+    {
+      id: `${suffix}-x`,
+      channel: "x",
+      label: "X",
+      copy: `${brief} X copy`,
+      cta: "Drop into the arena"
+    },
+    {
+      id: `${suffix}-instagram`,
+      channel: "instagram",
+      label: "Instagram Reel",
+      copy: `${brief} Instagram Reel copy`,
+      cta: "Swipe into the spotlight"
+    }
+  ];
+  fixture.studioPack.productionQueue = [
+    { id: `queue-sound-${suffix}`, label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: `${brief} bgm prompt` },
+    { id: `queue-asset-player-${suffix}`, label: "Hero showcase model", lane: "asset", key: "player", prompt: `${brief} player direction` },
+    { id: `queue-social-${suffix}`, label: "Social launch copy", lane: "social", key: "x", prompt: `${brief} X copy` }
+  ];
+  return fixture;
+}
+
+function waitForStudioPackResponse(page, matcher) {
+  return page.waitForResponse((response) => {
+    if (!response.url().includes("/api/varco/studio-pack")) return false;
+    try {
+      return matcher(response.request().postDataJSON());
+    } catch {
+      return false;
+    }
+  });
+}
+
+function waitForApiResponse(page, urlPart) {
+  return page.waitForResponse((response) => response.url().includes(urlPart));
+}
+
+function waitForClipboardSettlement(page, expectedCount = 1) {
+  return page.waitForFunction((count) => (window.__clipboardSettled || 0) >= count, expectedCount);
 }
 
 test.describe("API contracts", () => {
@@ -341,7 +389,7 @@ test.describe("Web UI", () => {
     await page.reload();
     await expect(page.getByTestId("agent-log-empty")).toContainText("No agent logs yet.");
     await expect(page.getByTestId("agent-log-summary")).toHaveCount(0);
-    await page.waitForTimeout(2600);
+    await waitForApiResponse(page, "/api/agent/logs");
     await expect(page.getByTestId("agent-log-summary")).toHaveCount(0);
 
     logsPayload = [
@@ -373,7 +421,7 @@ test.describe("Web UI", () => {
       { id: "log-older", level: "info", message: "older archive note synced" }
     ];
 
-    await page.waitForTimeout(2600);
+    await waitForApiResponse(page, "/api/agent/logs");
     await expect(page.getByTestId("agent-log-summary")).toHaveCount(0);
   });
 
@@ -400,6 +448,7 @@ test.describe("Web UI", () => {
     const firstPackPending = new Promise((resolve) => {
       releaseFirstPack = resolve;
     });
+    const staleRetroPackResponse = waitForStudioPackResponse(page, ({ brief }) => brief === "Retro arcade launch for creator heroes");
     let requestCount = 0;
 
     await page.route("**/api/varco/studio-pack", async (route) => {
@@ -448,13 +497,1797 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("studio-copy-card")).toContainText("Midnight remix pack for creator duels launch copy");
 
     releaseFirstPack();
-    await page.waitForTimeout(50);
+    await staleRetroPackResponse;
 
     await expect(studioStatus).toContainText("PACK READY");
     await expect(studioStatus).toContainText("Midnight remix pack for creator duels headline");
     await expect(page.locator(".studio-pack-card")).toContainText("Midnight remix pack for creator duels headline");
     await expect(page.locator(".studio-pack-card")).not.toContainText("Retro arcade launch for creator heroes headline");
     await expect(page.getByTestId("studio-copy-card")).toContainText("Midnight remix pack for creator duels launch copy");
+  });
+
+  test("studio pack resets stale hero-specific state when switching heroes before the run starts", async ({ page }) => {
+    let releaseFirstPack;
+    const firstPackPending = new Promise((resolve) => {
+      releaseFirstPack = resolve;
+    });
+    const staleModelerPackResponse = waitForStudioPackResponse(page, ({ heroId }) => heroId === "modeler");
+    const requestedHeroIds = [];
+    let requestCount = 0;
+
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const payload = route.request().postDataJSON();
+      requestedHeroIds.push(payload.heroId);
+
+      if (requestCount === 1) {
+        await firstPackPending;
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(createStudioPackFixture("Retro arcade launch for creator heroes", {
+            heroName: "3D Modeler",
+            suffix: "modeler"
+          }))
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(createStudioPackFixture("Retro arcade launch for creator heroes", {
+          heroName: "Sound Crafter",
+          suffix: "sounder"
+        }))
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const heroGroup = page.getByTestId("hero-select-group");
+    const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Generating a reusable promo pack for 3D Modeler.");
+
+    await sounderButton.click();
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for Sound Crafter. Ready for a new campaign brief.");
+    await expect(briefInput).toHaveValue("Retro arcade launch for creator heroes");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(page.getByTestId("studio-pack-status")).toHaveCount(0);
+    await expect(page.getByTestId("studio-copy-card")).toHaveCount(0);
+
+    await generateButton.click();
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await expect(page.locator(".studio-pack-card")).toContainText("Retro arcade launch for creator heroes headline");
+    await expect(page.getByTestId("studio-copy-card")).toContainText("Retro arcade launch for creator heroes launch copy");
+    expect(requestedHeroIds).toEqual(["modeler", "sounder"]);
+
+    releaseFirstPack();
+    await staleModelerPackResponse;
+
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await expect(page.getByTestId("studio-pack-panel")).not.toContainText("3D Modeler");
+  });
+
+  test("switching heroes during an in-flight studio pack failure keeps stale errors from restoring cleared pack UI", async ({ page }) => {
+    let releaseFirstFailure;
+    const firstFailurePending = new Promise((resolve) => {
+      releaseFirstFailure = resolve;
+    });
+    const staleModelerFailureResponse = waitForStudioPackResponse(page, ({ heroId }) => heroId === "modeler");
+    const requestedHeroIds = [];
+    let requestCount = 0;
+
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const payload = route.request().postDataJSON();
+      requestedHeroIds.push(payload.heroId);
+
+      if (requestCount === 1) {
+        await firstFailurePending;
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ ok: false, message: `studio pack timeout for ${payload.heroId}` })
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(createStudioPackFixture("Retro arcade launch for creator heroes", {
+          heroName: "Sound Crafter",
+          suffix: payload.heroId
+        }))
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const heroGroup = page.getByTestId("hero-select-group");
+    const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
+    const soundPromptInput = page.locator(".sound-editor .prompt-input");
+    const assetPromptInput = page.locator(".asset-editor .prompt-input");
+    const soundTabGroup = page.getByTestId("sound-tab-group");
+    const assetCardGroup = page.getByTestId("asset-card-group");
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Generating a reusable promo pack for 3D Modeler.");
+
+    await sounderButton.click();
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for Sound Crafter. Ready for a new campaign brief.");
+    await expect(briefInput).toHaveValue("Retro arcade launch for creator heroes");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(page.getByTestId("studio-pack-status")).toHaveCount(0);
+    await expect(page.getByTestId("studio-copy-card")).toHaveCount(0);
+
+    await page.getByRole("button", { name: /^🎵 사운드$/ }).click();
+    await expect(page.getByTestId("sound-tab-bgm")).toHaveClass(/active/);
+    await expect(soundPromptInput).toHaveValue("ambient game background music");
+    await expect(soundTabGroup).toHaveAttribute("aria-label", /Selected BGM\./);
+    await expect(soundTabGroup).not.toHaveAttribute("aria-label", /Selected Orb 수집음\./);
+
+    await page.getByRole("button", { name: /^🧊 에셋$/ }).click();
+    await expect(page.getByTestId("asset-card-orb")).toHaveClass(/selected/);
+    await expect(assetPromptInput).toHaveValue("Orb");
+    await expect(assetCardGroup).toHaveAttribute("aria-label", /Selected Orb\./);
+    await expect(assetCardGroup).not.toHaveAttribute("aria-label", /Selected Player\./);
+
+    releaseFirstFailure();
+    await staleModelerFailureResponse;
+
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for Sound Crafter. Ready for a new campaign brief.");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(page.getByTestId("studio-pack-status")).toHaveCount(0);
+    await expect(page.getByTestId("studio-copy-card")).toHaveCount(0);
+    await expect(page.getByText("studio pack timeout for modeler")).toHaveCount(0);
+
+    await page.getByRole("button", { name: /^🎵 사운드$/ }).click();
+    await expect(page.getByTestId("sound-tab-bgm")).toHaveClass(/active/);
+    await expect(soundPromptInput).toHaveValue("ambient game background music");
+
+    await page.getByRole("button", { name: /^🧊 에셋$/ }).click();
+    await expect(page.getByTestId("asset-card-orb")).toHaveClass(/selected/);
+    await expect(assetPromptInput).toHaveValue("Orb");
+    expect(requestedHeroIds).toEqual(["modeler"]);
+  });
+
+  test("switching heroes after generating a fresh pack ignores stale delayed success from the previous hero", async ({ page }) => {
+    let releaseFirstPack;
+    const firstPackPending = new Promise((resolve) => {
+      releaseFirstPack = resolve;
+    });
+    const staleModelerPackResponse = waitForStudioPackResponse(page, ({ heroId }) => heroId === "modeler");
+    const requestedHeroIds = [];
+    let requestCount = 0;
+
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const payload = route.request().postDataJSON();
+      requestedHeroIds.push(payload.heroId);
+
+      if (requestCount === 1) {
+        await firstPackPending;
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(createStudioPackFixture("Modeler delayed pack", {
+            heroName: "3D Modeler",
+            suffix: payload.heroId
+          }))
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(createStudioPackFixture("Sounder fresh pack", {
+          heroName: "Sound Crafter",
+          suffix: payload.heroId
+        }))
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const heroGroup = page.getByTestId("hero-select-group");
+    const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
+    const studioStatus = page.getByTestId("studio-pack-status");
+    const soundPromptInput = page.locator(".sound-editor .prompt-input");
+    const assetPromptInput = page.locator(".asset-editor .prompt-input");
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Generating a reusable promo pack for 3D Modeler.");
+
+    await sounderButton.click();
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for Sound Crafter. Ready for a new campaign brief.");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(studioStatus).toHaveCount(0);
+
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await expect(studioStatus).toContainText("Sounder fresh pack headline");
+    await expect(page.locator(".studio-pack-card")).toContainText("Sounder fresh pack headline");
+    await expect(page.locator(".studio-pack-card")).not.toContainText("Modeler delayed pack headline");
+    await expect(page.getByTestId("studio-copy-card")).toContainText("Sounder fresh pack launch copy");
+
+    await page.getByRole("button", { name: /^🎵 사운드$/ }).click();
+    await expect(page.getByTestId("sound-tab-bgm")).toHaveClass(/active/);
+    await expect(soundPromptInput).toHaveValue("Sounder fresh pack bgm prompt");
+
+    await page.getByRole("button", { name: /^🧊 에셋$/ }).click();
+    await expect(page.getByTestId("asset-card-orb")).toHaveClass(/selected/);
+    await expect(assetPromptInput).toHaveValue("Sounder fresh pack orb direction");
+
+    releaseFirstPack();
+    await staleModelerPackResponse;
+
+    await expect(studioStatus).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await expect(studioStatus).toContainText("Sounder fresh pack headline");
+    await expect(page.locator(".studio-pack-card")).toContainText("Sounder fresh pack headline");
+    await expect(page.locator(".studio-pack-card")).not.toContainText("Modeler delayed pack headline");
+    await expect(page.getByTestId("studio-copy-card")).toContainText("Sounder fresh pack launch copy");
+    await expect(studioPanel).not.toContainText("3D Modeler");
+    expect(requestedHeroIds).toEqual(["modeler", "sounder"]);
+  });
+
+  test("switching heroes during a stale delayed success keeps the fresh marketing selection and queue state", async ({ page }) => {
+    let releaseFirstPack;
+    const firstPackPending = new Promise((resolve) => {
+      releaseFirstPack = resolve;
+    });
+    const staleModelerPackResponse = waitForStudioPackResponse(page, ({ heroId }) => heroId === "modeler");
+    const requestedHeroIds = [];
+    let requestCount = 0;
+
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const payload = route.request().postDataJSON();
+      requestedHeroIds.push(payload.heroId);
+
+      if (requestCount === 1) {
+        await firstPackPending;
+        const fixture = createStudioPackFixture("Modeler delayed pack", {
+          heroName: "3D Modeler",
+          suffix: payload.heroId
+        });
+        fixture.studioPack.marketingAngles = [
+          {
+            id: `${payload.heroId}-launch-x`,
+            channel: "x",
+            label: "X",
+            copy: "Modeler delayed pack X copy",
+            cta: "Queue the creator drop"
+          },
+          {
+            id: `${payload.heroId}-launch-instagram`,
+            channel: "instagram",
+            label: "Instagram Reel",
+            copy: "Modeler delayed pack Instagram Reel copy",
+            cta: "Spin the arena spotlight"
+          }
+        ];
+        fixture.studioPack.productionQueue = [
+          { id: `queue-sound-${payload.heroId}`, label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: "Modeler delayed pack bgm prompt" },
+          { id: `queue-asset-player-${payload.heroId}`, label: "Hero showcase model", lane: "asset", key: "player", prompt: "Modeler delayed pack player direction" },
+          { id: `queue-social-${payload.heroId}`, label: "Social launch copy", lane: "social", key: "x", prompt: "Modeler delayed pack X copy" }
+        ];
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(fixture)
+        });
+        return;
+      }
+
+      const fixture = createStudioPackFixture("Sounder fresh pack", {
+        heroName: "Sound Crafter",
+        suffix: payload.heroId
+      });
+      fixture.studioPack.marketingAngles = [
+        {
+          id: `${payload.heroId}-launch-x`,
+          channel: "x",
+          label: "X",
+          copy: "Sounder fresh pack X copy",
+          cta: "Drop into the arena"
+        },
+        {
+          id: `${payload.heroId}-launch-instagram`,
+          channel: "instagram",
+          label: "Instagram Reel",
+          copy: "Sounder fresh pack Instagram Reel copy",
+          cta: "Swipe into the spotlight"
+        }
+      ];
+      fixture.studioPack.productionQueue = [
+        { id: `queue-sound-${payload.heroId}`, label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: "Sounder fresh pack bgm prompt" },
+        { id: `queue-asset-player-${payload.heroId}`, label: "Hero showcase model", lane: "asset", key: "player", prompt: "Sounder fresh pack player direction" },
+        { id: `queue-social-${payload.heroId}`, label: "Social launch copy", lane: "social", key: "x", prompt: "Sounder fresh pack X copy" }
+      ];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(fixture)
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const heroGroup = page.getByTestId("hero-select-group");
+    const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
+    const studioStatus = page.getByTestId("studio-pack-status");
+    const copyCard = page.getByTestId("studio-copy-card");
+    const socialQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Social launch copy" });
+    const xAngleButton = page.getByRole("button", { name: "X", exact: true });
+    const instagramAngleButton = page.getByRole("button", { name: "Instagram Reel", exact: true });
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Generating a reusable promo pack for 3D Modeler.");
+
+    await sounderButton.click();
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for Sound Crafter. Ready for a new campaign brief.");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(studioStatus).toHaveCount(0);
+
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await expect(copyCard).toContainText("Sounder fresh pack X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await instagramAngleButton.click();
+    await expect(copyCard).toContainText("Sounder fresh pack Instagram Reel copy");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
+
+    releaseFirstPack();
+    await staleModelerPackResponse;
+
+    await expect(studioStatus).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await expect(page.locator(".studio-pack-card")).toContainText("Sounder fresh pack headline");
+    await expect(page.locator(".studio-pack-card")).not.toContainText("Modeler delayed pack headline");
+    await expect(copyCard).toContainText("Sounder fresh pack Instagram Reel copy");
+    await expect(copyCard).not.toContainText("Modeler delayed pack X copy");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "false");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
+    await expect(studioPanel).not.toContainText("3D Modeler");
+    expect(requestedHeroIds).toEqual(["modeler", "sounder"]);
+  });
+
+  test("switching heroes during a stale delayed success keeps pending clipboard feedback on the fresh marketing selection", async ({ page }) => {
+    const staleModelerPackResponse = waitForStudioPackResponse(page, ({ heroId }) => heroId === "modeler");
+
+    await page.evaluate(() => {
+      window.__copiedText = "";
+      window.__clipboardResolves = [];
+      window.__resolveClipboardWrite = () => {
+        const resolve = window.__clipboardResolves.shift();
+        if (resolve) resolve();
+      };
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: (text) => new Promise((resolve) => {
+            window.__copiedText = text;
+            window.__clipboardResolves.push(resolve);
+          }),
+          readText: async () => window.__copiedText,
+        },
+      });
+    });
+
+    let releaseFirstPack;
+    const firstPackPending = new Promise((resolve) => {
+      releaseFirstPack = resolve;
+    });
+    const requestedHeroIds = [];
+    let requestCount = 0;
+
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const payload = route.request().postDataJSON();
+      requestedHeroIds.push(payload.heroId);
+
+      if (requestCount === 1) {
+        await firstPackPending;
+        const fixture = createStudioPackFixture("Modeler delayed pack", {
+          heroName: "3D Modeler",
+          suffix: payload.heroId
+        });
+        fixture.studioPack.marketingAngles = [
+          {
+            id: `${payload.heroId}-launch-x`,
+            channel: "x",
+            label: "X",
+            copy: "Modeler delayed pack X copy",
+            cta: "Queue the creator drop"
+          },
+          {
+            id: `${payload.heroId}-launch-instagram`,
+            channel: "instagram",
+            label: "Instagram Reel",
+            copy: "Modeler delayed pack Instagram Reel copy",
+            cta: "Spin the arena spotlight"
+          }
+        ];
+        fixture.studioPack.productionQueue = [
+          { id: `queue-sound-${payload.heroId}`, label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: "Modeler delayed pack bgm prompt" },
+          { id: `queue-asset-player-${payload.heroId}`, label: "Hero showcase model", lane: "asset", key: "player", prompt: "Modeler delayed pack player direction" },
+          { id: `queue-social-${payload.heroId}`, label: "Social launch copy", lane: "social", key: "x", prompt: "Modeler delayed pack X copy" }
+        ];
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(fixture)
+        });
+        return;
+      }
+
+      const fixture = createStudioPackFixture("Sounder fresh pack", {
+        heroName: "Sound Crafter",
+        suffix: payload.heroId
+      });
+      fixture.studioPack.marketingAngles = [
+        {
+          id: `${payload.heroId}-launch-x`,
+          channel: "x",
+          label: "X",
+          copy: "Sounder fresh pack X copy",
+          cta: "Drop into the arena"
+        },
+        {
+          id: `${payload.heroId}-launch-instagram`,
+          channel: "instagram",
+          label: "Instagram Reel",
+          copy: "Sounder fresh pack Instagram Reel copy",
+          cta: "Swipe into the spotlight"
+        }
+      ];
+      fixture.studioPack.productionQueue = [
+        { id: `queue-sound-${payload.heroId}`, label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: "Sounder fresh pack bgm prompt" },
+        { id: `queue-asset-player-${payload.heroId}`, label: "Hero showcase model", lane: "asset", key: "player", prompt: "Sounder fresh pack player direction" },
+        { id: `queue-social-${payload.heroId}`, label: "Social launch copy", lane: "social", key: "x", prompt: "Sounder fresh pack X copy" }
+      ];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(fixture)
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const heroGroup = page.getByTestId("hero-select-group");
+    const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
+    const studioStatus = page.getByTestId("studio-pack-status");
+    const copyCard = page.getByTestId("studio-copy-card");
+    const copyButton = page.getByTestId("studio-copy-button");
+    const copyFeedback = page.getByTestId("studio-copy-feedback");
+    const socialQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Social launch copy" });
+    const xAngleButton = page.getByRole("button", { name: "X", exact: true });
+    const instagramAngleButton = page.getByRole("button", { name: "Instagram Reel", exact: true });
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Generating a reusable promo pack for 3D Modeler.");
+
+    await sounderButton.click();
+    await expect(studioStatus).toHaveCount(0);
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await instagramAngleButton.click();
+    await expect(copyCard).toContainText("Sounder fresh pack Instagram Reel copy");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "false");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
+
+    await copyButton.click();
+    await expect(copyButton).toHaveText("Copying Instagram Reel copy...");
+    await expect(copyFeedback).toContainText("Copying Instagram Reel copy to the clipboard...");
+    await expect(copyFeedback).toHaveAttribute(
+      "aria-label",
+      "Marketing copy status. Pending. Instagram Reel. Copying Instagram Reel copy to the clipboard..."
+    );
+
+    releaseFirstPack();
+    await staleModelerPackResponse;
+
+    await expect(studioStatus).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await expect(page.locator(".studio-pack-card")).toContainText("Sounder fresh pack headline");
+    await expect(page.locator(".studio-pack-card")).not.toContainText("Modeler delayed pack headline");
+    await expect(copyCard).toContainText("Sounder fresh pack Instagram Reel copy");
+    await expect(copyCard).not.toContainText("Modeler delayed pack X copy");
+    await expect(copyButton).toHaveText("Copying Instagram Reel copy...");
+    await expect(copyFeedback).toContainText("Copying Instagram Reel copy to the clipboard...");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "false");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
+
+    await page.evaluate(() => window.__resolveClipboardWrite());
+    await expect(copyButton).toHaveText("Copied Instagram Reel copy");
+    await expect(copyFeedback).toContainText("Instagram Reel copy copied.");
+    await expect(copyFeedback).toHaveAttribute(
+      "aria-label",
+      "Marketing copy status. Ready. Instagram Reel. Instagram Reel copy copied."
+    );
+
+    expect(requestedHeroIds).toEqual(["modeler", "sounder"]);
+  });
+
+  test("switching heroes after a stale response resolves keeps clipboard-ready feedback on the fresh default X selection", async ({ page }) => {
+    await page.evaluate(() => {
+      window.__copiedText = "";
+      window.__clipboardResolves = [];
+      window.__resolveClipboardWrite = () => {
+        const resolve = window.__clipboardResolves.shift();
+        if (resolve) resolve();
+      };
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: (text) => {
+            window.__copiedText = text;
+            return new Promise((resolve) => {
+              window.__clipboardResolves.push(resolve);
+            });
+          },
+        },
+      });
+    });
+
+    let releaseFirstPack;
+    const firstPackPending = new Promise((resolve) => {
+      releaseFirstPack = resolve;
+    });
+    let resolveFirstPackFulfilled;
+    const firstPackFulfilled = new Promise((resolve) => {
+      resolveFirstPackFulfilled = resolve;
+    });
+    const requestedHeroIds = [];
+    let requestCount = 0;
+
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const payload = route.request().postDataJSON();
+      requestedHeroIds.push(payload.heroId);
+
+      if (requestCount === 1) {
+        await firstPackPending;
+        const fixture = createStudioPackFixture("Modeler delayed pack", {
+          heroName: "3D Modeler",
+          suffix: payload.heroId
+        });
+        fixture.studioPack.marketingAngles = [
+          {
+            id: `${payload.heroId}-launch-x`,
+            channel: "x",
+            label: "X",
+            copy: "Modeler delayed pack X copy",
+            cta: "Queue the creator drop"
+          },
+          {
+            id: `${payload.heroId}-launch-instagram`,
+            channel: "instagram",
+            label: "Instagram Reel",
+            copy: "Modeler delayed pack Instagram Reel copy",
+            cta: "Spin the arena spotlight"
+          }
+        ];
+        fixture.studioPack.productionQueue = [
+          { id: `queue-sound-${payload.heroId}`, label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: "Modeler delayed pack bgm prompt" },
+          { id: `queue-asset-player-${payload.heroId}`, label: "Hero showcase model", lane: "asset", key: "player", prompt: "Modeler delayed pack player direction" },
+          { id: `queue-social-${payload.heroId}`, label: "Social launch copy", lane: "social", key: "x", prompt: "Modeler delayed pack X copy" }
+        ];
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(fixture)
+        });
+        resolveFirstPackFulfilled();
+        return;
+      }
+
+      const fixture = createStudioPackFixture("Sounder fresh pack", {
+        heroName: "Sound Crafter",
+        suffix: payload.heroId
+      });
+      fixture.studioPack.marketingAngles = [
+        {
+          id: `${payload.heroId}-launch-x`,
+          channel: "x",
+          label: "X",
+          copy: "Sounder fresh pack X copy",
+          cta: "Drop into the arena"
+        },
+        {
+          id: `${payload.heroId}-launch-instagram`,
+          channel: "instagram",
+          label: "Instagram Reel",
+          copy: "Sounder fresh pack Instagram Reel copy",
+          cta: "Swipe into the spotlight"
+        }
+      ];
+      fixture.studioPack.productionQueue = [
+        { id: `queue-sound-${payload.heroId}`, label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: "Sounder fresh pack bgm prompt" },
+        { id: `queue-asset-player-${payload.heroId}`, label: "Hero showcase model", lane: "asset", key: "player", prompt: "Sounder fresh pack player direction" },
+        { id: `queue-social-${payload.heroId}`, label: "Social launch copy", lane: "social", key: "x", prompt: "Sounder fresh pack X copy" }
+      ];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(fixture)
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const heroGroup = page.getByTestId("hero-select-group");
+    const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
+    const studioStatus = page.getByTestId("studio-pack-status");
+    const copyCard = page.getByTestId("studio-copy-card");
+    const copyButton = page.getByTestId("studio-copy-button");
+    const copyFeedback = page.getByTestId("studio-copy-feedback");
+    const socialQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Social launch copy" });
+    const xAngleButton = page.getByRole("button", { name: "X", exact: true });
+    const instagramAngleButton = page.getByRole("button", { name: "Instagram Reel", exact: true });
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Generating a reusable promo pack for 3D Modeler.");
+
+    await sounderButton.click();
+    await expect(studioStatus).toHaveCount(0);
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await expect(copyCard).toContainText("Sounder fresh pack X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "false");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await copyButton.click();
+    await expect(copyButton).toHaveText("Copying X copy...");
+    await expect(copyFeedback).toContainText("Copying X copy to the clipboard...");
+    await expect(copyFeedback).toHaveAttribute(
+      "aria-label",
+      "Marketing copy status. Pending. X. Copying X copy to the clipboard..."
+    );
+
+    releaseFirstPack();
+    await firstPackFulfilled;
+
+    await expect(studioStatus).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await expect(page.locator(".studio-pack-card")).toContainText("Sounder fresh pack headline");
+    await expect(page.locator(".studio-pack-card")).not.toContainText("Modeler delayed pack headline");
+    await expect(copyCard).toContainText("Sounder fresh pack X copy");
+    await expect(copyCard).not.toContainText("Modeler delayed pack X copy");
+    await expect(copyButton).toHaveText("Copying X copy...");
+    await expect(copyFeedback).toContainText("Copying X copy to the clipboard...");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "false");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await page.evaluate(() => window.__resolveClipboardWrite());
+    await expect(copyButton).toHaveText("Copied X copy");
+    await expect(copyFeedback).toContainText("X copy copied.");
+    await expect(copyFeedback).toHaveAttribute(
+      "aria-label",
+      "Marketing copy status. Ready. X. X copy copied."
+    );
+    await expect(copyCard).toContainText("Sounder fresh pack X copy");
+    await expect(copyCard).not.toContainText("Modeler delayed pack X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "false");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+    await expect(page.evaluate(() => window.__copiedText)).resolves.toBe("Sounder fresh pack X copy\nCTA: Drop into the arena");
+
+    expect(requestedHeroIds).toEqual(["modeler", "sounder"]);
+  });
+
+  test("switching heroes during a stale delayed clipboard failure keeps the fresh marketing error on the active selection", async ({ page }) => {
+    await page.evaluate(() => {
+      window.__clipboardRejects = [];
+      window.__rejectClipboardWrite = () => {
+        const reject = window.__clipboardRejects.shift();
+        if (reject) reject(new Error("clipboard permissions denied"));
+      };
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: () => new Promise((resolve, reject) => {
+            window.__clipboardRejects.push(reject);
+          }),
+        },
+      });
+    });
+
+    let releaseFirstPack;
+    const firstPackPending = new Promise((resolve) => {
+      releaseFirstPack = resolve;
+    });
+    let resolveFirstPackFulfilled;
+    const firstPackFulfilled = new Promise((resolve) => {
+      resolveFirstPackFulfilled = resolve;
+    });
+    const requestedHeroIds = [];
+    let requestCount = 0;
+
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const payload = route.request().postDataJSON();
+      requestedHeroIds.push(payload.heroId);
+
+      if (requestCount === 1) {
+        await firstPackPending;
+        const fixture = createStudioPackFixture("Modeler delayed pack", {
+          heroName: "3D Modeler",
+          suffix: payload.heroId
+        });
+        fixture.studioPack.marketingAngles = [
+          {
+            id: `${payload.heroId}-launch-x`,
+            channel: "x",
+            label: "X",
+            copy: "Modeler delayed pack X copy",
+            cta: "Queue the creator drop"
+          },
+          {
+            id: `${payload.heroId}-launch-instagram`,
+            channel: "instagram",
+            label: "Instagram Reel",
+            copy: "Modeler delayed pack Instagram Reel copy",
+            cta: "Spin the arena spotlight"
+          }
+        ];
+        fixture.studioPack.productionQueue = [
+          { id: `queue-sound-${payload.heroId}`, label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: "Modeler delayed pack bgm prompt" },
+          { id: `queue-asset-player-${payload.heroId}`, label: "Hero showcase model", lane: "asset", key: "player", prompt: "Modeler delayed pack player direction" },
+          { id: `queue-social-${payload.heroId}`, label: "Social launch copy", lane: "social", key: "x", prompt: "Modeler delayed pack X copy" }
+        ];
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(fixture)
+        });
+        resolveFirstPackFulfilled();
+        return;
+      }
+
+      const fixture = createStudioPackFixture("Sounder fresh pack", {
+        heroName: "Sound Crafter",
+        suffix: payload.heroId
+      });
+      fixture.studioPack.marketingAngles = [
+        {
+          id: `${payload.heroId}-launch-x`,
+          channel: "x",
+          label: "X",
+          copy: "Sounder fresh pack X copy",
+          cta: "Drop into the arena"
+        },
+        {
+          id: `${payload.heroId}-launch-instagram`,
+          channel: "instagram",
+          label: "Instagram Reel",
+          copy: "Sounder fresh pack Instagram Reel copy",
+          cta: "Swipe into the spotlight"
+        }
+      ];
+      fixture.studioPack.productionQueue = [
+        { id: `queue-sound-${payload.heroId}`, label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: "Sounder fresh pack bgm prompt" },
+        { id: `queue-asset-player-${payload.heroId}`, label: "Hero showcase model", lane: "asset", key: "player", prompt: "Sounder fresh pack player direction" },
+        { id: `queue-social-${payload.heroId}`, label: "Social launch copy", lane: "social", key: "x", prompt: "Sounder fresh pack X copy" }
+      ];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(fixture)
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const heroGroup = page.getByTestId("hero-select-group");
+    const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
+    const studioStatus = page.getByTestId("studio-pack-status");
+    const copyCard = page.getByTestId("studio-copy-card");
+    const copyButton = page.getByTestId("studio-copy-button");
+    const copyFeedback = page.getByTestId("studio-copy-feedback");
+    const socialQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Social launch copy" });
+    const xAngleButton = page.getByRole("button", { name: "X", exact: true });
+    const instagramAngleButton = page.getByRole("button", { name: "Instagram Reel", exact: true });
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Generating a reusable promo pack for 3D Modeler.");
+
+    await sounderButton.click();
+    await expect(studioStatus).toHaveCount(0);
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await instagramAngleButton.click();
+    await expect(copyCard).toContainText("Sounder fresh pack Instagram Reel copy");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "false");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
+
+    await copyButton.click();
+    await expect(copyButton).toHaveText("Copying Instagram Reel copy...");
+    await expect(copyFeedback).toContainText("Copying Instagram Reel copy to the clipboard...");
+    await expect(copyFeedback).toHaveAttribute(
+      "aria-label",
+      "Marketing copy status. Pending. Instagram Reel. Copying Instagram Reel copy to the clipboard..."
+    );
+
+    releaseFirstPack();
+    await firstPackFulfilled;
+
+    await expect(studioStatus).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await expect(page.locator(".studio-pack-card")).toContainText("Sounder fresh pack headline");
+    await expect(page.locator(".studio-pack-card")).not.toContainText("Modeler delayed pack headline");
+    await expect(copyCard).toContainText("Sounder fresh pack Instagram Reel copy");
+    await expect(copyCard).not.toContainText("Modeler delayed pack X copy");
+    await expect(copyButton).toHaveText("Copying Instagram Reel copy...");
+    await expect(copyFeedback).toContainText("Copying Instagram Reel copy to the clipboard...");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "false");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
+
+    await page.evaluate(() => window.__rejectClipboardWrite());
+    await expect(copyButton).toHaveText("Copy Instagram Reel copy");
+    await expect(copyFeedback).toContainText("Clipboard copy blocked. Try again after granting permissions.");
+    await expect(copyFeedback).toHaveAttribute(
+      "aria-label",
+      "Marketing copy status. Error. Instagram Reel. Clipboard copy blocked. Try again after granting permissions."
+    );
+    await expect(copyCard).toContainText("Sounder fresh pack Instagram Reel copy");
+    await expect(copyCard).not.toContainText("Modeler delayed pack X copy");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "false");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
+
+    expect(requestedHeroIds).toEqual(["modeler", "sounder"]);
+  });
+
+  test("switching heroes after a stale response resolves still scopes clipboard-unavailable feedback to the fresh marketing selection", async ({ page }) => {
+    let releaseFirstPack;
+    const firstPackPending = new Promise((resolve) => {
+      releaseFirstPack = resolve;
+    });
+    let resolveFirstPackFulfilled;
+    const firstPackFulfilled = new Promise((resolve) => {
+      resolveFirstPackFulfilled = resolve;
+    });
+    const requestedHeroIds = [];
+    let requestCount = 0;
+
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const payload = route.request().postDataJSON();
+      requestedHeroIds.push(payload.heroId);
+
+      if (requestCount === 1) {
+        await firstPackPending;
+        const fixture = createStudioPackFixture("Modeler delayed pack", {
+          heroName: "3D Modeler",
+          suffix: payload.heroId
+        });
+        fixture.studioPack.marketingAngles = [
+          {
+            id: `${payload.heroId}-launch-x`,
+            channel: "x",
+            label: "X",
+            copy: "Modeler delayed pack X copy",
+            cta: "Queue the creator drop"
+          },
+          {
+            id: `${payload.heroId}-launch-instagram`,
+            channel: "instagram",
+            label: "Instagram Reel",
+            copy: "Modeler delayed pack Instagram Reel copy",
+            cta: "Spin the arena spotlight"
+          }
+        ];
+        fixture.studioPack.productionQueue = [
+          { id: `queue-sound-${payload.heroId}`, label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: "Modeler delayed pack bgm prompt" },
+          { id: `queue-asset-player-${payload.heroId}`, label: "Hero showcase model", lane: "asset", key: "player", prompt: "Modeler delayed pack player direction" },
+          { id: `queue-social-${payload.heroId}`, label: "Social launch copy", lane: "social", key: "x", prompt: "Modeler delayed pack X copy" }
+        ];
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(fixture)
+        });
+        resolveFirstPackFulfilled();
+        return;
+      }
+
+      const fixture = createStudioPackFixture("Sounder fresh pack", {
+        heroName: "Sound Crafter",
+        suffix: payload.heroId
+      });
+      fixture.studioPack.marketingAngles = [
+        {
+          id: `${payload.heroId}-launch-x`,
+          channel: "x",
+          label: "X",
+          copy: "Sounder fresh pack X copy",
+          cta: "Drop into the arena"
+        },
+        {
+          id: `${payload.heroId}-launch-instagram`,
+          channel: "instagram",
+          label: "Instagram Reel",
+          copy: "Sounder fresh pack Instagram Reel copy",
+          cta: "Swipe into the spotlight"
+        }
+      ];
+      fixture.studioPack.productionQueue = [
+        { id: `queue-sound-${payload.heroId}`, label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: "Sounder fresh pack bgm prompt" },
+        { id: `queue-asset-player-${payload.heroId}`, label: "Hero showcase model", lane: "asset", key: "player", prompt: "Sounder fresh pack player direction" },
+        { id: `queue-social-${payload.heroId}`, label: "Social launch copy", lane: "social", key: "x", prompt: "Sounder fresh pack X copy" }
+      ];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(fixture)
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const heroGroup = page.getByTestId("hero-select-group");
+    const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
+    const studioStatus = page.getByTestId("studio-pack-status");
+    const copyCard = page.getByTestId("studio-copy-card");
+    const copyButton = page.getByTestId("studio-copy-button");
+    const copyFeedback = page.getByTestId("studio-copy-feedback");
+    const socialQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Social launch copy" });
+    const xAngleButton = page.getByRole("button", { name: "X", exact: true });
+    const instagramAngleButton = page.getByRole("button", { name: "Instagram Reel", exact: true });
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Generating a reusable promo pack for 3D Modeler.");
+
+    await sounderButton.click();
+    await expect(studioStatus).toHaveCount(0);
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await instagramAngleButton.click();
+    await expect(copyCard).toContainText("Sounder fresh pack Instagram Reel copy");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "false");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
+
+    releaseFirstPack();
+    await firstPackFulfilled;
+
+    await expect(studioStatus).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await expect(page.locator(".studio-pack-card")).toContainText("Sounder fresh pack headline");
+    await expect(page.locator(".studio-pack-card")).not.toContainText("Modeler delayed pack headline");
+    await expect(copyCard).toContainText("Sounder fresh pack Instagram Reel copy");
+    await expect(copyCard).not.toContainText("Modeler delayed pack X copy");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "false");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
+
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: undefined,
+      });
+    });
+
+    await copyButton.click();
+    await expect(copyButton).toHaveText("Copy Instagram Reel copy");
+    await expect(copyFeedback).toContainText("Clipboard unavailable in this browser.");
+    await expect(copyFeedback).toHaveAttribute(
+      "aria-label",
+      "Marketing copy status. Error. Instagram Reel. Clipboard unavailable in this browser."
+    );
+    await expect(copyCard).toContainText("Sounder fresh pack Instagram Reel copy");
+    await expect(copyCard).not.toContainText("Modeler delayed pack X copy");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "false");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
+
+    expect(requestedHeroIds).toEqual(["modeler", "sounder"]);
+  });
+
+  test("switching heroes after a stale response resolves keeps clipboard-unavailable feedback on the fresh default X selection", async ({ page }) => {
+    let releaseFirstPack;
+    const firstPackPending = new Promise((resolve) => {
+      releaseFirstPack = resolve;
+    });
+    let resolveFirstPackFulfilled;
+    const firstPackFulfilled = new Promise((resolve) => {
+      resolveFirstPackFulfilled = resolve;
+    });
+    const requestedHeroIds = [];
+    let requestCount = 0;
+
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const payload = route.request().postDataJSON();
+      requestedHeroIds.push(payload.heroId);
+
+      if (requestCount === 1) {
+        await firstPackPending;
+        const fixture = createStudioPackFixture("Modeler delayed pack", {
+          heroName: "3D Modeler",
+          suffix: payload.heroId
+        });
+        fixture.studioPack.marketingAngles = [
+          {
+            id: `${payload.heroId}-launch-x`,
+            channel: "x",
+            label: "X",
+            copy: "Modeler delayed pack X copy",
+            cta: "Queue the creator drop"
+          },
+          {
+            id: `${payload.heroId}-launch-instagram`,
+            channel: "instagram",
+            label: "Instagram Reel",
+            copy: "Modeler delayed pack Instagram Reel copy",
+            cta: "Spin the arena spotlight"
+          }
+        ];
+        fixture.studioPack.productionQueue = [
+          { id: `queue-sound-${payload.heroId}`, label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: "Modeler delayed pack bgm prompt" },
+          { id: `queue-asset-player-${payload.heroId}`, label: "Hero showcase model", lane: "asset", key: "player", prompt: "Modeler delayed pack player direction" },
+          { id: `queue-social-${payload.heroId}`, label: "Social launch copy", lane: "social", key: "x", prompt: "Modeler delayed pack X copy" }
+        ];
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(fixture)
+        });
+        resolveFirstPackFulfilled();
+        return;
+      }
+
+      const fixture = createStudioPackFixture("Sounder fresh pack", {
+        heroName: "Sound Crafter",
+        suffix: payload.heroId
+      });
+      fixture.studioPack.marketingAngles = [
+        {
+          id: `${payload.heroId}-launch-x`,
+          channel: "x",
+          label: "X",
+          copy: "Sounder fresh pack X copy",
+          cta: "Drop into the arena"
+        },
+        {
+          id: `${payload.heroId}-launch-instagram`,
+          channel: "instagram",
+          label: "Instagram Reel",
+          copy: "Sounder fresh pack Instagram Reel copy",
+          cta: "Swipe into the spotlight"
+        }
+      ];
+      fixture.studioPack.productionQueue = [
+        { id: `queue-sound-${payload.heroId}`, label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: "Sounder fresh pack bgm prompt" },
+        { id: `queue-asset-player-${payload.heroId}`, label: "Hero showcase model", lane: "asset", key: "player", prompt: "Sounder fresh pack player direction" },
+        { id: `queue-social-${payload.heroId}`, label: "Social launch copy", lane: "social", key: "x", prompt: "Sounder fresh pack X copy" }
+      ];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(fixture)
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const heroGroup = page.getByTestId("hero-select-group");
+    const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
+    const studioStatus = page.getByTestId("studio-pack-status");
+    const copyCard = page.getByTestId("studio-copy-card");
+    const copyButton = page.getByTestId("studio-copy-button");
+    const copyFeedback = page.getByTestId("studio-copy-feedback");
+    const socialQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Social launch copy" });
+    const xAngleButton = page.getByRole("button", { name: "X", exact: true });
+    const instagramAngleButton = page.getByRole("button", { name: "Instagram Reel", exact: true });
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Generating a reusable promo pack for 3D Modeler.");
+
+    await sounderButton.click();
+    await expect(studioStatus).toHaveCount(0);
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await expect(copyCard).toContainText("Sounder fresh pack X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "false");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    releaseFirstPack();
+    await firstPackFulfilled;
+
+    await expect(studioStatus).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await expect(page.locator(".studio-pack-card")).toContainText("Sounder fresh pack headline");
+    await expect(page.locator(".studio-pack-card")).not.toContainText("Modeler delayed pack headline");
+    await expect(copyCard).toContainText("Sounder fresh pack X copy");
+    await expect(copyCard).not.toContainText("Modeler delayed pack X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "false");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: undefined,
+      });
+    });
+
+    await copyButton.click();
+    await expect(copyButton).toHaveText("Copy X copy");
+    await expect(copyFeedback).toContainText("Clipboard unavailable in this browser.");
+    await expect(copyFeedback).toHaveAttribute(
+      "aria-label",
+      "Marketing copy status. Error. X. Clipboard unavailable in this browser."
+    );
+    await expect(copyCard).toContainText("Sounder fresh pack X copy");
+    await expect(copyCard).not.toContainText("Modeler delayed pack X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "false");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    expect(requestedHeroIds).toEqual(["modeler", "sounder"]);
+  });
+
+  test("switching heroes after a stale response resolves keeps clipboard-failure feedback on the fresh default X selection", async ({ page }) => {
+    await page.evaluate(() => {
+      window.__clipboardRejects = [];
+      window.__rejectClipboardWrite = () => {
+        const reject = window.__clipboardRejects.shift();
+        if (reject) reject(new Error("clipboard permissions denied"));
+      };
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: () => new Promise((resolve, reject) => {
+            window.__clipboardRejects.push(reject);
+          }),
+        },
+      });
+    });
+
+    let releaseFirstPack;
+    const firstPackPending = new Promise((resolve) => {
+      releaseFirstPack = resolve;
+    });
+    let resolveFirstPackFulfilled;
+    const firstPackFulfilled = new Promise((resolve) => {
+      resolveFirstPackFulfilled = resolve;
+    });
+    const requestedHeroIds = [];
+    let requestCount = 0;
+
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const payload = route.request().postDataJSON();
+      requestedHeroIds.push(payload.heroId);
+
+      if (requestCount === 1) {
+        await firstPackPending;
+        const fixture = createStudioPackFixture("Modeler delayed pack", {
+          heroName: "3D Modeler",
+          suffix: payload.heroId
+        });
+        fixture.studioPack.marketingAngles = [
+          {
+            id: `${payload.heroId}-launch-x`,
+            channel: "x",
+            label: "X",
+            copy: "Modeler delayed pack X copy",
+            cta: "Queue the creator drop"
+          },
+          {
+            id: `${payload.heroId}-launch-instagram`,
+            channel: "instagram",
+            label: "Instagram Reel",
+            copy: "Modeler delayed pack Instagram Reel copy",
+            cta: "Spin the arena spotlight"
+          }
+        ];
+        fixture.studioPack.productionQueue = [
+          { id: `queue-sound-${payload.heroId}`, label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: "Modeler delayed pack bgm prompt" },
+          { id: `queue-asset-player-${payload.heroId}`, label: "Hero showcase model", lane: "asset", key: "player", prompt: "Modeler delayed pack player direction" },
+          { id: `queue-social-${payload.heroId}`, label: "Social launch copy", lane: "social", key: "x", prompt: "Modeler delayed pack X copy" }
+        ];
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(fixture)
+        });
+        resolveFirstPackFulfilled();
+        return;
+      }
+
+      const fixture = createStudioPackFixture("Sounder fresh pack", {
+        heroName: "Sound Crafter",
+        suffix: payload.heroId
+      });
+      fixture.studioPack.marketingAngles = [
+        {
+          id: `${payload.heroId}-launch-x`,
+          channel: "x",
+          label: "X",
+          copy: "Sounder fresh pack X copy",
+          cta: "Drop into the arena"
+        },
+        {
+          id: `${payload.heroId}-launch-instagram`,
+          channel: "instagram",
+          label: "Instagram Reel",
+          copy: "Sounder fresh pack Instagram Reel copy",
+          cta: "Swipe into the spotlight"
+        }
+      ];
+      fixture.studioPack.productionQueue = [
+        { id: `queue-sound-${payload.heroId}`, label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: "Sounder fresh pack bgm prompt" },
+        { id: `queue-asset-player-${payload.heroId}`, label: "Hero showcase model", lane: "asset", key: "player", prompt: "Sounder fresh pack player direction" },
+        { id: `queue-social-${payload.heroId}`, label: "Social launch copy", lane: "social", key: "x", prompt: "Sounder fresh pack X copy" }
+      ];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(fixture)
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const heroGroup = page.getByTestId("hero-select-group");
+    const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
+    const studioStatus = page.getByTestId("studio-pack-status");
+    const copyCard = page.getByTestId("studio-copy-card");
+    const copyButton = page.getByTestId("studio-copy-button");
+    const copyFeedback = page.getByTestId("studio-copy-feedback");
+    const socialQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Social launch copy" });
+    const xAngleButton = page.getByRole("button", { name: "X", exact: true });
+    const instagramAngleButton = page.getByRole("button", { name: "Instagram Reel", exact: true });
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Generating a reusable promo pack for 3D Modeler.");
+
+    await sounderButton.click();
+    await expect(studioStatus).toHaveCount(0);
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await expect(copyCard).toContainText("Sounder fresh pack X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "false");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await copyButton.click();
+    await expect(copyButton).toHaveText("Copying X copy...");
+    await expect(copyFeedback).toContainText("Copying X copy to the clipboard...");
+    await expect(copyFeedback).toHaveAttribute(
+      "aria-label",
+      "Marketing copy status. Pending. X. Copying X copy to the clipboard..."
+    );
+
+    releaseFirstPack();
+    await firstPackFulfilled;
+
+    await expect(studioStatus).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await expect(page.locator(".studio-pack-card")).toContainText("Sounder fresh pack headline");
+    await expect(page.locator(".studio-pack-card")).not.toContainText("Modeler delayed pack headline");
+    await expect(copyCard).toContainText("Sounder fresh pack X copy");
+    await expect(copyCard).not.toContainText("Modeler delayed pack X copy");
+    await expect(copyButton).toHaveText("Copying X copy...");
+    await expect(copyFeedback).toContainText("Copying X copy to the clipboard...");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "false");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await page.evaluate(() => window.__rejectClipboardWrite());
+    await expect(copyButton).toHaveText("Copy X copy");
+    await expect(copyFeedback).toContainText("Clipboard copy blocked. Try again after granting permissions.");
+    await expect(copyFeedback).toHaveAttribute(
+      "aria-label",
+      "Marketing copy status. Error. X. Clipboard copy blocked. Try again after granting permissions."
+    );
+    await expect(copyCard).toContainText("Sounder fresh pack X copy");
+    await expect(copyCard).not.toContainText("Modeler delayed pack X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "false");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    expect(requestedHeroIds).toEqual(["modeler", "sounder"]);
+  });
+
+  test("switching heroes after a ready studio pack clears stale loaded sound prompts", async ({ page }) => {
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      const payload = route.request().postDataJSON();
+      const heroName = payload.heroId === "sounder" ? "Sound Crafter" : "3D Modeler";
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(createStudioPackFixture("Retro arcade launch for creator heroes", {
+          heroName,
+          suffix: payload.heroId
+        }))
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const heroGroup = page.getByTestId("hero-select-group");
+    const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
+    const soundPromptInput = page.locator(".sound-editor .prompt-input");
+    const soundTabGroup = page.getByTestId("sound-tab-group");
+    const orbSoundTab = page.getByTestId("sound-tab-orb");
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Fresh studio pack ready for 3D Modeler.");
+
+    await orbSoundTab.click();
+    await expect(orbSoundTab).toHaveClass(/active/);
+    await expect(soundPromptInput).toHaveValue("Retro arcade launch for creator heroes orb prompt");
+    await expect(soundTabGroup).toHaveAttribute("aria-label", /Selected Orb 수집음\./);
+    await expect(soundTabGroup).toHaveAttribute("aria-label", /Current prompt Retro arcade launch for creator heroes orb prompt\./);
+
+    await sounderButton.click();
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for Sound Crafter. Ready for a new campaign brief.");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(page.getByTestId("studio-pack-status")).toHaveCount(0);
+    await expect(page.getByTestId("studio-copy-card")).toHaveCount(0);
+    await expect(page.getByTestId("sound-tab-bgm")).toHaveClass(/active/);
+    await expect(soundPromptInput).toHaveValue("ambient game background music");
+    await expect(soundTabGroup).toHaveAttribute("aria-label", /Selected BGM\./);
+    await expect(soundTabGroup).not.toHaveAttribute("aria-label", /Selected Orb 수집음\./);
+  });
+
+  test("switching heroes after a ready studio pack clears stale loaded asset directions", async ({ page }) => {
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      const payload = route.request().postDataJSON();
+      const heroName = payload.heroId === "sounder" ? "Sound Crafter" : "3D Modeler";
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(createStudioPackFixture("Retro arcade launch for creator heroes", {
+          heroName,
+          suffix: payload.heroId
+        }))
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const heroGroup = page.getByTestId("hero-select-group");
+    const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
+    const assetPromptInput = page.locator(".asset-editor .prompt-input");
+    const assetCardGroup = page.getByTestId("asset-card-group");
+    const heroShowcaseQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Hero showcase model" });
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Fresh studio pack ready for 3D Modeler.");
+
+    await heroShowcaseQueueItem.click();
+    await expect(page.getByRole("button", { name: /^🧊 에셋$/ })).toHaveClass(/active/);
+    await expect(page.getByTestId("asset-card-player")).toHaveClass(/selected/);
+    await expect(assetPromptInput).toHaveValue("Retro arcade launch for creator heroes player direction");
+    await expect(assetCardGroup).toHaveAttribute("aria-label", /Retro arcade launch for creator heroes player direction/);
+
+    await sounderButton.click();
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for Sound Crafter. Ready for a new campaign brief.");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(page.getByTestId("studio-pack-status")).toHaveCount(0);
+    await expect(page.getByTestId("asset-card-orb")).toHaveClass(/selected/);
+    await expect(assetPromptInput).toHaveValue("Orb");
+    await expect(assetCardGroup).toHaveAttribute("aria-label", /Selected Orb\./);
+    await expect(assetCardGroup).not.toHaveAttribute("aria-label", /Retro arcade launch for creator heroes player direction/);
+    await expect(assetCardGroup).not.toHaveAttribute("aria-label", /Selected Player\./);
+  });
+
+  test("editing the brief after a ready studio pack clears stale sound and asset selections", async ({ page }) => {
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      const payload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(createStudioPackFixture(payload.brief, {
+          heroName: "3D Modeler",
+          suffix: payload.heroId
+        }))
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const soundPromptInput = page.locator(".sound-editor .prompt-input");
+    const assetPromptInput = page.locator(".asset-editor .prompt-input");
+    const soundTabGroup = page.getByTestId("sound-tab-group");
+    const assetCardGroup = page.getByTestId("asset-card-group");
+    const orbSoundTab = page.getByTestId("sound-tab-orb");
+    const heroShowcaseQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Hero showcase model" });
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Fresh studio pack ready for 3D Modeler.");
+
+    await orbSoundTab.click();
+    await expect(orbSoundTab).toHaveClass(/active/);
+    await expect(soundPromptInput).toHaveValue("Retro arcade launch for creator heroes orb prompt");
+    await expect(soundTabGroup).toHaveAttribute("aria-label", /Selected Orb 수집음\./);
+    await expect(soundTabGroup).toHaveAttribute("aria-label", /Current prompt Retro arcade launch for creator heroes orb prompt\./);
+
+    await heroShowcaseQueueItem.click();
+    await expect(page.getByRole("button", { name: /^🧊 에셋$/ })).toHaveClass(/active/);
+    await expect(page.getByTestId("asset-card-player")).toHaveClass(/selected/);
+    await expect(assetPromptInput).toHaveValue("Retro arcade launch for creator heroes player direction");
+    await expect(assetCardGroup).toHaveAttribute("aria-label", /Selected Player\./);
+    await expect(assetCardGroup).toHaveAttribute("aria-label", /Current direction Retro arcade launch for creator heroes player direction\./);
+
+    await briefInput.fill("Midnight remix pack for creator duels");
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for 3D Modeler. Ready for a new campaign brief.");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(page.getByTestId("studio-pack-status")).toHaveCount(0);
+    await expect(page.getByTestId("studio-copy-card")).toHaveCount(0);
+    await page.getByRole("button", { name: /^🎵 사운드$/ }).click();
+    await expect(page.getByTestId("sound-tab-bgm")).toHaveClass(/active/);
+    await expect(soundPromptInput).toHaveValue("ambient game background music");
+    await expect(soundTabGroup).toHaveAttribute("aria-label", /Selected BGM\./);
+    await expect(soundTabGroup).not.toHaveAttribute("aria-label", /Selected Orb 수집음\./);
+    await page.getByRole("button", { name: /^🧊 에셋$/ }).click();
+    await expect(page.getByTestId("asset-card-orb")).toHaveClass(/selected/);
+    await expect(assetPromptInput).toHaveValue("Orb");
+    await expect(assetCardGroup).toHaveAttribute("aria-label", /Selected Orb\./);
+    await expect(assetCardGroup).not.toHaveAttribute("aria-label", /Selected Player\./);
+    await expect(assetCardGroup).not.toHaveAttribute("aria-label", /Retro arcade launch for creator heroes player direction/);
+  });
+
+  test("editing the brief during an in-flight studio pack request keeps stale completions from restoring cleared pack UI", async ({ page }) => {
+    let releasePendingPack;
+    const pendingPack = new Promise((resolve) => {
+      releasePendingPack = resolve;
+    });
+    const staleMidnightPackResponse = waitForStudioPackResponse(page, ({ brief }) => brief === "Midnight remix pack for creator duels");
+    let requestCount = 0;
+
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const payload = route.request().postDataJSON();
+      if (requestCount === 2) {
+        await pendingPack;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(createStudioPackFixture(payload.brief, {
+          heroName: "3D Modeler",
+          suffix: `request-${requestCount}`
+        }))
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const soundPromptInput = page.locator(".sound-editor .prompt-input");
+    const assetPromptInput = page.locator(".asset-editor .prompt-input");
+    const soundTabGroup = page.getByTestId("sound-tab-group");
+    const assetCardGroup = page.getByTestId("asset-card-group");
+    const orbSoundTab = page.getByTestId("sound-tab-orb");
+    const heroShowcaseQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Hero showcase model" });
+    const socialQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Social launch copy" });
+    const copyCard = page.getByTestId("studio-copy-card");
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Fresh studio pack ready for 3D Modeler.");
+
+    await orbSoundTab.click();
+    await heroShowcaseQueueItem.click();
+    await socialQueueItem.click();
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes launch copy");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await briefInput.fill("Midnight remix pack for creator duels");
+    await generateButton.click();
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Generating a reusable promo pack for 3D Modeler.");
+
+    await briefInput.fill("Sunset arcade relaunch for creator heroes");
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for 3D Modeler. Ready for a new campaign brief.");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(page.getByTestId("studio-pack-status")).toHaveCount(0);
+    await expect(copyCard).toHaveCount(0);
+
+    await page.getByRole("button", { name: /^🎵 사운드$/ }).click();
+    await expect(page.getByTestId("sound-tab-bgm")).toHaveClass(/active/);
+    await expect(soundPromptInput).toHaveValue("ambient game background music");
+    await expect(soundTabGroup).toHaveAttribute("aria-label", /Selected BGM\./);
+    await expect(soundTabGroup).not.toHaveAttribute("aria-label", /Selected Orb 수집음\./);
+
+    await page.getByRole("button", { name: /^🧊 에셋$/ }).click();
+    await expect(page.getByTestId("asset-card-orb")).toHaveClass(/selected/);
+    await expect(assetPromptInput).toHaveValue("Orb");
+    await expect(assetCardGroup).toHaveAttribute("aria-label", /Selected Orb\./);
+    await expect(assetCardGroup).not.toHaveAttribute("aria-label", /Selected Player\./);
+
+    releasePendingPack();
+    await staleMidnightPackResponse;
+
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for 3D Modeler. Ready for a new campaign brief.");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(page.getByTestId("studio-pack-status")).toHaveCount(0);
+    await expect(copyCard).toHaveCount(0);
+
+    await page.getByRole("button", { name: /^🎵 사운드$/ }).click();
+    await expect(page.getByTestId("sound-tab-bgm")).toHaveClass(/active/);
+    await expect(soundPromptInput).toHaveValue("ambient game background music");
+
+    await page.getByRole("button", { name: /^🧊 에셋$/ }).click();
+    await expect(page.getByTestId("asset-card-orb")).toHaveClass(/selected/);
+    await expect(assetPromptInput).toHaveValue("Orb");
+  });
+
+  test("editing the brief during an in-flight studio pack failure keeps stale errors from restoring cleared pack UI", async ({ page }) => {
+    let releasePendingFailure;
+    const pendingFailure = new Promise((resolve) => {
+      releasePendingFailure = resolve;
+    });
+    const staleMidnightFailureResponse = waitForStudioPackResponse(page, ({ brief }) => brief === "Midnight remix pack for creator duels");
+    let requestCount = 0;
+
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const payload = route.request().postDataJSON();
+      if (requestCount === 2) {
+        await pendingFailure;
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ ok: false, message: `studio pack timeout for ${payload.brief}` })
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(createStudioPackFixture(payload.brief, {
+          heroName: "3D Modeler",
+          suffix: `request-${requestCount}`
+        }))
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const soundPromptInput = page.locator(".sound-editor .prompt-input");
+    const assetPromptInput = page.locator(".asset-editor .prompt-input");
+    const soundTabGroup = page.getByTestId("sound-tab-group");
+    const assetCardGroup = page.getByTestId("asset-card-group");
+    const orbSoundTab = page.getByTestId("sound-tab-orb");
+    const heroShowcaseQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Hero showcase model" });
+    const socialQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Social launch copy" });
+    const copyCard = page.getByTestId("studio-copy-card");
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Fresh studio pack ready for 3D Modeler.");
+
+    await orbSoundTab.click();
+    await heroShowcaseQueueItem.click();
+    await socialQueueItem.click();
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes launch copy");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await briefInput.fill("Midnight remix pack for creator duels");
+    await generateButton.click();
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Generating a reusable promo pack for 3D Modeler.");
+
+    await briefInput.fill("Sunset arcade relaunch for creator heroes");
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for 3D Modeler. Ready for a new campaign brief.");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(page.getByTestId("studio-pack-status")).toHaveCount(0);
+    await expect(copyCard).toHaveCount(0);
+
+    await page.getByRole("button", { name: /^🎵 사운드$/ }).click();
+    await expect(page.getByTestId("sound-tab-bgm")).toHaveClass(/active/);
+    await expect(soundPromptInput).toHaveValue("ambient game background music");
+    await expect(soundTabGroup).toHaveAttribute("aria-label", /Selected BGM\./);
+    await expect(soundTabGroup).not.toHaveAttribute("aria-label", /Selected Orb 수집음\./);
+
+    await page.getByRole("button", { name: /^🧊 에셋$/ }).click();
+    await expect(page.getByTestId("asset-card-orb")).toHaveClass(/selected/);
+    await expect(assetPromptInput).toHaveValue("Orb");
+    await expect(assetCardGroup).toHaveAttribute("aria-label", /Selected Orb\./);
+    await expect(assetCardGroup).not.toHaveAttribute("aria-label", /Selected Player\./);
+
+    releasePendingFailure();
+    await staleMidnightFailureResponse;
+
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for 3D Modeler. Ready for a new campaign brief.");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(page.getByTestId("studio-pack-status")).toHaveCount(0);
+    await expect(copyCard).toHaveCount(0);
+    await expect(page.getByText("studio pack timeout for Midnight remix pack for creator duels")).toHaveCount(0);
+
+    await page.getByRole("button", { name: /^🎵 사운드$/ }).click();
+    await expect(page.getByTestId("sound-tab-bgm")).toHaveClass(/active/);
+    await expect(soundPromptInput).toHaveValue("ambient game background music");
+
+    await page.getByRole("button", { name: /^🧊 에셋$/ }).click();
+    await expect(page.getByTestId("asset-card-orb")).toHaveClass(/selected/);
+    await expect(assetPromptInput).toHaveValue("Orb");
+  });
+
+  test("switching heroes after loading social queue copy resets the next hero pack to its default copy", async ({ page }) => {
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      const payload = route.request().postDataJSON();
+      const heroName = payload.heroId === "sounder" ? "Sound Crafter" : "3D Modeler";
+      const brief = payload.heroId === "sounder"
+        ? "Midnight remix pack for creator duels"
+        : "Retro arcade launch for creator heroes";
+      const fixture = createStudioPackFixture(brief, {
+        heroName,
+        suffix: payload.heroId
+      });
+      fixture.studioPack.marketingAngles = [
+        {
+          id: `${payload.heroId}-launch-x`,
+          channel: "x",
+          label: "X",
+          copy: `${brief} X copy`,
+          cta: `${heroName} CTA`
+        },
+        {
+          id: `${payload.heroId}-launch-instagram`,
+          channel: "instagram",
+          label: "Instagram Reel",
+          copy: `${brief} Instagram Reel copy`,
+          cta: `${heroName} Reel CTA`
+        }
+      ];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(fixture)
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const heroGroup = page.getByTestId("hero-select-group");
+    const sounderButton = heroGroup.getByRole("button", { name: "Sound Crafter", exact: true });
+    const socialQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Social launch copy" });
+    const xAngleButton = page.getByRole("button", { name: "X", exact: true });
+    const copyCard = page.getByTestId("studio-copy-card");
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Fresh studio pack ready for 3D Modeler.");
+
+    await socialQueueItem.click();
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await sounderButton.click();
+    await expect(studioPanel).toHaveAttribute("aria-label", "Promo Director. Build one campaign brief into reusable sound, asset, and marketing prompts for Sound Crafter. Ready for a new campaign brief.");
+    await expect(page.locator(".studio-pack-card")).toHaveCount(0);
+    await expect(page.getByTestId("studio-pack-status")).toHaveCount(0);
+    await expect(copyCard).toHaveCount(0);
+
+    await briefInput.fill("Midnight remix pack for creator duels");
+    await generateButton.click();
+    await expect(page.getByTestId("studio-pack-status")).toContainText("Fresh studio pack ready for Sound Crafter.");
+    await expect(copyCard).toContainText("Midnight remix pack for creator duels X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("regenerating a cached pack restores the default social queue highlight for the active copy", async ({ page }) => {
+    let requestCount = 0;
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const fixture = createStudioPackFixture("Retro arcade launch for creator heroes", {
+        suffix: "cached-social-reset"
+      });
+      fixture.studioPack.packId = "pack-cached-social-reset";
+      fixture.studioPack.marketingAngles = [
+        {
+          id: "cached-launch-x",
+          channel: "x",
+          label: "X",
+          copy: "Retro arcade launch for creator heroes X copy",
+          cta: "Drop into the arena"
+        },
+        {
+          id: "cached-launch-instagram",
+          channel: "instagram",
+          label: "Instagram Reel",
+          copy: "Retro arcade launch for creator heroes Instagram Reel copy",
+          cta: "Swipe into the spotlight"
+        }
+      ];
+      fixture.studioPack.productionQueue = [
+        { id: "queue-sound-cached", label: "Launch soundtrack", lane: "sound", key: "bgm", prompt: "Retro arcade launch bgm prompt" },
+        { id: "queue-asset-player-cached", label: "Hero showcase model", lane: "asset", key: "player", prompt: "Retro arcade launch player direction" },
+        { id: "queue-social-cached", label: "Social launch copy", lane: "social", key: "x", prompt: "Retro arcade launch for creator heroes X copy" }
+      ];
+      fixture.studioPack.cache_hit = requestCount > 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(fixture)
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const socialQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Social launch copy" });
+    const xAngleButton = page.getByRole("button", { name: "X", exact: true });
+    const instagramAngleButton = page.getByRole("button", { name: "Instagram Reel", exact: true });
+    const copyCard = page.getByTestId("studio-copy-card");
+    const studioStatus = page.getByTestId("studio-pack-status");
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Fresh studio pack ready for 3D Modeler.");
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await instagramAngleButton.click();
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes Instagram Reel copy");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
+
+    await generateButton.click();
+    await expect(studioStatus).toContainText("CACHE HIT");
+    await expect(studioStatus).toContainText("Reused the latest studio pack for 3D Modeler.");
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
   });
 
   test("studio pack status surfaces backend failures without leaving stale content behind", async ({ page }) => {
@@ -577,6 +2410,7 @@ test.describe("Web UI", () => {
     await page.evaluate(() => {
       window.__copiedText = "";
       window.__clipboardResolves = [];
+      window.__clipboardSettled = 0;
       window.__resolveClipboardWrite = () => {
         const resolve = window.__clipboardResolves.shift();
         if (resolve) resolve();
@@ -586,7 +2420,10 @@ test.describe("Web UI", () => {
         value: {
           writeText: (text) => new Promise((resolve) => {
             window.__copiedText = text;
-            window.__clipboardResolves.push(resolve);
+            window.__clipboardResolves.push(() => {
+              resolve();
+              window.__clipboardSettled += 1;
+            });
           }),
           readText: async () => window.__copiedText,
         },
@@ -627,7 +2464,7 @@ test.describe("Web UI", () => {
     await expect(copyButton).toHaveText("Copy Instagram Reel copy");
 
     await page.evaluate(() => window.__resolveClipboardWrite());
-    await page.waitForTimeout(50);
+    await waitForClipboardSettlement(page);
     await expect(page.getByTestId("studio-copy-feedback")).toHaveCount(0);
     await expect(copyButton).toHaveText("Copy Instagram Reel copy");
 
@@ -638,6 +2475,60 @@ test.describe("Web UI", () => {
     await expect(copyFeedback).toHaveAttribute("aria-label", "Marketing copy status. Ready. Instagram Reel. Instagram Reel copy copied.");
     await copyFeedback.focus();
     await expect(copyFeedback).toBeFocused();
+  });
+
+  test("marketing channel chips keep the social queue highlight aligned with the active copy", async ({ page }) => {
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      const fixture = createStudioPackFixture("Retro arcade launch for creator heroes", { suffix: "marketing-sync" });
+      fixture.studioPack.marketingAngles = [
+        {
+          id: "launch-x",
+          channel: "x",
+          label: "X",
+          copy: "Retro arcade launch for creator heroes X copy",
+          cta: "Drop into the arena"
+        },
+        {
+          id: "launch-instagram",
+          channel: "instagram",
+          label: "Instagram Reel",
+          copy: "Retro arcade launch for creator heroes Instagram Reel copy",
+          cta: "Swipe into the spotlight"
+        }
+      ];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(fixture)
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    await studioPanel.locator("textarea").fill("Retro arcade launch for creator heroes");
+    await studioPanel.getByRole("button", { name: "Generate Studio Pack" }).click();
+
+    const socialQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Social launch copy" });
+    const xAngleButton = page.getByRole("button", { name: "X", exact: true });
+    const instagramAngleButton = page.getByRole("button", { name: "Instagram Reel", exact: true });
+    const copyCard = page.getByTestId("studio-copy-card");
+
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await socialQueueItem.click();
+    await expect(copyCard).toContainText("X");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+
+    await instagramAngleButton.click();
+    await expect(copyCard).toContainText("Instagram Reel");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
+
+    await xAngleButton.click();
+    await expect(copyCard).toContainText("X");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
   });
 
   test("marketing copy feedback surfaces clipboard failures with a keyboard-readable status", async ({ page }) => {
@@ -671,6 +2562,7 @@ test.describe("Web UI", () => {
   test("marketing copy feedback stays cleared when a new pack is generated mid-copy", async ({ page }) => {
     await page.evaluate(() => {
       window.__clipboardResolves = [];
+      window.__clipboardSettled = 0;
       window.__resolveClipboardWrite = () => {
         const resolve = window.__clipboardResolves.shift();
         if (resolve) resolve();
@@ -679,7 +2571,10 @@ test.describe("Web UI", () => {
         configurable: true,
         value: {
           writeText: (text) => new Promise((resolve) => {
-            window.__clipboardResolves.push(resolve);
+            window.__clipboardResolves.push(() => {
+              resolve();
+              window.__clipboardSettled += 1;
+            });
           }),
         },
       });
@@ -700,9 +2595,232 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("studio-copy-feedback")).toHaveCount(0);
 
     await page.evaluate(() => window.__resolveClipboardWrite());
-    await page.waitForTimeout(50);
+    await waitForClipboardSettlement(page);
     await expect(page.getByTestId("studio-copy-feedback")).toHaveCount(0);
     await expect(page.getByTestId("studio-copy-button")).toHaveText("Copy X copy");
+  });
+
+  test("cached pack reload clears stale clipboard feedback and restores the default social selection", async ({ page }) => {
+    await page.evaluate(() => {
+      window.__clipboardResolves = [];
+      window.__clipboardSettled = 0;
+      window.__resolveClipboardWrite = () => {
+        const resolve = window.__clipboardResolves.shift();
+        if (resolve) resolve();
+      };
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: () => new Promise((resolve) => {
+            window.__clipboardResolves.push(() => {
+              resolve();
+              window.__clipboardSettled += 1;
+            });
+          }),
+        },
+      });
+    });
+
+    let requestCount = 0;
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const fixture = createCachedStudioPackSelectionFixture("Retro arcade launch for creator heroes", {
+        suffix: "cached-copy-feedback"
+      });
+      fixture.studioPack.cache_hit = requestCount > 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(fixture)
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const copyButton = page.getByTestId("studio-copy-button");
+    const copyCard = page.getByTestId("studio-copy-card");
+    const copyFeedback = page.getByTestId("studio-copy-feedback");
+    const studioStatus = page.getByTestId("studio-pack-status");
+    const socialQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Social launch copy" });
+    const xAngleButton = page.getByRole("button", { name: "X", exact: true });
+    const instagramAngleButton = page.getByRole("button", { name: "Instagram Reel", exact: true });
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Fresh studio pack ready for 3D Modeler.");
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await instagramAngleButton.click();
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes Instagram Reel copy");
+    await expect(copyButton).toHaveText("Copy Instagram Reel copy");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
+
+    await copyButton.click();
+    await expect(copyButton).toHaveText("Copying Instagram Reel copy...");
+    await expect(copyFeedback).toContainText("Copying Instagram Reel copy to the clipboard...");
+
+    await generateButton.click();
+    await expect(studioStatus).toContainText("CACHE HIT");
+    await expect(studioStatus).toContainText("Reused the latest studio pack for 3D Modeler.");
+    await expect(copyFeedback).toHaveCount(0);
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
+    await expect(copyButton).toHaveText("Copy X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await page.evaluate(() => window.__resolveClipboardWrite());
+    await waitForClipboardSettlement(page);
+    await expect(page.getByTestId("studio-copy-feedback")).toHaveCount(0);
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
+    await expect(copyButton).toHaveText("Copy X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("cached pack reload keeps stale clipboard failures cleared while restoring the default social selection", async ({ page }) => {
+    await page.evaluate(() => {
+      window.__clipboardRejects = [];
+      window.__clipboardSettled = 0;
+      window.__rejectClipboardWrite = () => {
+        const reject = window.__clipboardRejects.shift();
+        if (reject) reject(new Error("clipboard permissions denied"));
+      };
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: () => new Promise((resolve, reject) => {
+            window.__clipboardRejects.push((error) => {
+              reject(error);
+              window.__clipboardSettled += 1;
+            });
+          }),
+        },
+      });
+    });
+
+    let requestCount = 0;
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const fixture = createCachedStudioPackSelectionFixture("Retro arcade launch for creator heroes", {
+        suffix: "cached-copy-error"
+      });
+      fixture.studioPack.cache_hit = requestCount > 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(fixture)
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const copyButton = page.getByTestId("studio-copy-button");
+    const copyCard = page.getByTestId("studio-copy-card");
+    const copyFeedback = page.getByTestId("studio-copy-feedback");
+    const studioStatus = page.getByTestId("studio-pack-status");
+    const socialQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Social launch copy" });
+    const xAngleButton = page.getByRole("button", { name: "X", exact: true });
+    const instagramAngleButton = page.getByRole("button", { name: "Instagram Reel", exact: true });
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Fresh studio pack ready for 3D Modeler.");
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await instagramAngleButton.click();
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes Instagram Reel copy");
+    await expect(copyButton).toHaveText("Copy Instagram Reel copy");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
+
+    await copyButton.click();
+    await expect(copyButton).toHaveText("Copying Instagram Reel copy...");
+    await expect(copyFeedback).toContainText("Copying Instagram Reel copy to the clipboard...");
+
+    await generateButton.click();
+    await expect(studioStatus).toContainText("CACHE HIT");
+    await expect(studioStatus).toContainText("Reused the latest studio pack for 3D Modeler.");
+    await expect(copyFeedback).toHaveCount(0);
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
+    await expect(copyButton).toHaveText("Copy X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await page.evaluate(() => window.__rejectClipboardWrite());
+    await waitForClipboardSettlement(page);
+    await expect(page.getByTestId("studio-copy-feedback")).toHaveCount(0);
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
+    await expect(copyButton).toHaveText("Copy X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("cached pack reload clears clipboard-unavailable errors while restoring the default social selection", async ({ page }) => {
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {},
+      });
+    });
+
+    let requestCount = 0;
+    await page.route("**/api/varco/studio-pack", async (route) => {
+      requestCount += 1;
+      const fixture = createCachedStudioPackSelectionFixture("Retro arcade launch for creator heroes", {
+        suffix: "cached-copy-unavailable"
+      });
+      fixture.studioPack.cache_hit = requestCount > 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(fixture)
+      });
+    });
+
+    const studioPanel = page.getByTestId("studio-pack-panel");
+    const briefInput = studioPanel.locator("textarea");
+    const generateButton = studioPanel.getByRole("button", { name: "Generate Studio Pack" });
+    const copyButton = page.getByTestId("studio-copy-button");
+    const copyCard = page.getByTestId("studio-copy-card");
+    const copyFeedback = page.getByTestId("studio-copy-feedback");
+    const studioStatus = page.getByTestId("studio-pack-status");
+    const socialQueueItem = page.getByTestId("studio-queue-item").filter({ hasText: "Social launch copy" });
+    const xAngleButton = page.getByRole("button", { name: "X", exact: true });
+    const instagramAngleButton = page.getByRole("button", { name: "Instagram Reel", exact: true });
+
+    await briefInput.fill("Retro arcade launch for creator heroes");
+    await generateButton.click();
+    await expect(studioStatus).toContainText("Fresh studio pack ready for 3D Modeler.");
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
+
+    await instagramAngleButton.click();
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes Instagram Reel copy");
+    await expect(copyButton).toHaveText("Copy Instagram Reel copy");
+    await expect(instagramAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "false");
+
+    await copyButton.click();
+    await expect(copyButton).toHaveText("Copy Instagram Reel copy");
+    await expect(copyFeedback).toContainText("Clipboard unavailable in this browser.");
+    await expect(copyFeedback).toHaveAttribute("aria-label", "Marketing copy status. Error. Instagram Reel. Clipboard unavailable in this browser.");
+
+    await generateButton.click();
+    await expect(studioStatus).toContainText("CACHE HIT");
+    await expect(studioStatus).toContainText("Reused the latest studio pack for 3D Modeler.");
+    await expect(copyFeedback).toHaveCount(0);
+    await expect(copyCard).toContainText("Retro arcade launch for creator heroes X copy");
+    await expect(copyButton).toHaveText("Copy X copy");
+    await expect(xAngleButton).toHaveAttribute("aria-pressed", "true");
+    await expect(socialQueueItem).toHaveAttribute("aria-pressed", "true");
   });
 
   test("marketing copy channels support keyboard cycling and pressed-state accessibility", async ({ page }) => {
@@ -763,18 +2881,18 @@ test.describe("Web UI", () => {
 
     const queueGroup = page.getByTestId("studio-queue-group");
     const queueItems = queueGroup.locator('button[data-testid="studio-queue-item"]');
-    const queueSound = queueGroup.getByRole("button", { name: /Queue sound/i });
-    const queueCopy = queueGroup.getByRole("button", { name: /Queue copy/i });
+    const queueSound = queueGroup.getByRole("button", { name: /Launch soundtrack/i });
+    const queueCopy = queueGroup.getByRole("button", { name: /Social launch copy/i });
 
-    await expect(queueItems).toHaveCount(2);
+    await expect(queueItems).toHaveCount(4);
     await expect(queueSound).toHaveAttribute("aria-pressed", "false");
-    await expect(queueSound).toHaveAttribute("aria-description", "Load Queue sound into sound prompt for bgm.");
-    await expect(queueCopy).toHaveAttribute("aria-pressed", "false");
-    await expect(queueCopy).toHaveAttribute("aria-description", "Load Queue copy into marketing copy for launch.");
+    await expect(queueSound).toHaveAttribute("aria-description", "Load Launch soundtrack into sound prompt for bgm.");
+    await expect(queueCopy).toHaveAttribute("aria-pressed", "true");
+    await expect(queueCopy).toHaveAttribute("aria-description", "Load Social launch copy into marketing copy for x; currently selected.");
 
     await queueSound.focus();
     await expect(queueSound).toBeFocused();
-    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("End");
     await expect(queueCopy).toBeFocused();
     await expect(queueCopy).toHaveAttribute("aria-pressed", "true");
     await expect(queueSound).toHaveAttribute("aria-pressed", "false");
@@ -1406,6 +3524,390 @@ test.describe("Web UI", () => {
     await expect(betFeedback).toHaveAttribute("aria-label", "Bet status. Error. Betting is closed until the next match starts.");
   });
 
+  test("betting panel hydrates a server-closed match from polling before the next bet", async ({ page }) => {
+    let betRequestCount = 0;
+    let matchState = {
+      matchId: "match-closed-1",
+      status: "running",
+      startedAt: "2026-04-10T23:12:00.000Z",
+      spectators: 144,
+      pools: { player: 120, enemy: 80 },
+      swingEvent: null,
+      odds: { player: 1.8, enemy: 2.1 },
+      totalBets: 3
+    };
+
+    await page.route("**/api/match/start", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          matchId: matchState.matchId,
+          status: "running"
+        })
+      });
+    });
+
+    await page.route("**/api/match/state", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          match: matchState
+        })
+      });
+    });
+
+    await page.route("**/api/agent/logs", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, logs: [] })
+      });
+    });
+
+    await page.route("**/api/match/bet", async (route) => {
+      betRequestCount += 1;
+      await route.abort();
+    });
+
+    await page.reload();
+
+    const firstPollResponse = await waitForApiResponse(page, "/api/match/state");
+    const firstPollJson = await firstPollResponse.json();
+    expect(firstPollJson.match.status).toBe("running");
+    await expect(page.getByTestId("bet-status-chip")).toHaveText("LIVE WINDOW");
+
+    matchState = {
+      ...matchState,
+      status: "finished"
+    };
+
+    const closedPollResponse = await waitForApiResponse(page, "/api/match/state");
+    const closedPollJson = await closedPollResponse.json();
+    expect(closedPollJson.match.status).toBe("finished");
+
+    const betStatusStrip = page.getByTestId("bet-status-strip");
+    await expect(page.getByTestId("bet-status-chip")).toHaveText("CLOSED");
+    await expect(page.getByTestId("bet-status-note")).toContainText("Betting closed");
+    await expect(betStatusStrip).toHaveAttribute("aria-label", /CLOSED\. Betting closed • match .* ended after 0s\./);
+
+    await page.getByTestId("bet-name-input").fill("arena_fan");
+    await page.getByTestId("bet-side-select").selectOption("enemy");
+    await page.getByTestId("bet-amount-input").fill("120");
+    await page.getByTestId("bet-submit-button").click();
+
+    const betFeedback = page.getByTestId("bet-feedback");
+    await expect(betFeedback).toContainText("Betting is closed until the next match starts.");
+    await expect(betFeedback).toHaveAttribute("aria-label", "Bet status. Error. Betting is closed until the next match starts.");
+    await expect(page.getByTestId("bet-name-input")).toHaveValue("arena_fan");
+    await expect(page.getByTestId("bet-amount-input")).toHaveValue("120");
+    expect(betRequestCount).toBe(0);
+  });
+
+  test("betting panel returns to standby when polling hydrates a non-running match before the next round", async ({ page }) => {
+    let betRequestCount = 0;
+    let matchState = {
+      matchId: "match-idle-1",
+      status: "running",
+      startedAt: "2026-04-11T13:58:00.000Z",
+      spectators: 101,
+      pools: { player: 40, enemy: 20 },
+      swingEvent: null,
+      odds: { player: 1.7, enemy: 2.3 },
+      totalBets: 2
+    };
+
+    await page.route("**/api/match/start", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          matchId: matchState.matchId,
+          status: "running"
+        })
+      });
+    });
+
+    await page.route("**/api/match/state", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          match: matchState
+        })
+      });
+    });
+
+    await page.route("**/api/agent/logs", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, logs: [] })
+      });
+    });
+
+    await page.route("**/api/match/bet", async (route) => {
+      betRequestCount += 1;
+      await route.abort();
+    });
+
+    await page.reload();
+
+    const firstPollResponse = await waitForApiResponse(page, "/api/match/state");
+    const firstPollJson = await firstPollResponse.json();
+    expect(firstPollJson.match.status).toBe("running");
+    await expect(page.getByTestId("bet-status-chip")).toHaveText("LIVE WINDOW");
+
+    matchState = {
+      ...matchState,
+      status: "idle",
+      startedAt: null,
+      pools: { player: 0, enemy: 0 },
+      totalBets: 0
+    };
+
+    const idlePollResponse = await waitForApiResponse(page, "/api/match/state");
+    const idlePollJson = await idlePollResponse.json();
+    expect(idlePollJson.match.status).toBe("idle");
+
+    const betStatusStrip = page.getByTestId("bet-status-strip");
+    await expect(page.getByTestId("bet-status-chip")).toHaveText("STANDBY");
+    await expect(page.getByTestId("bet-status-note")).toContainText("Betting opens when the live match is ready.");
+    await expect(betStatusStrip).toHaveAttribute("aria-label", "STANDBY. Betting opens when the live match is ready.");
+
+    await page.getByTestId("bet-name-input").fill("arena_fan");
+    await page.getByTestId("bet-side-select").selectOption("player");
+    await page.getByTestId("bet-amount-input").fill("75");
+    await page.getByTestId("bet-submit-button").click();
+
+    const betFeedback = page.getByTestId("bet-feedback");
+    await expect(betFeedback).toContainText("Betting will open when the live match starts.");
+    await expect(betFeedback).toHaveAttribute("aria-label", "Bet status. Error. Betting will open when the live match starts.");
+    await expect(page.getByTestId("bet-name-input")).toHaveValue("arena_fan");
+    await expect(page.getByTestId("bet-side-select")).toHaveValue("player");
+    await expect(page.getByTestId("bet-amount-input")).toHaveValue("75");
+    expect(betRequestCount).toBe(0);
+  });
+
+  test("betting panel reopens the wager window when polling hydrates a fresh running match after standby", async ({ page }) => {
+    let betRequestCount = 0;
+    let submittedPayload = null;
+    let matchState = {
+      matchId: "match-reopen-seed",
+      status: "running",
+      startedAt: "2026-04-11T14:00:00.000Z",
+      spectators: 120,
+      pools: { player: 30, enemy: 20 },
+      swingEvent: null,
+      odds: { player: 1.8, enemy: 2.1 },
+      totalBets: 2
+    };
+
+    await page.route("**/api/match/start", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          matchId: matchState.matchId,
+          status: "running"
+        })
+      });
+    });
+
+    await page.route("**/api/match/state", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          match: matchState
+        })
+      });
+    });
+
+    await page.route("**/api/agent/logs", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, logs: [] })
+      });
+    });
+
+    await page.route("**/api/match/bet", async (route) => {
+      betRequestCount += 1;
+      submittedPayload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          bet: {
+            id: "bet-reopen-1",
+            userName: submittedPayload.userName,
+            side: submittedPayload.side,
+            amount: submittedPayload.amount,
+            matchId: matchState.matchId
+          },
+          pools: { player: 30, enemy: 85 },
+          odds: { player: 2.4, enemy: 1.5 }
+        })
+      });
+    });
+
+    await page.reload();
+
+    const firstPollResponse = await waitForApiResponse(page, "/api/match/state");
+    const firstPollJson = await firstPollResponse.json();
+    expect(firstPollJson.match.status).toBe("running");
+    await expect(page.getByTestId("bet-status-chip")).toHaveText("LIVE WINDOW");
+
+    matchState = {
+      ...matchState,
+      status: "idle",
+      startedAt: null,
+      pools: { player: 0, enemy: 0 },
+      odds: { player: 1.9, enemy: 1.9 },
+      totalBets: 0
+    };
+
+    const idlePollResponse = await waitForApiResponse(page, "/api/match/state");
+    const idlePollJson = await idlePollResponse.json();
+    expect(idlePollJson.match.status).toBe("idle");
+    await expect(page.getByTestId("bet-status-chip")).toHaveText("STANDBY");
+    await expect(page.getByTestId("bet-status-note")).toContainText("Betting opens when the live match is ready.");
+
+    await page.getByTestId("bet-name-input").fill("arena_fan");
+    await page.getByTestId("bet-side-select").selectOption("enemy");
+    await page.getByTestId("bet-amount-input").fill("65");
+
+    matchState = {
+      matchId: "match-reopen-123456",
+      status: "running",
+      startedAt: "2026-04-11T14:05:00.000Z",
+      spectators: 166,
+      pools: { player: 30, enemy: 20 },
+      swingEvent: null,
+      odds: { player: 1.8, enemy: 2.1 },
+      totalBets: 2
+    };
+
+    const reopenedPollResponse = await waitForApiResponse(page, "/api/match/state");
+    const reopenedPollJson = await reopenedPollResponse.json();
+    expect(reopenedPollJson.match.status).toBe("running");
+
+    const betStatusStrip = page.getByTestId("bet-status-strip");
+    await expect(page.getByTestId("bet-status-chip")).toHaveText("LIVE WINDOW");
+    await expect(page.getByTestId("bet-status-note")).toContainText("Betting open");
+    await expect(page.getByTestId("bet-status-note")).toContainText("60s left in match 123456");
+    await expect(betStatusStrip).toHaveAttribute("aria-label", /LIVE WINDOW\. Betting open • 60s left in match 123456\./);
+
+    await page.getByTestId("bet-submit-button").click();
+
+    const betFeedback = page.getByTestId("bet-feedback");
+    await expect(betFeedback).toContainText("arena_fan backed Enemy Win for 65.");
+    await expect(betFeedback).toHaveAttribute("aria-label", "Bet status. Ready. arena_fan backed Enemy Win for 65.");
+    await expect(page.getByTestId("bet-name-input")).toHaveValue("arena_fan");
+    await expect(page.getByTestId("bet-side-select")).toHaveValue("enemy");
+    await expect(page.getByTestId("bet-amount-input")).toHaveValue("65");
+    expect(submittedPayload).toEqual({ userName: "arena_fan", side: "enemy", amount: 65 });
+    expect(betRequestCount).toBe(1);
+  });
+
+  test("betting panel clears stale standby feedback when polling reopens a fresh live window", async ({ page }) => {
+    let matchState = {
+      matchId: "match-standby-seed",
+      status: "idle",
+      startedAt: null,
+      spectators: 96,
+      pools: { player: 0, enemy: 0 },
+      swingEvent: null,
+      odds: { player: 1.9, enemy: 1.9 },
+      totalBets: 0
+    };
+
+    await page.route("**/api/match/start", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          matchId: matchState.matchId,
+          status: matchState.status
+        })
+      });
+    });
+
+    await page.route("**/api/match/state", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          match: matchState
+        })
+      });
+    });
+
+    await page.route("**/api/agent/logs", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, logs: [] })
+      });
+    });
+
+    await page.route("**/api/match/bet", async (route) => {
+      await route.abort();
+    });
+
+    await page.reload();
+
+    const initialPollResponse = await waitForApiResponse(page, "/api/match/state");
+    const initialPollJson = await initialPollResponse.json();
+    expect(initialPollJson.match.status).toBe("idle");
+    await expect(page.getByTestId("bet-status-chip")).toHaveText("STANDBY");
+
+    await page.getByTestId("bet-name-input").fill("arena_fan");
+    await page.getByTestId("bet-side-select").selectOption("player");
+    await page.getByTestId("bet-amount-input").fill("90");
+    await page.getByTestId("bet-submit-button").click();
+
+    const betFeedback = page.getByTestId("bet-feedback");
+    await expect(betFeedback).toContainText("Betting will open when the live match starts.");
+    await expect(betFeedback).toHaveAttribute("aria-label", "Bet status. Error. Betting will open when the live match starts.");
+
+    matchState = {
+      matchId: "match-live-654321",
+      status: "running",
+      startedAt: "2026-04-11T14:08:00.000Z",
+      spectators: 188,
+      pools: { player: 45, enemy: 30 },
+      swingEvent: null,
+      odds: { player: 1.7, enemy: 2.2 },
+      totalBets: 3
+    };
+
+    const reopenedPollResponse = await waitForApiResponse(page, "/api/match/state");
+    const reopenedPollJson = await reopenedPollResponse.json();
+    expect(reopenedPollJson.match.status).toBe("running");
+
+    const betStatusStrip = page.getByTestId("bet-status-strip");
+    await expect(page.getByTestId("bet-status-chip")).toHaveText("LIVE WINDOW");
+    await expect(page.getByTestId("bet-status-note")).toContainText("Betting open");
+    await expect(page.getByTestId("bet-status-note")).toContainText("60s left in match 654321");
+    await expect(betStatusStrip).toHaveAttribute("aria-label", /LIVE WINDOW\. Betting open • 60s left in match 654321\./);
+    await expect(page.getByTestId("bet-feedback")).toHaveCount(0);
+    await expect(page.getByTestId("bet-name-input")).toHaveValue("arena_fan");
+    await expect(page.getByTestId("bet-side-select")).toHaveValue("player");
+    await expect(page.getByTestId("bet-amount-input")).toHaveValue("90");
+  });
+
   test("betting panel surfaces server-side match closures without clearing the draft", async ({ page }) => {
     await page.route("**/api/match/bet", async (route) => {
       await route.fulfill({
@@ -1561,6 +4063,7 @@ test.describe("Web UI", () => {
       });
     });
 
+    const staleSoundResponse = waitForApiResponse(page, "/api/varco/text2sound");
     await page.locator(".sound-editor .prompt-input").fill("slow-burn sponsor anthem");
     await page.locator(".sound-editor .regenerate-btn").click();
     await expect(page.locator(".sound-editor .regenerate-btn")).toHaveText("⏳ Generating...");
@@ -1572,7 +4075,7 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("sound-generation-result")).toHaveCount(0);
 
     releaseGeneration();
-    await page.waitForTimeout(100);
+    await staleSoundResponse;
 
     await expect(page.getByTestId("sound-generation-status")).toHaveCount(0);
     await expect(page.getByTestId("sound-generation-result")).toHaveCount(0);
@@ -1606,6 +4109,7 @@ test.describe("Web UI", () => {
       });
     });
 
+    const staleSoundResponse = waitForApiResponse(page, "/api/varco/text2sound");
     await page.locator(".sound-editor .prompt-input").fill("glitch sponsor outro");
     await page.locator(".sound-editor .regenerate-btn").click();
     await expect(page.locator(".sound-editor .regenerate-btn")).toHaveText("⏳ Generating...");
@@ -1616,7 +4120,7 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("sound-generation-status")).toHaveCount(0);
 
     releaseGeneration();
-    await page.waitForTimeout(100);
+    await staleSoundResponse;
 
     await expect(page.getByTestId("sound-generation-status")).toHaveCount(0);
     await expect(page.getByTestId("sound-generation-result")).toHaveCount(0);
@@ -1867,6 +4371,7 @@ test.describe("Web UI", () => {
       });
     });
 
+    const stalePollResponse = waitForApiResponse(page, "/api/varco/image-to-3d/result/mock-request-stale-success");
     await page.getByRole("button", { name: /에셋/ }).click();
     await page.locator(".asset-editor .regenerate-btn").click();
     await expect(page.getByTestId("asset-conversion-status")).toContainText("mock-request-stale-success");
@@ -1877,7 +4382,7 @@ test.describe("Web UI", () => {
     await expect(page.locator(".asset-editor .regenerate-btn")).toHaveText("▶ 3D 변환");
 
     releasePoll();
-    await page.waitForTimeout(100);
+    await stalePollResponse;
 
     await expect(page.getByTestId("asset-conversion-status")).toHaveCount(0);
     await expect(page.getByTestId("asset-generation-result")).toHaveCount(0);
@@ -1915,6 +4420,7 @@ test.describe("Web UI", () => {
       });
     });
 
+    const stalePollResponse = waitForApiResponse(page, "/api/varco/image-to-3d/result/mock-request-stale-fail");
     await page.getByRole("button", { name: /에셋/ }).click();
     await page.locator(".asset-editor .regenerate-btn").click();
     await expect(page.getByTestId("asset-conversion-status")).toContainText("mock-request-stale-fail");
@@ -1925,7 +4431,7 @@ test.describe("Web UI", () => {
     await expect(page.locator(".asset-editor .regenerate-btn")).toHaveText("▶ 3D 변환");
 
     releasePoll();
-    await page.waitForTimeout(100);
+    await stalePollResponse;
 
     await expect(page.getByTestId("asset-conversion-status")).toHaveCount(0);
     await expect(page.getByTestId("asset-generation-result")).toHaveCount(0);
@@ -1943,6 +4449,10 @@ test.describe("Web UI", () => {
     let releaseFirstShare;
     const firstSharePending = new Promise((resolve) => {
       releaseFirstShare = resolve;
+    });
+    let resolveFirstShareSettled;
+    const firstShareSettled = new Promise((resolve) => {
+      resolveFirstShareSettled = resolve;
     });
     let shareRequestCount = 0;
 
@@ -1962,6 +4472,7 @@ test.describe("Web UI", () => {
             }
           })
         });
+        resolveFirstShareSettled();
         return;
       }
 
@@ -2001,7 +4512,7 @@ test.describe("Web UI", () => {
     expect(openedUrls).toEqual(["https://share.example/telegram-second"]);
 
     releaseFirstShare();
-    await page.waitForTimeout(50);
+    await firstShareSettled;
 
     await expect(page.getByTestId("share-feedback")).toContainText("Opened Telegram share link.");
     openedUrls = await page.evaluate(() => window.__openedUrls.slice());

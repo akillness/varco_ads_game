@@ -68,6 +68,8 @@ const EDITOR_TABS = [
   { id: "history", label: "📋 이력", ariaLabel: "history editor" }
 ];
 
+const DEFAULT_EDITOR_SELECTION = { sound: "bgm", asset: "orb" };
+
 const MISSION_TEMPLATES = [
   {
     kind: "collect",
@@ -2694,12 +2696,13 @@ export default function App() {
   const [shareFeedback, setShareFeedback] = useState(null);
   const [sharePendingChannel, setSharePendingChannel] = useState(null);
   const [editorDrafts, setEditorDrafts] = useState({ sound: {}, asset: {} });
-  const [editorSelection, setEditorSelection] = useState({ sound: "bgm", asset: "orb" });
+  const [editorSelection, setEditorSelection] = useState(DEFAULT_EDITOR_SELECTION);
   const latestStateRef = useRef(state);
   const latestServerLogsRef = useRef(serverLogs);
   const serverLogsHydratedRef = useRef(false);
   const marketingCopyActionRef = useRef(0);
   const studioPackRequestRef = useRef(0);
+  const previousHeroIdRef = useRef(state.hero.id);
   const betActionRef = useRef(0);
   const shareActionRef = useRef(0);
   const gameOverHandledRef = useRef(false);
@@ -2950,6 +2953,13 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (matchStatus !== "running" || betPending || betFeedback?.reason !== "match-unavailable") {
+      return;
+    }
+    setBetFeedback(null);
+  }, [matchStatus, betPending, betFeedback]);
+
   // Log orb collect
   useEffect(() => {
     if (totalOrbs > 0 && running) {
@@ -3090,12 +3100,13 @@ export default function App() {
   }, [gameOver, score, appliedSounds.win, appliedSounds.lose]);
 
   useEffect(() => {
-    if (studioPack?.marketingAngles?.length) {
-      setSelectedMarketingAngle(studioPack.marketingAngles[0]);
-    } else {
-      setSelectedMarketingAngle(null);
-    }
-    setSelectedQueueItemId(null);
+    const initialMarketingAngle = studioPack?.marketingAngles?.[0] || null;
+    const initialQueueItem = initialMarketingAngle
+      ? studioPack?.productionQueue?.find((item) => item.lane === "social" && item.key === initialMarketingAngle.channel) || null
+      : null;
+
+    setSelectedMarketingAngle(initialMarketingAngle);
+    setSelectedQueueItemId(initialQueueItem?.id || null);
     clearMarketingCopyFeedback();
   }, [studioPack?.packId]);
 
@@ -3190,10 +3201,23 @@ export default function App() {
     setStudioStatus(nextStatus);
     setStudioStatusMessage("");
     setEditorDrafts({ sound: {}, asset: {} });
+    setEditorSelection(DEFAULT_EDITOR_SELECTION);
     setSelectedMarketingAngle(null);
     setSelectedQueueItemId(null);
     clearMarketingCopyFeedback();
   }
+
+  useEffect(() => {
+    if (previousHeroIdRef.current === hero.id) {
+      return;
+    }
+
+    previousHeroIdRef.current = hero.id;
+    const hasStudioPackState = studioStatus !== "idle" || studioPack || selectedMarketingAngle || selectedQueueItemId || marketingCopyFeedback;
+    if (hasStudioPackState) {
+      resetStudioPackState({ cancelInFlight: studioStatus === "loading" });
+    }
+  }, [hero.id, studioStatus, studioPack, selectedMarketingAngle, selectedQueueItemId, marketingCopyFeedback]);
 
   function marketingCopyButtonLabel() {
     const angleLabel = selectedMarketingAngle?.label || "launch";
@@ -3205,8 +3229,12 @@ export default function App() {
       : `Copy ${angleLabel} copy`;
   }
 
-  function selectMarketingAngle(angle) {
+  function selectMarketingAngle(angle, { syncQueueItem = true } = {}) {
     setSelectedMarketingAngle(angle);
+    if (syncQueueItem) {
+      const matchingQueueItem = studioPack?.productionQueue?.find((item) => item.lane === "social" && item.key === angle?.channel) || null;
+      setSelectedQueueItemId(matchingQueueItem?.id || null);
+    }
     clearMarketingCopyFeedback();
   }
 
@@ -3311,6 +3339,11 @@ export default function App() {
         body: JSON.stringify({ brief: briefAtStart, heroId: heroIdAtStart })
       });
       applyIfActive(() => {
+        const initialMarketingAngle = json.studioPack.marketingAngles?.[0] || null;
+        const initialQueueItem = initialMarketingAngle
+          ? json.studioPack.productionQueue?.find((item) => item.lane === "social" && item.key === initialMarketingAngle.channel) || null
+          : null;
+
         setStudioPack(json.studioPack);
         setStudioStatus(json.studioPack.cache_hit ? "cached" : "ready");
         setStudioStatusMessage("");
@@ -3318,7 +3351,8 @@ export default function App() {
           sound: json.studioPack.sounds,
           asset: json.studioPack.assets
         });
-        setSelectedMarketingAngle(json.studioPack.marketingAngles?.[0] || null);
+        setSelectedMarketingAngle(initialMarketingAngle);
+        setSelectedQueueItemId(initialQueueItem?.id || null);
         clearMarketingCopyFeedback();
         refreshCacheStats().catch(() => null);
         setLog((prev) => [`Studio pack ${json.studioPack.cache_hit ? "cached" : "ready"}`, ...prev].slice(0, 8));
@@ -3337,7 +3371,11 @@ export default function App() {
     const amount = Number(betAmount);
     const validationMessage = validateBetDraft(userName, amount);
     if (validationMessage) {
-      setBetFeedback({ tone: "error", message: validationMessage });
+      setBetFeedback({
+        tone: "error",
+        message: validationMessage,
+        reason: matchStatus === "running" ? "validation" : "match-unavailable"
+      });
       setLog((prev) => [`Bet blocked: ${validationMessage}`, ...prev].slice(0, 8));
       return;
     }
