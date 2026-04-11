@@ -381,7 +381,7 @@ test.describe("Web UI", () => {
     await page.reload();
     await expect(page.getByTestId("agent-log-empty")).toContainText("No agent logs yet.");
     await expect(page.getByTestId("agent-log-summary")).toHaveCount(0);
-    await page.waitForTimeout(2600);
+    await waitForApiResponse(page, "/api/agent/logs");
     await expect(page.getByTestId("agent-log-summary")).toHaveCount(0);
 
     logsPayload = [
@@ -413,7 +413,7 @@ test.describe("Web UI", () => {
       { id: "log-older", level: "info", message: "older archive note synced" }
     ];
 
-    await page.waitForTimeout(2600);
+    await waitForApiResponse(page, "/api/agent/logs");
     await expect(page.getByTestId("agent-log-summary")).toHaveCount(0);
   });
 
