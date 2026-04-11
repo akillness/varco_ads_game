@@ -3516,6 +3516,89 @@ test.describe("Web UI", () => {
     await expect(betFeedback).toHaveAttribute("aria-label", "Bet status. Error. Betting is closed until the next match starts.");
   });
 
+  test("betting panel hydrates a server-closed match from polling before the next bet", async ({ page }) => {
+    let betRequestCount = 0;
+    let matchState = {
+      matchId: "match-closed-1",
+      status: "running",
+      startedAt: "2026-04-10T23:12:00.000Z",
+      spectators: 144,
+      pools: { player: 120, enemy: 80 },
+      swingEvent: null,
+      odds: { player: 1.8, enemy: 2.1 },
+      totalBets: 3
+    };
+
+    await page.route("**/api/match/start", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          matchId: matchState.matchId,
+          status: "running"
+        })
+      });
+    });
+
+    await page.route("**/api/match/state", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          match: matchState
+        })
+      });
+    });
+
+    await page.route("**/api/agent/logs", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, logs: [] })
+      });
+    });
+
+    await page.route("**/api/match/bet", async (route) => {
+      betRequestCount += 1;
+      await route.abort();
+    });
+
+    await page.reload();
+
+    const firstPollResponse = await waitForApiResponse(page, "/api/match/state");
+    const firstPollJson = await firstPollResponse.json();
+    expect(firstPollJson.match.status).toBe("running");
+    await expect(page.getByTestId("bet-status-chip")).toHaveText("LIVE WINDOW");
+
+    matchState = {
+      ...matchState,
+      status: "finished"
+    };
+
+    const closedPollResponse = await waitForApiResponse(page, "/api/match/state");
+    const closedPollJson = await closedPollResponse.json();
+    expect(closedPollJson.match.status).toBe("finished");
+
+    const betStatusStrip = page.getByTestId("bet-status-strip");
+    await expect(page.getByTestId("bet-status-chip")).toHaveText("CLOSED");
+    await expect(page.getByTestId("bet-status-note")).toContainText("Betting closed");
+    await expect(betStatusStrip).toHaveAttribute("aria-label", /CLOSED\. Betting closed • match .* ended after 0s\./);
+
+    await page.getByTestId("bet-name-input").fill("arena_fan");
+    await page.getByTestId("bet-side-select").selectOption("enemy");
+    await page.getByTestId("bet-amount-input").fill("120");
+    await page.getByTestId("bet-submit-button").click();
+
+    const betFeedback = page.getByTestId("bet-feedback");
+    await expect(betFeedback).toContainText("Betting is closed until the next match starts.");
+    await expect(betFeedback).toHaveAttribute("aria-label", "Bet status. Error. Betting is closed until the next match starts.");
+    await expect(page.getByTestId("bet-name-input")).toHaveValue("arena_fan");
+    await expect(page.getByTestId("bet-amount-input")).toHaveValue("120");
+    expect(betRequestCount).toBe(0);
+  });
+
   test("betting panel surfaces server-side match closures without clearing the draft", async ({ page }) => {
     await page.route("**/api/match/bet", async (route) => {
       await route.fulfill({
