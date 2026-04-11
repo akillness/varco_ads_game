@@ -3686,6 +3686,131 @@ test.describe("Web UI", () => {
     expect(betRequestCount).toBe(0);
   });
 
+  test("betting panel reopens the wager window when polling hydrates a fresh running match after standby", async ({ page }) => {
+    let betRequestCount = 0;
+    let submittedPayload = null;
+    let matchState = {
+      matchId: "match-reopen-seed",
+      status: "running",
+      startedAt: "2026-04-11T14:00:00.000Z",
+      spectators: 120,
+      pools: { player: 30, enemy: 20 },
+      swingEvent: null,
+      odds: { player: 1.8, enemy: 2.1 },
+      totalBets: 2
+    };
+
+    await page.route("**/api/match/start", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          matchId: matchState.matchId,
+          status: "running"
+        })
+      });
+    });
+
+    await page.route("**/api/match/state", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          match: matchState
+        })
+      });
+    });
+
+    await page.route("**/api/agent/logs", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, logs: [] })
+      });
+    });
+
+    await page.route("**/api/match/bet", async (route) => {
+      betRequestCount += 1;
+      submittedPayload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          bet: {
+            id: "bet-reopen-1",
+            userName: submittedPayload.userName,
+            side: submittedPayload.side,
+            amount: submittedPayload.amount,
+            matchId: matchState.matchId
+          },
+          pools: { player: 30, enemy: 85 },
+          odds: { player: 2.4, enemy: 1.5 }
+        })
+      });
+    });
+
+    await page.reload();
+
+    const firstPollResponse = await waitForApiResponse(page, "/api/match/state");
+    const firstPollJson = await firstPollResponse.json();
+    expect(firstPollJson.match.status).toBe("running");
+    await expect(page.getByTestId("bet-status-chip")).toHaveText("LIVE WINDOW");
+
+    matchState = {
+      ...matchState,
+      status: "idle",
+      startedAt: null,
+      pools: { player: 0, enemy: 0 },
+      odds: { player: 1.9, enemy: 1.9 },
+      totalBets: 0
+    };
+
+    const idlePollResponse = await waitForApiResponse(page, "/api/match/state");
+    const idlePollJson = await idlePollResponse.json();
+    expect(idlePollJson.match.status).toBe("idle");
+    await expect(page.getByTestId("bet-status-chip")).toHaveText("STANDBY");
+    await expect(page.getByTestId("bet-status-note")).toContainText("Betting opens when the live match is ready.");
+
+    await page.getByTestId("bet-name-input").fill("arena_fan");
+    await page.getByTestId("bet-side-select").selectOption("enemy");
+    await page.getByTestId("bet-amount-input").fill("65");
+
+    matchState = {
+      matchId: "match-reopen-123456",
+      status: "running",
+      startedAt: "2026-04-11T14:05:00.000Z",
+      spectators: 166,
+      pools: { player: 30, enemy: 20 },
+      swingEvent: null,
+      odds: { player: 1.8, enemy: 2.1 },
+      totalBets: 2
+    };
+
+    const reopenedPollResponse = await waitForApiResponse(page, "/api/match/state");
+    const reopenedPollJson = await reopenedPollResponse.json();
+    expect(reopenedPollJson.match.status).toBe("running");
+
+    const betStatusStrip = page.getByTestId("bet-status-strip");
+    await expect(page.getByTestId("bet-status-chip")).toHaveText("LIVE WINDOW");
+    await expect(page.getByTestId("bet-status-note")).toContainText("Betting open");
+    await expect(page.getByTestId("bet-status-note")).toContainText("60s left in match 123456");
+    await expect(betStatusStrip).toHaveAttribute("aria-label", /LIVE WINDOW\. Betting open • 60s left in match 123456\./);
+
+    await page.getByTestId("bet-submit-button").click();
+
+    const betFeedback = page.getByTestId("bet-feedback");
+    await expect(betFeedback).toContainText("arena_fan backed Enemy Win for 65.");
+    await expect(betFeedback).toHaveAttribute("aria-label", "Bet status. Ready. arena_fan backed Enemy Win for 65.");
+    await expect(page.getByTestId("bet-name-input")).toHaveValue("arena_fan");
+    await expect(page.getByTestId("bet-side-select")).toHaveValue("enemy");
+    await expect(page.getByTestId("bet-amount-input")).toHaveValue("65");
+    expect(submittedPayload).toEqual({ userName: "arena_fan", side: "enemy", amount: 65 });
+    expect(betRequestCount).toBe(1);
+  });
+
   test("betting panel surfaces server-side match closures without clearing the draft", async ({ page }) => {
     await page.route("**/api/match/bet", async (route) => {
       await route.fulfill({
