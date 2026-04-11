@@ -88,6 +88,10 @@ function waitForStudioPackResponse(page, matcher) {
   });
 }
 
+function waitForApiResponse(page, urlPart) {
+  return page.waitForResponse((response) => response.url().includes(urlPart));
+}
+
 function waitForClipboardSettlement(page, expectedCount = 1) {
   return page.waitForFunction((count) => (window.__clipboardSettled || 0) >= count, expectedCount);
 }
@@ -3667,6 +3671,7 @@ test.describe("Web UI", () => {
       });
     });
 
+    const staleSoundResponse = waitForApiResponse(page, "/api/varco/text2sound");
     await page.locator(".sound-editor .prompt-input").fill("slow-burn sponsor anthem");
     await page.locator(".sound-editor .regenerate-btn").click();
     await expect(page.locator(".sound-editor .regenerate-btn")).toHaveText("⏳ Generating...");
@@ -3678,7 +3683,7 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("sound-generation-result")).toHaveCount(0);
 
     releaseGeneration();
-    await page.waitForTimeout(100);
+    await staleSoundResponse;
 
     await expect(page.getByTestId("sound-generation-status")).toHaveCount(0);
     await expect(page.getByTestId("sound-generation-result")).toHaveCount(0);
@@ -3712,6 +3717,7 @@ test.describe("Web UI", () => {
       });
     });
 
+    const staleSoundResponse = waitForApiResponse(page, "/api/varco/text2sound");
     await page.locator(".sound-editor .prompt-input").fill("glitch sponsor outro");
     await page.locator(".sound-editor .regenerate-btn").click();
     await expect(page.locator(".sound-editor .regenerate-btn")).toHaveText("⏳ Generating...");
@@ -3722,7 +3728,7 @@ test.describe("Web UI", () => {
     await expect(page.getByTestId("sound-generation-status")).toHaveCount(0);
 
     releaseGeneration();
-    await page.waitForTimeout(100);
+    await staleSoundResponse;
 
     await expect(page.getByTestId("sound-generation-status")).toHaveCount(0);
     await expect(page.getByTestId("sound-generation-result")).toHaveCount(0);
@@ -3973,6 +3979,7 @@ test.describe("Web UI", () => {
       });
     });
 
+    const stalePollResponse = waitForApiResponse(page, "/api/varco/image-to-3d/result/mock-request-stale-success");
     await page.getByRole("button", { name: /에셋/ }).click();
     await page.locator(".asset-editor .regenerate-btn").click();
     await expect(page.getByTestId("asset-conversion-status")).toContainText("mock-request-stale-success");
@@ -3983,7 +3990,7 @@ test.describe("Web UI", () => {
     await expect(page.locator(".asset-editor .regenerate-btn")).toHaveText("▶ 3D 변환");
 
     releasePoll();
-    await page.waitForTimeout(100);
+    await stalePollResponse;
 
     await expect(page.getByTestId("asset-conversion-status")).toHaveCount(0);
     await expect(page.getByTestId("asset-generation-result")).toHaveCount(0);
@@ -4021,6 +4028,7 @@ test.describe("Web UI", () => {
       });
     });
 
+    const stalePollResponse = waitForApiResponse(page, "/api/varco/image-to-3d/result/mock-request-stale-fail");
     await page.getByRole("button", { name: /에셋/ }).click();
     await page.locator(".asset-editor .regenerate-btn").click();
     await expect(page.getByTestId("asset-conversion-status")).toContainText("mock-request-stale-fail");
@@ -4031,7 +4039,7 @@ test.describe("Web UI", () => {
     await expect(page.locator(".asset-editor .regenerate-btn")).toHaveText("▶ 3D 변환");
 
     releasePoll();
-    await page.waitForTimeout(100);
+    await stalePollResponse;
 
     await expect(page.getByTestId("asset-conversion-status")).toHaveCount(0);
     await expect(page.getByTestId("asset-generation-result")).toHaveCount(0);
