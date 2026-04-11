@@ -307,6 +307,20 @@ function createSwingEvent(type, title, text, targetCell = null, now = Date.now()
   };
 }
 
+function buildSwingSummary(event) {
+  if (!event) return null;
+  return {
+    title: event.title,
+    variant: event.eventVariant || event.type,
+    mode: event.zoneShiftMode || null
+  };
+}
+
+function formatSwingSummary(summary) {
+  if (!summary) return "";
+  return `${summary.variant}${summary.mode ? ` / ${summary.mode}` : ""}`;
+}
+
 function pickWeightedSwingVariant(state, timer) {
   const weights = [
     {
@@ -352,6 +366,15 @@ function triggerSwingEvent(state, timer) {
         ),
         eventVariant
       },
+      lastSwingSummary: buildSwingSummary({
+        type: "rare-drop-ping",
+        title: "Rare Drop Ping",
+        eventVariant
+      }),
+      swingSummaryLabel: formatSwingSummary({
+        variant: eventVariant,
+        mode: null
+      }),
       swingEventEndsAt: now + 5000,
       bonusOrb: state.bonusOrb || randomCellAway(state.player, 4),
       powerup: state.powerup || { ...randomCellAway(state.player, 4), type: powerType },
@@ -380,6 +403,16 @@ function triggerSwingEvent(state, timer) {
         eventVariant,
         zoneShiftMode
       },
+      lastSwingSummary: buildSwingSummary({
+        type: "zone-shift-alert",
+        title: "Zone Shift Alert",
+        eventVariant,
+        zoneShiftMode
+      }),
+      swingSummaryLabel: formatSwingSummary({
+        variant: eventVariant,
+        mode: zoneShiftMode
+      }),
       swingEventEndsAt: now + 5000,
       orb: zoneShiftMode === "map-impact" ? zoneTarget : state.orb,
       enemies:
@@ -412,6 +445,15 @@ function triggerSwingEvent(state, timer) {
       ),
       eventVariant
     },
+    lastSwingSummary: buildSwingSummary({
+      type: "bounty-signal",
+      title: "Bounty Signal",
+      eventVariant
+    }),
+    swingSummaryLabel: formatSwingSummary({
+      variant: eventVariant,
+      mode: null
+    }),
     swingEventEndsAt: now + 5000,
     abilityCharge: clamp(state.abilityCharge + 15, 0, ABILITY_MAX),
     directorBeat: createDirectorBeat("30s Swing", "현상금 신호 포착. 지금 추격할지 결정해야 한다.", now),
@@ -2173,6 +2215,8 @@ const initState = (hero) => {
     swingTriggerAt: 25 + Math.floor(Math.random() * 11),
     swingEvent: null,
     swingEventEndsAt: 0,
+    lastSwingSummary: null,
+    swingSummaryLabel: null,
     bonusOrb: null,
     editHistory: [],
     appliedSounds: { orb: null, hit: null, win: null, lose: null, bgm: null },
@@ -2435,7 +2479,63 @@ function reducer(state, action) {
       return { ...state, abilityEvent: null };
 
     case "DEBUG_PATCH_STATE":
-      return { ...state, ...(action.patch || {}) };
+      {
+        const patch = action.patch || {};
+        const derivedSummary =
+          patch.lastSwingSummary !== undefined
+            ? patch.lastSwingSummary
+            : patch.swingEvent
+              ? buildSwingSummary(patch.swingEvent)
+              : patch.swingSummaryLabel
+                ? {
+                    title: "Debug Swing Summary",
+                    variant: patch.swingSummaryLabel.split(" / ")[0] || patch.swingSummaryLabel,
+                    mode: patch.swingSummaryLabel.split(" / ")[1] || null
+                  }
+                : state.lastSwingSummary;
+        const derivedSummaryLabel =
+          patch.swingSummaryLabel !== undefined
+            ? patch.swingSummaryLabel
+            : patch.lastSwingSummary
+              ? formatSwingSummary(patch.lastSwingSummary)
+              : patch.swingEvent
+                ? formatSwingSummary(buildSwingSummary(patch.swingEvent))
+                : state.swingSummaryLabel;
+        return {
+          ...state,
+          ...patch,
+          lastSwingSummary: derivedSummary,
+          swingSummaryLabel: derivedSummaryLabel
+        };
+      }
+
+    case "DEBUG_FORCE_SWING_SUMMARY":
+      {
+        const now = Date.now();
+        const variant = action.variant || "zone-shift-alert";
+        const mode = action.mode || null;
+        const title = action.title || "Zone Shift Alert";
+        const text =
+          action.text ||
+          "안전 루트가 무너졌다. 오브젝트 위치와 적 압박이 동시에 바뀐다.";
+        const forcedEvent = {
+          ...createSwingEvent(variant, title, text, action.targetCell || null, now),
+          eventVariant: variant,
+          zoneShiftMode: mode
+        };
+
+        return {
+          ...state,
+          running: action.running ?? true,
+          timer: action.timer ?? state.timer,
+          difficulty: action.difficulty ?? state.difficulty,
+          swingEventTriggered: true,
+          swingEvent: forcedEvent,
+          swingEventEndsAt: now + (action.durationMs || 5000),
+          lastSwingSummary: buildSwingSummary(forcedEvent),
+          swingSummaryLabel: formatSwingSummary(buildSwingSummary(forcedEvent))
+        };
+      }
 
     case "ACTIVATE_ABILITY": {
       if (!state.running || state.gameOver) return state;
@@ -2638,6 +2738,8 @@ export default function App() {
     swingEvent,
     swingEventEndsAt,
     bonusOrb,
+    lastSwingSummary,
+    swingSummaryLabel,
     editHistory,
     appliedSounds,
     appliedAssets
@@ -3002,6 +3104,10 @@ export default function App() {
   const abilityCooldown = Math.max(0, Math.ceil((abilityCooldownUntil - Date.now()) / 1000));
   const abilityReady = abilityCharge >= ABILITY_MAX && abilityCooldown <= 0;
   const enemyFrozen = enemyFreezeUntil && Date.now() < enemyFreezeUntil;
+  const swingSummaryText =
+    formatSwingSummary(buildSwingSummary(swingEvent)) ||
+    formatSwingSummary(lastSwingSummary) ||
+    swingSummaryLabel;
   const powerupPanelAriaLabel = getPowerupPanelAriaLabel(activePowerups, powerup);
 
   // Build tile data
@@ -3546,6 +3652,10 @@ export default function App() {
             >
               <strong>{swingEvent.title}</strong>
               <span>{swingEvent.text}</span>
+              <span className="director-beat-meta">
+                variant: {swingEvent.eventVariant || swingEvent.type}
+                {swingEvent.zoneShiftMode ? ` / mode: ${swingEvent.zoneShiftMode}` : ""}
+              </span>
             </div>
           )}
           <div className="director-kpis" data-testid="director-kpi-group">
@@ -3698,6 +3808,11 @@ export default function App() {
           <span>Mission: {mission.title}</span>
           <span>Ability: {activeAbility.name}</span>
           <span>Swing: {state.swingEventTriggered ? "Triggered" : "Pending"}</span>
+          {swingSummaryText && (
+            <span data-testid="swing-summary-strip">
+              Last swing: {swingSummaryText}
+            </span>
+          )}
           <span>Assets live: {liveAssetCount}/3</span>
           <span>Sound cues live: {liveSoundCount}/5</span>
         </div>

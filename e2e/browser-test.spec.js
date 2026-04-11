@@ -1,7 +1,10 @@
 import { test, expect } from "@playwright/test";
 
-const BASE = "http://127.0.0.1:5173";
-const API = "http://127.0.0.1:8787";
+const HOST = process.env.HOST || "127.0.0.1";
+const WEB_PORT = process.env.WEB_PORT || "4173";
+const API_PORT = process.env.API_PORT || "4174";
+const BASE = `http://${HOST}:${WEB_PORT}`;
+const API = `http://${HOST}:${API_PORT}`;
 
 function createStudioPackFixture(brief, { heroName = "Sound Crafter", suffix = "launch" } = {}) {
   return {
@@ -59,8 +62,9 @@ test.describe("API contracts", () => {
   });
 
   test("POST /api/varco/studio-pack returns reusable prompts and caches repeats", async ({ request }) => {
+    const runId = `${Date.now()}-studio-pack`;
     const payload = {
-      brief: "Neon sponsor arena for creator-made hero collectibles",
+      brief: `Neon sponsor arena for creator-made hero collectibles ${runId}`,
       heroId: "sounder",
     };
 
@@ -81,7 +85,11 @@ test.describe("API contracts", () => {
   });
 
   test("POST /api/varco/text2sound reuses cache for the same prompt", async ({ request }) => {
-    const payload = { prompt: "arena pickup stinger", version: "v1", num_sample: 1 };
+    const payload = {
+      prompt: `arena pickup stinger ${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      version: "v1",
+      num_sample: 1,
+    };
     const first = await request.post(`${API}/api/varco/text2sound`, { data: payload });
     const firstJson = await first.json();
     expect(firstJson.ok).toBe(true);
@@ -2117,6 +2125,27 @@ test.describe("Web UI", () => {
     await page.getByRole("button", { name: "Play Again" }).click();
     await expect(page.getByTestId("game-over-overlay")).toHaveCount(0);
     await expect(page.locator(".stat-val.score")).toHaveText("0");
+  });
+
+  test("surfaces swing event variant and mode in the HUD when the event fires", async ({ page }) => {
+    await expect(page.getByTestId("arena-status-strip")).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__SAGA_DEBUG__));
+    await page.evaluate(() => {
+      window.__SAGA_DEBUG__.dispatch({
+        type: "DEBUG_FORCE_SWING_SUMMARY",
+        running: true,
+        timer: 35,
+        difficulty: 4,
+        variant: "zone-shift-alert",
+        mode: "map-impact",
+        title: "Zone Shift Alert",
+        text: "안전 루트가 무너졌다. 오브젝트 위치와 적 압박이 동시에 바뀐다.",
+        targetCell: { x: 6, y: 6 },
+        durationMs: 60000,
+      });
+    });
+    await expect(page.getByTestId("arena-status-strip")).toContainText("Swing: Triggered");
+    await expect(page.getByTestId("swing-summary-strip")).toContainText("Last swing: zone-shift-alert / map-impact");
   });
 
   test("leaderboard recap strip compares the current run against live board targets", async ({ page }) => {
