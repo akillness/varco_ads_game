@@ -2851,6 +2851,13 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (matchStatus !== "running" || betPending || betFeedback?.reason !== "match-unavailable") {
+      return;
+    }
+    setBetFeedback(null);
+  }, [matchStatus, betPending, betFeedback]);
+
   // Log orb collect
   useEffect(() => {
     if (totalOrbs > 0 && running) {
@@ -3258,7 +3265,11 @@ export default function App() {
     const amount = Number(betAmount);
     const validationMessage = validateBetDraft(userName, amount);
     if (validationMessage) {
-      setBetFeedback({ tone: "error", message: validationMessage });
+      setBetFeedback({
+        tone: "error",
+        message: validationMessage,
+        reason: matchStatus === "running" ? "validation" : "match-unavailable"
+      });
       setLog((prev) => [`Bet blocked: ${validationMessage}`, ...prev].slice(0, 8));
       return;
     }

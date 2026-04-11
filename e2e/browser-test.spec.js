@@ -3811,6 +3811,95 @@ test.describe("Web UI", () => {
     expect(betRequestCount).toBe(1);
   });
 
+  test("betting panel clears stale standby feedback when polling reopens a fresh live window", async ({ page }) => {
+    let matchState = {
+      matchId: "match-standby-seed",
+      status: "idle",
+      startedAt: null,
+      spectators: 96,
+      pools: { player: 0, enemy: 0 },
+      swingEvent: null,
+      odds: { player: 1.9, enemy: 1.9 },
+      totalBets: 0
+    };
+
+    await page.route("**/api/match/start", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          matchId: matchState.matchId,
+          status: matchState.status
+        })
+      });
+    });
+
+    await page.route("**/api/match/state", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          match: matchState
+        })
+      });
+    });
+
+    await page.route("**/api/agent/logs", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, logs: [] })
+      });
+    });
+
+    await page.route("**/api/match/bet", async (route) => {
+      await route.abort();
+    });
+
+    await page.reload();
+
+    const initialPollResponse = await waitForApiResponse(page, "/api/match/state");
+    const initialPollJson = await initialPollResponse.json();
+    expect(initialPollJson.match.status).toBe("idle");
+    await expect(page.getByTestId("bet-status-chip")).toHaveText("STANDBY");
+
+    await page.getByTestId("bet-name-input").fill("arena_fan");
+    await page.getByTestId("bet-side-select").selectOption("player");
+    await page.getByTestId("bet-amount-input").fill("90");
+    await page.getByTestId("bet-submit-button").click();
+
+    const betFeedback = page.getByTestId("bet-feedback");
+    await expect(betFeedback).toContainText("Betting will open when the live match starts.");
+    await expect(betFeedback).toHaveAttribute("aria-label", "Bet status. Error. Betting will open when the live match starts.");
+
+    matchState = {
+      matchId: "match-live-654321",
+      status: "running",
+      startedAt: "2026-04-11T14:08:00.000Z",
+      spectators: 188,
+      pools: { player: 45, enemy: 30 },
+      swingEvent: null,
+      odds: { player: 1.7, enemy: 2.2 },
+      totalBets: 3
+    };
+
+    const reopenedPollResponse = await waitForApiResponse(page, "/api/match/state");
+    const reopenedPollJson = await reopenedPollResponse.json();
+    expect(reopenedPollJson.match.status).toBe("running");
+
+    const betStatusStrip = page.getByTestId("bet-status-strip");
+    await expect(page.getByTestId("bet-status-chip")).toHaveText("LIVE WINDOW");
+    await expect(page.getByTestId("bet-status-note")).toContainText("Betting open");
+    await expect(page.getByTestId("bet-status-note")).toContainText("60s left in match 654321");
+    await expect(betStatusStrip).toHaveAttribute("aria-label", /LIVE WINDOW\. Betting open • 60s left in match 654321\./);
+    await expect(page.getByTestId("bet-feedback")).toHaveCount(0);
+    await expect(page.getByTestId("bet-name-input")).toHaveValue("arena_fan");
+    await expect(page.getByTestId("bet-side-select")).toHaveValue("player");
+    await expect(page.getByTestId("bet-amount-input")).toHaveValue("90");
+  });
+
   test("betting panel surfaces server-side match closures without clearing the draft", async ({ page }) => {
     await page.route("**/api/match/bet", async (route) => {
       await route.fulfill({
