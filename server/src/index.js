@@ -523,7 +523,7 @@ app.post("/api/match/start", (_req, res) => {
     matchId: matchState.matchId,
     elapsedSeconds: 0
   });
-  return res.json({ ok: true, matchId: matchState.matchId });
+  return res.json({ ok: true, matchId: matchState.matchId, status: matchState.status });
 });
 
 app.post("/api/match/finish", (req, res) => {
@@ -538,7 +538,7 @@ app.post("/api/match/finish", (req, res) => {
     playerId,
     elapsedSeconds
   });
-  return res.json({ ok: true, winner, settledBets: matchState.bets.length });
+  return res.json({ ok: true, winner, settledBets: matchState.bets.length, status: matchState.status });
 });
 
 app.post("/api/match/bet", (req, res) => {
@@ -552,6 +552,16 @@ app.post("/api/match/bet", (req, res) => {
   }
   if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
     return res.status(400).json({ ok: false, message: "amount(number > 0) is required" });
+  }
+  if (matchState.status !== "running") {
+    return res.status(409).json({
+      ok: false,
+      message: `betting is closed while match status is ${matchState.status}`,
+      data: {
+        status: matchState.status,
+        matchId: matchState.matchId
+      }
+    });
   }
 
   const bet = {
